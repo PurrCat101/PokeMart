@@ -8,6 +8,7 @@
     "start:bff": "npm run start --workspace=@pokemart/bff",
     "start:api": "npm run start --workspace=@pokemart/api",
     "test": "npm run test --workspace=@pokemart/tests",
+    "test:report": "npm run test:report --workspace=@pokemart/tests",
     "test:mocked": "npm run test:mocked --workspace=@pokemart/tests",
     "test:api": "npm run test:api --workspace=@pokemart/tests",
     "test:pokeapi": "npm run test:pokeapi --workspace=@pokemart/tests",

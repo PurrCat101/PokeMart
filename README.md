@@ -130,6 +130,12 @@ make test-e2e
 make test
 ```
 
+Playwright สร้าง HTML report ไว้ที่ `tests/playwright-report` หลังรันทดสอบ เปิดดูได้ด้วย:
+
+```bash
+npm run test:report
+```
+
 ทุก suite แยก test files ตาม target และ endpoint: `tests/testCases/mocked-bff/` สำหรับ WireMock, `pokemon/` และ `purchases/` สำหรับ public BFF, `PokeAPI/<endpoint>/` สำหรับ internal PokéMart API โดยตรง และ `e2e/` สำหรับ journeys ผ่าน BFF ผลจาก WireMock ยืนยันเฉพาะ contract ของ mapping ไม่ได้ยืนยัน business logic หรือ persistence ของระบบจริง ส่วน `PokeAPI` ตรวจ internal DTO/error behavior โดยไม่ใช้ BFF.
 
 ดู targets ทั้งหมดได้ด้วย:

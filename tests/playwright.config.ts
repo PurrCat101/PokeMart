@@ -6,7 +6,7 @@ export default defineConfig({
   timeout: 15_000,
   fullyParallel: false,
   workers: 1,
-  reporter: 'list',
+  reporter: [['list'], ['html', { open: 'never' }]],
   projects: [
     {
       name: 'wiremock',

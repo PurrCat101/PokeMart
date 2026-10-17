@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "test": "playwright test",
+    "test:report": "playwright show-report",
     "test:mocked": "playwright test --project=wiremock",
     "test:api": "playwright test --project=api",
     "test:pokeapi": "playwright test --project=pokeapi",
