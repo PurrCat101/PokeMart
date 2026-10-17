@@ -197,7 +197,7 @@ rm -ri tests wiremock
 
 สร้างโครงสร้าง/config, mappings และ test cases ใหม่ โปรเจ็กต์ root กำหนด `tests` เป็น npm workspace จึงต้องสร้าง `tests/package.json` และ Playwright config กลับมาก่อนรัน `npm install`/tests
 
-เริ่มออกแบบจาก [BFF OpenAPI](specs/openapi.yaml), [internal API OpenAPI](specs/pokemart-openapi.yaml), [acceptance criteria](specs/06-acceptance-and-decisions.md) และ [test design / traceability](specs/08-test-design.md) ใช้ [แผนภาพ Drawdy](https://drawdy.io/?canvas=6ad37296732501d97c4f802f) ช่วยวางเส้นทางการเรียกและแยก real กับ mocked tests
+เริ่มออกแบบจาก [BFF OpenAPI](specs/openapi.yaml), [internal API OpenAPI](specs/pokemart-openapi.yaml), [acceptance criteria](specs/06-acceptance-and-decisions.md) และ [test design / traceability](specs/08-test-design.md) แล้วใช้แผนภาพสถาปัตยกรรมและ workflow ที่ฝังใน README นี้ช่วยแยก real กับ mocked tests
 
 ## Purchase request และ retry
 
@@ -219,6 +219,12 @@ Client สร้าง UUID `purchaseId` ก่อนเริ่มซื้อ
 ## ฐานข้อมูลและ Pokémon seed
 
 ฐานข้อมูลใช้ SQL ใน `database/schema/` และ `database/seed/`; การ initialize อัตโนมัติทำงานเมื่อสร้าง MySQL volume ใหม่เท่านั้น Seed ปัจจุบันมี Pokémon Generation I 151 ตัวจาก PokeAPI v2 พร้อมราคาและ stock จำลองของ PokéMart
+
+### ERD: ตารางและความสัมพันธ์
+
+![PokéMart database tables and entity relationships](database/schema/erd.svg)
+
+เส้นทึบคือ foreign key ที่ประกาศใน MySQL; เส้นประคือการเชื่อมโยงด้วย `user_id` ที่ใช้ใน lab แต่ไม่มี `users` table หรือ foreign key คัดลอก DBML ไปใช้ใน dbdiagram.io ได้จาก [database/schema/pokemart.dbml](database/schema/pokemart.dbml); ดูรายละเอียดคอลัมน์และ constraints ที่ [database/README.md](database/README.md).
 
 ราคา derive จาก base experience ปัดทีละ 50 และจำกัดช่วง 200–1500 ส่วน stock ลดลงตาม experience tier และมี variation แบบ deterministic จาก Pokémon ID ทำให้ seed ซ้ำได้ผลเดิม Runtime และ tests ไม่เรียก PokéAPI ดูรายละเอียดที่ [database/README.md](database/README.md) และข้อมูลใน [database/seed/001_seed_shop_data.sql](database/seed/001_seed_shop_data.sql)
 
