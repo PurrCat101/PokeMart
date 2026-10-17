@@ -24,25 +24,25 @@ Validation is intentionally duplicated in the BFF and the PokéMart API. The BFF
 
 The BFF calls one upstream: the PokéMart API, at `POKEMART_API_BASE_URL`.
 
-Upstream paths use the service contract prefix `/pokemart/v2`. The PokéMart API is not a public entry point. Its contract is in `specs/pokemart-openapi.yaml` and described in `03c-pokemart-api.md`. Clients must not call it directly for business journeys.
+Upstream paths use the service contract prefix `/pokemart/v1`. The PokéMart API is not a public entry point. Its contract is in `specs/pokemart-openapi.yaml` and described in `03c-pokemart-api.md`. Clients must not call it directly for business journeys.
 
 ## 3. Endpoints
 
 | Method | Path | Upstream call | Success | Possible public errors |
 |---|---|---|---|---|
-| `POST` | `/api/auth/login` | `POST /pokemart/v2/auth/login` with email/password body | `200` | `400 VALIDATION_ERROR`; `401 INVALID_CREDENTIALS`; `503 DEPENDENCY_UNAVAILABLE` |
-| `GET` | `/api/auth/me` | `GET /pokemart/v2/auth/me` with bearer token | `200` | `401 UNAUTHORIZED`; `503 DEPENDENCY_UNAVAILABLE` |
-| `GET` | `/api/pokemon` | `GET /pokemart/v2/catalog/pokemon` with same `limit`, `offset` | `200` | `400 VALIDATION_ERROR` / `UNKNOWN_QUERY_PARAMETER`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
-| `GET` | `/api/pokemon/:id` | `GET /pokemart/v2/catalog/pokemon/{id}` | `200` | `400 VALIDATION_ERROR`; `404 POKEMON_NOT_FOUND`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
-| `GET` | `/api/wallet` | `GET /pokemart/v2/wallet` with bearer token | `200` | `401 UNAUTHORIZED`; `404 USER_NOT_FOUND`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
-| `GET` | `/api/inventory` | `GET /pokemart/v2/inventory` with bearer token | `200` | `401 UNAUTHORIZED`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
-| `POST` | `/api/purchases` | `POST /pokemart/v2/purchases` with bearer token and `purchaseId` body | `201` | `400 VALIDATION_ERROR` / `INVALID_JSON`; `401 UNAUTHORIZED`; `404 POKEMON_NOT_FOUND`; `409 PURCHASE_DUPLICATE` / `POKEMON_NOT_FOR_SALE` / `INSUFFICIENT_STOCK`; `415 UNSUPPORTED_MEDIA_TYPE`; `422 INSUFFICIENT_FUNDS`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
-| `GET` | `/api/purchases` | `GET /pokemart/v2/purchases` with bearer token, `limit`, `offset` | `200` | `400 VALIDATION_ERROR` / `UNKNOWN_QUERY_PARAMETER`; `401 UNAUTHORIZED`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
-| `GET` | `/api/purchases/:id` | `GET /pokemart/v2/purchases/{id}` with bearer token | `200` | `400 VALIDATION_ERROR`; `401 UNAUTHORIZED`; `404 PURCHASE_NOT_FOUND`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
+| `POST` | `/api/auth/login` | `POST /pokemart/v1/auth/login` with email/password body | `200` | `400 VALIDATION_ERROR`; `401 INVALID_CREDENTIALS`; `503 DEPENDENCY_UNAVAILABLE` |
+| `GET` | `/api/auth/me` | `GET /pokemart/v1/auth/me` with bearer token | `200` | `401 UNAUTHORIZED`; `503 DEPENDENCY_UNAVAILABLE` |
+| `GET` | `/api/pokemon` | `GET /pokemart/v1/catalog/pokemon` with same `limit`, `offset` | `200` | `400 VALIDATION_ERROR` / `UNKNOWN_QUERY_PARAMETER`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
+| `GET` | `/api/pokemon/:id` | `GET /pokemart/v1/catalog/pokemon/{id}` | `200` | `400 VALIDATION_ERROR`; `404 POKEMON_NOT_FOUND`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
+| `GET` | `/api/wallet` | `GET /pokemart/v1/wallet` with bearer token | `200` | `401 UNAUTHORIZED`; `404 USER_NOT_FOUND`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
+| `GET` | `/api/inventory` | `GET /pokemart/v1/inventory` with bearer token | `200` | `401 UNAUTHORIZED`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
+| `POST` | `/api/purchases` | `POST /pokemart/v1/purchases` with bearer token and `purchaseId` body | `201` | `400 VALIDATION_ERROR` / `INVALID_JSON`; `401 UNAUTHORIZED`; `404 POKEMON_NOT_FOUND`; `409 PURCHASE_DUPLICATE` / `POKEMON_NOT_FOR_SALE` / `INSUFFICIENT_STOCK`; `415 UNSUPPORTED_MEDIA_TYPE`; `422 INSUFFICIENT_FUNDS`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
+| `GET` | `/api/purchases` | `GET /pokemart/v1/purchases` with bearer token, `limit`, `offset` | `200` | `400 VALIDATION_ERROR` / `UNKNOWN_QUERY_PARAMETER`; `401 UNAUTHORIZED`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
+| `GET` | `/api/purchases/:id` | `GET /pokemart/v1/purchases/{id}` with bearer token | `200` | `400 VALIDATION_ERROR`; `401 UNAUTHORIZED`; `404 PURCHASE_NOT_FOUND`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
 | `GET` | `/health` | none | `200` | none |
 | `GET` | `/ready` | `GET /ready` on PokéMart API | `200` or `503` | none |
 
-The BFF and PokéMart API paths differ on purpose. The BFF is the public contract; `/pokemart/v2` is the service contract. The mapping above is part of this spec and must be kept in sync with `specs/pokemart-openapi.yaml`.
+The BFF and PokéMart API paths differ on purpose. The BFF is the public contract; `/pokemart/v1` is the service contract. The mapping above is part of this spec and must be kept in sync with `specs/pokemart-openapi.yaml`.
 
 ### Endpoint notes
 
@@ -119,6 +119,6 @@ Do not log: headers other than the ones listed in section 4, or request bodies t
 
 ## 11. Open points for the BFF
 
-- ~~Exact upstream paths~~ Decided: upstream paths use the `/pokemart/v2` prefix (section 2 and section 3).
+- ~~Exact upstream paths~~ Decided: upstream paths use the `/pokemart/v1` prefix (section 2 and section 3).
 - Whether `GET /api/inventory` and `GET /api/wallet` should be combined into one dashboard endpoint later. Not in this iteration.
 - Whether the BFF should expose metrics separately from the PokéMart API, once the observability phase starts (`05-operations.md`).

@@ -21,8 +21,8 @@ test('INT-PURCHASE-CONCURRENCY-001 concurrent POSTs with one purchaseId commit o
 
     const payload = { purchaseId, pokemonId: testEnvironment.pokemonId, quantity: 1 };
     const responses = await Promise.all([
-      request.post('/pokemart/v2/purchases', { data: payload, headers: internalHeaders(testEnvironment.userId, requestId) }),
-      request.post('/pokemart/v2/purchases', { data: payload, headers: internalHeaders(testEnvironment.userId, requestId) }),
+      request.post('/pokemart/v1/purchases', { data: payload, headers: internalHeaders(testEnvironment.userId, requestId) }),
+      request.post('/pokemart/v1/purchases', { data: payload, headers: internalHeaders(testEnvironment.userId, requestId) }),
     ]);
     expect(responses.map((response) => response.status()).sort()).toEqual([201, 409]);
     const duplicate = responses.find((response) => response.status() === 409);
@@ -67,7 +67,7 @@ test('INT-PURCHASE-CONCURRENCY-002 concurrent distinct purchases competing for t
     expect(snapshot.walletBalance).toBeGreaterThanOrEqual(price);
     await database.query('UPDATE shop_listing SET stock=1 WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
 
-    const responses = await Promise.all(purchaseIds.map((purchaseId) => request.post('/pokemart/v2/purchases', {
+    const responses = await Promise.all(purchaseIds.map((purchaseId) => request.post('/pokemart/v1/purchases', {
       data: { purchaseId, pokemonId: testEnvironment.pokemonId, quantity: 1 },
       headers: internalHeaders(testEnvironment.userId, requestId),
     })));

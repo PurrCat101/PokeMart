@@ -4,7 +4,7 @@ import { internalHeaders } from '../support';
 
 test('INT-PURCHASE-DETAIL-001 GET purchase detail distinguishes invalid and absent IDs', async ({ request, testEnvironment }) => {
   const requestId = 'tc-pokeapi-purchase-detail';
-  const malformed = await request.get('/pokemart/v2/purchases/not-a-uuid', {
+  const malformed = await request.get('/pokemart/v1/purchases/not-a-uuid', {
     headers: internalHeaders(testEnvironment.userId, requestId),
   });
   await expectPublicError(malformed, {
@@ -15,7 +15,7 @@ test('INT-PURCHASE-DETAIL-001 GET purchase detail distinguishes invalid and abse
     details: [{ field: 'id', message: 'must be a UUID' }],
   });
 
-  const missing = await request.get('/pokemart/v2/purchases/00000000-0000-4000-8000-000000000099', {
+  const missing = await request.get('/pokemart/v1/purchases/00000000-0000-4000-8000-000000000099', {
     headers: internalHeaders(testEnvironment.userId, requestId),
   });
   await expectPublicError(missing, {
@@ -26,7 +26,7 @@ test('INT-PURCHASE-DETAIL-001 GET purchase detail distinguishes invalid and abse
     details: [],
   });
 
-  const noIdentity = await request.get('/pokemart/v2/purchases/00000000-0000-4000-8000-000000000099', {
+  const noIdentity = await request.get('/pokemart/v1/purchases/00000000-0000-4000-8000-000000000099', {
     headers: { 'X-Request-Id': requestId },
   });
   await expectPublicError(noIdentity, {

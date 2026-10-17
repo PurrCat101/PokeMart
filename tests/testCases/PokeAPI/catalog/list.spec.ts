@@ -3,7 +3,7 @@ import { expectPublicError } from '../../../support/utils/expectPublicError';
 import { internalHeaders } from '../support';
 
 test('INT-CAT-LIST-001 GET catalog returns the internal paginated DTO and stable order', async ({ request, testEnvironment }) => {
-  const response = await request.get('/pokemart/v2/catalog/pokemon', {
+  const response = await request.get('/pokemart/v1/catalog/pokemon', {
     headers: internalHeaders(testEnvironment.userId, 'tc-pokeapi-catalog'),
   });
   expect(response.status()).toBe(200);
@@ -29,7 +29,7 @@ test('INT-CAT-LIST-001 GET catalog returns the internal paginated DTO and stable
 
 test('INT-CAT-LIST-002 GET catalog supports pagination boundaries and empty pages', async ({ request, testEnvironment }) => {
   for (const limit of [1, 100]) {
-    const response = await request.get(`/pokemart/v2/catalog/pokemon?limit=${limit}&offset=0`, {
+    const response = await request.get(`/pokemart/v1/catalog/pokemon?limit=${limit}&offset=0`, {
       headers: internalHeaders(testEnvironment.userId),
     });
     expect(response.status()).toBe(200);
@@ -38,7 +38,7 @@ test('INT-CAT-LIST-002 GET catalog supports pagination boundaries and empty page
     expect(body.results.length).toBe(Math.min(limit, 151));
   }
 
-  const emptyResponse = await request.get('/pokemart/v2/catalog/pokemon?limit=2&offset=999', {
+  const emptyResponse = await request.get('/pokemart/v1/catalog/pokemon?limit=2&offset=999', {
     headers: internalHeaders(testEnvironment.userId),
   });
   expect(emptyResponse.status()).toBe(200);
@@ -53,7 +53,7 @@ test('INT-CAT-LIST-003 GET catalog rejects invalid and unknown query parameters'
     { query: 'offset=-1', code: 'VALIDATION_ERROR', details: [{ field: 'offset', message: 'must be an integer' }] },
     { query: 'unexpected=true', code: 'UNKNOWN_QUERY_PARAMETER', details: [{ field: 'unexpected', message: 'is not supported' }] },
   ]) {
-    const response = await request.get(`/pokemart/v2/catalog/pokemon?${scenario.query}`, {
+    const response = await request.get(`/pokemart/v1/catalog/pokemon?${scenario.query}`, {
       headers: internalHeaders(testEnvironment.userId, requestId),
     });
     await expectPublicError(response, {
@@ -73,7 +73,7 @@ test('INT-CAT-LIST-004 GET catalog is public and ignores X-User-Id', async ({ re
     { 'X-User-Id': 'bad user', 'X-Request-Id': requestId },
   ];
   for (const headers of cases) {
-    const response = await request.get('/pokemart/v2/catalog/pokemon', { headers });
+    const response = await request.get('/pokemart/v1/catalog/pokemon', { headers });
     expect(response.status()).toBe(200);
     expect(response.headers()['x-request-id']).toBe(requestId);
     expect(await response.json()).toMatchObject({ count: 151, results: expect.any(Array) });

@@ -26,13 +26,13 @@ test('INT-PURCHASE-CREATE-001 POST purchase commits once, exposes service DTO, a
     expect(snapshot.stock).toBeGreaterThanOrEqual(1);
     expect(snapshot.walletBalance).toBeGreaterThanOrEqual(price);
 
-    const response = await request.post('/pokemart/v2/purchases', {
+    const response = await request.post('/pokemart/v1/purchases', {
       data: { purchaseId, pokemonId: testEnvironment.pokemonId, quantity: 1 },
       headers: internalHeaders(testEnvironment.userId, requestId),
     });
     expect(response.status()).toBe(201);
     expect(response.headers()['x-request-id']).toBe(requestId);
-    expect(response.headers().location).toBe(`/pokemart/v2/purchases/${purchaseId}`);
+    expect(response.headers().location).toBe(`/pokemart/v1/purchases/${purchaseId}`);
     const expectedPurchase = {
       id: purchaseId,
       pokemonId: testEnvironment.pokemonId,
@@ -44,14 +44,14 @@ test('INT-PURCHASE-CREATE-001 POST purchase commits once, exposes service DTO, a
     };
     expect(await response.json()).toEqual(expectedPurchase);
 
-    const detailResponse = await request.get(`/pokemart/v2/purchases/${purchaseId}`, {
+    const detailResponse = await request.get(`/pokemart/v1/purchases/${purchaseId}`, {
       headers: internalHeaders(testEnvironment.userId, requestId),
     });
     expect(detailResponse.status()).toBe(200);
     const createdBody = await response.json();
     expect(await detailResponse.json()).toEqual(createdBody);
 
-    const otherUserResponse = await request.get(`/pokemart/v2/purchases/${purchaseId}`, {
+    const otherUserResponse = await request.get(`/pokemart/v1/purchases/${purchaseId}`, {
       headers: internalHeaders('lab-empty-user-001', requestId),
     });
     await expectPublicError(otherUserResponse, {
@@ -62,7 +62,7 @@ test('INT-PURCHASE-CREATE-001 POST purchase commits once, exposes service DTO, a
       details: [],
     });
 
-    const duplicateResponse = await request.post('/pokemart/v2/purchases', {
+    const duplicateResponse = await request.post('/pokemart/v1/purchases', {
       data: { purchaseId, pokemonId: testEnvironment.pokemonId, quantity: 2 },
       headers: internalHeaders(testEnvironment.userId, requestId),
     });
@@ -107,7 +107,7 @@ test('INT-PURCHASE-CREATE-002 POST purchase rejects invalid payloads and media t
         ? scenario.body.purchaseId
         : testEnvironment.purchaseId();
       const before = await snapshotPurchaseState(database, testEnvironment.userId, testEnvironment.pokemonId);
-      const response = await request.post('/pokemart/v2/purchases', {
+      const response = await request.post('/pokemart/v1/purchases', {
         data: scenario.body,
         headers: internalHeaders(testEnvironment.userId, requestId),
       });
@@ -122,7 +122,7 @@ test('INT-PURCHASE-CREATE-002 POST purchase rejects invalid payloads and media t
       await assertNoPurchase(database, purchaseId);
     }
 
-    const malformedJson = await request.post('/pokemart/v2/purchases', {
+    const malformedJson = await request.post('/pokemart/v1/purchases', {
       data: Buffer.from('{"purchaseId":'),
       headers: { ...internalHeaders(testEnvironment.userId, requestId), 'Content-Type': 'application/json' },
     });
@@ -134,7 +134,7 @@ test('INT-PURCHASE-CREATE-002 POST purchase rejects invalid payloads and media t
       details: [],
     });
 
-    const unsupportedType = await request.post('/pokemart/v2/purchases', {
+    const unsupportedType = await request.post('/pokemart/v1/purchases', {
       data: 'not-json',
       headers: { ...internalHeaders(testEnvironment.userId, requestId), 'Content-Type': 'text/plain' },
     });
@@ -147,7 +147,7 @@ test('INT-PURCHASE-CREATE-002 POST purchase rejects invalid payloads and media t
     });
 
     const beforeMissingIdentity = await snapshotPurchaseState(database, testEnvironment.userId, testEnvironment.pokemonId);
-    const missingIdentity = await request.post('/pokemart/v2/purchases', {
+    const missingIdentity = await request.post('/pokemart/v1/purchases', {
       data: { purchaseId: testEnvironment.purchaseId(), pokemonId: testEnvironment.pokemonId, quantity: 1 },
       headers: { 'X-Request-Id': requestId },
     });
@@ -198,7 +198,7 @@ test('INT-PURCHASE-CREATE-003 POST purchase returns documented business errors w
 
       const purchaseId = testEnvironment.purchaseId();
       const requestId = `tc-pokeapi-business-${scenario.code}`;
-      const response = await request.post('/pokemart/v2/purchases', {
+      const response = await request.post('/pokemart/v1/purchases', {
         data: { purchaseId, pokemonId: scenario.pokemonId, quantity: scenario.quantity ?? 1 },
         headers: internalHeaders(testEnvironment.userId, requestId),
       });

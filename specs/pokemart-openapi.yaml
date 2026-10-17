@@ -1,10 +1,10 @@
 openapi: 3.0.3
 info:
   title: PokéMart API (service contract)
-  version: 2.0.0
+  version: 1.0.0
   description: |
     Service contract for the PokéMart API. Called by the BFF only. Not a public entry point.
-    Business endpoints use the prefix `/pokemart/v2`. Health endpoints are not versioned.
+    Business endpoints use the prefix `/pokemart/v1`. Health endpoints are not versioned.
 
     Business behavior is aligned with the public BFF contract, but internal response schemas are service-owned.
     Catalog reads are public. Wallet, inventory, and purchase resources require a bearer JWT.
@@ -21,7 +21,7 @@ tags:
   - name: Health
 
 paths:
-  /pokemart/v2/auth/login:
+  /pokemart/v1/auth/login:
     post:
       tags: [Authentication]
       operationId: login
@@ -52,7 +52,7 @@ paths:
           $ref: '#/components/responses/UnsupportedMediaType'
         '500':
           $ref: '#/components/responses/InternalError'
-  /pokemart/v2/auth/me:
+  /pokemart/v1/auth/me:
     get:
       tags: [Authentication]
       operationId: getCurrentUser
@@ -76,7 +76,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /pokemart/v2/catalog/pokemon:
+  /pokemart/v1/catalog/pokemon:
     get:
       tags: [Catalog]
       operationId: listCatalogPokemon
@@ -105,7 +105,7 @@ paths:
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
 
-  /pokemart/v2/catalog/pokemon/{id}:
+  /pokemart/v1/catalog/pokemon/{id}:
     get:
       tags: [Catalog]
       operationId: getCatalogPokemon
@@ -135,7 +135,7 @@ paths:
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
 
-  /pokemart/v2/wallet:
+  /pokemart/v1/wallet:
     security:
       - bearerAuth: []
     get:
@@ -168,7 +168,7 @@ paths:
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
 
-  /pokemart/v2/inventory:
+  /pokemart/v1/inventory:
     security:
       - bearerAuth: []
     get:
@@ -199,7 +199,7 @@ paths:
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
 
-  /pokemart/v2/purchases:
+  /pokemart/v1/purchases:
     security:
       - bearerAuth: []
     post:
@@ -282,7 +282,7 @@ paths:
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
 
-  /pokemart/v2/purchases/{id}:
+  /pokemart/v1/purchases/{id}:
     security:
       - bearerAuth: []
     get:

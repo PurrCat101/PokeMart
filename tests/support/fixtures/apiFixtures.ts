@@ -21,7 +21,7 @@ export const test = base.extend<ApiFixtures>({
     const baseURL = isWireMock ? testConfig.wiremockBaseUrl : isInternalApi ? testConfig.pokemartApiBaseUrl : testConfig.bffBaseUrl;
     let accessToken = 'wiremock-test-token';
     if (!isWireMock) {
-      const loginPath = isInternalApi ? '/pokemart/v2/auth/login' : '/api/auth/login';
+      const loginPath = isInternalApi ? '/pokemart/v1/auth/login' : '/api/auth/login';
       const login = await request.post(loginPath, {
         data: { email: testConfig.auth.email, password: testConfig.auth.password },
       });

@@ -19,7 +19,7 @@ test('INT-PURCHASE-RETRY-001 POST failed purchase can retry the same ID after fu
 
     await database.query('UPDATE user_wallet SET balance=0 WHERE user_id=?', [testEnvironment.userId]);
     const body = { purchaseId, pokemonId: testEnvironment.pokemonId, quantity: 1 };
-    const failed = await request.post('/pokemart/v2/purchases', {
+    const failed = await request.post('/pokemart/v1/purchases', {
       data: body,
       headers: internalHeaders(testEnvironment.userId, requestId),
     });
@@ -34,7 +34,7 @@ test('INT-PURCHASE-RETRY-001 POST failed purchase can retry the same ID after fu
     expect(failedPurchaseRows).toEqual([]);
 
     await restorePurchaseState(database, testEnvironment.userId, testEnvironment.pokemonId, snapshot);
-    const retried = await request.post('/pokemart/v2/purchases', {
+    const retried = await request.post('/pokemart/v1/purchases', {
       data: body,
       headers: internalHeaders(testEnvironment.userId, requestId),
     });

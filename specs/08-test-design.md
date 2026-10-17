@@ -156,15 +156,15 @@ The `pokeapi` Playwright project targets `POKEMART_API_BASE_URL` directly. Each 
 |---|---|---|
 | `GET /health` | Exact 200 liveness payload; generated request ID; no business identity required | `health/get.spec.ts` |
 | `GET /ready` | Exact 200 readiness payload when MySQL is initialized | `ready/get.spec.ts` |
-| `GET /pokemart/v2/catalog/pokemon` | Public internal DTO, default and boundary pagination, empty page, invalid/unknown query, ignores `X-User-Id` | `catalog/list.spec.ts` |
-| `GET /pokemart/v2/catalog/pokemon/{id}` | Exact internal Pokémon/listing shape; malformed and nonexistent IDs; missing identity | `catalog/detail.spec.ts` |
-| `GET /pokemart/v2/wallet` | Exact wallet DTO; missing identity; `USER_NOT_FOUND` | `wallet/get.spec.ts` |
-| `GET /pokemart/v2/inventory` | Internal item shape, empty inventory, missing identity | `inventory/get.spec.ts` |
-| `POST /pokemart/v2/purchases` | Exact 201 DTO/Location; duplicate ID even with changed body; body/media validation; missing identity; missing Pokémon, inactive listing, stock, funds; state unchanged on failure | `purchases/create.spec.ts` |
-| `POST /pokemart/v2/purchases` retry | Failed transaction does not reserve ID; same ID succeeds after state is corrected | `purchases/retry.spec.ts` |
-| `POST /pokemart/v2/purchases` concurrency | Same ID commits once; distinct IDs competing for final stock allow one commit; verify DB state | `purchases/concurrency.spec.ts` |
-| `GET /pokemart/v2/purchases` | Exact service page/item DTO, pagination validation, unknown query, missing identity | `purchases/list.spec.ts` |
-| `GET /pokemart/v2/purchases/{id}` | Invalid UUID, nonexistent UUID, missing identity; successful ownership-scoped detail read is checked after create | `purchases/detail.spec.ts`, `purchases/create.spec.ts` |
+| `GET /pokemart/v1/catalog/pokemon` | Public internal DTO, default and boundary pagination, empty page, invalid/unknown query, ignores `X-User-Id` | `catalog/list.spec.ts` |
+| `GET /pokemart/v1/catalog/pokemon/{id}` | Exact internal Pokémon/listing shape; malformed and nonexistent IDs; missing identity | `catalog/detail.spec.ts` |
+| `GET /pokemart/v1/wallet` | Exact wallet DTO; missing identity; `USER_NOT_FOUND` | `wallet/get.spec.ts` |
+| `GET /pokemart/v1/inventory` | Internal item shape, empty inventory, missing identity | `inventory/get.spec.ts` |
+| `POST /pokemart/v1/purchases` | Exact 201 DTO/Location; duplicate ID even with changed body; body/media validation; missing identity; missing Pokémon, inactive listing, stock, funds; state unchanged on failure | `purchases/create.spec.ts` |
+| `POST /pokemart/v1/purchases` retry | Failed transaction does not reserve ID; same ID succeeds after state is corrected | `purchases/retry.spec.ts` |
+| `POST /pokemart/v1/purchases` concurrency | Same ID commits once; distinct IDs competing for final stock allow one commit; verify DB state | `purchases/concurrency.spec.ts` |
+| `GET /pokemart/v1/purchases` | Exact service page/item DTO, pagination validation, unknown query, missing identity | `purchases/list.spec.ts` |
+| `GET /pokemart/v1/purchases/{id}` | Invalid UUID, nonexistent UUID, missing identity; successful ownership-scoped detail read is checked after create | `purchases/detail.spec.ts`, `purchases/create.spec.ts` |
 
 Internal API error-code coverage (excluding fault-only codes):
 

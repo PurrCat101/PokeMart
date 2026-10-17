@@ -3,7 +3,7 @@ import { expectPublicError } from '../../../support/utils/expectPublicError';
 import { internalHeaders } from '../support';
 
 test('INT-WALLET-001 GET wallet returns the identified user wallet', async ({ request, testEnvironment }) => {
-  const response = await request.get('/pokemart/v2/wallet', {
+  const response = await request.get('/pokemart/v1/wallet', {
     headers: internalHeaders(testEnvironment.userId, 'tc-pokeapi-wallet'),
   });
   expect(response.status()).toBe(200);
@@ -15,7 +15,7 @@ test('INT-WALLET-001 GET wallet returns the identified user wallet', async ({ re
 
 test('INT-WALLET-002 GET wallet requires authentication and reports users without wallets', async ({ request }) => {
   const requestId = 'tc-pokeapi-wallet-error';
-  const noIdentity = await request.get('/pokemart/v2/wallet', { headers: { 'X-Request-Id': requestId } });
+  const noIdentity = await request.get('/pokemart/v1/wallet', { headers: { 'X-Request-Id': requestId } });
   await expectPublicError(noIdentity, {
     status: 401,
     code: 'UNAUTHORIZED',
@@ -24,7 +24,7 @@ test('INT-WALLET-002 GET wallet requires authentication and reports users withou
     details: [],
   });
 
-  const unknownUser = await request.get('/pokemart/v2/wallet', {
+  const unknownUser = await request.get('/pokemart/v1/wallet', {
     headers: internalHeaders('lab-empty-user-001', requestId),
   });
   await expectPublicError(unknownUser, {

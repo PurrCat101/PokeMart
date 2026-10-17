@@ -169,7 +169,7 @@ app.use((req, res, next) => {
   next();
 });
 app.use((req, _res, next) => {
-  if (req.method === 'POST' && ['/pokemart/v2/auth/login', '/pokemart/v2/purchases'].includes(req.path) && !req.is('application/json')) return next(new AppError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Content-Type must be application/json'));
+  if (req.method === 'POST' && ['/pokemart/v1/auth/login', '/pokemart/v1/purchases'].includes(req.path) && !req.is('application/json')) return next(new AppError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Content-Type must be application/json'));
   next();
 });
 app.use(express.json({ strict: false }));
@@ -187,7 +187,7 @@ app.get('/ready', async (_req, res) => {
   } catch { return res.status(503).json({ status: 'not_ready', checks: { mysql: 'unavailable' } }); }
 });
 
-app.post('/pokemart/v2/auth/login', async (req, res, next) => {
+app.post('/pokemart/v1/auth/login', async (req, res, next) => {
   try {
     if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)
       || Object.keys(req.body).some((field) => field !== 'email' && field !== 'password')) {
@@ -211,10 +211,10 @@ app.post('/pokemart/v2/auth/login', async (req, res, next) => {
     });
   } catch (error) { next(error); }
 });
-app.get('/pokemart/v2/auth/me', authenticate, (req, res) => {
+app.get('/pokemart/v1/auth/me', authenticate, (req, res) => {
   res.json({ user: res.locals.user });
 });
-app.get('/pokemart/v2/catalog/pokemon', async (req, res, next) => {
+app.get('/pokemart/v1/catalog/pokemon', async (req, res, next) => {
   try {
     const { limit, offset } = pageParams(req);
     const [countRows] = await pool.query('SELECT COUNT(*) AS count FROM shop_listing WHERE active = TRUE');
@@ -222,7 +222,7 @@ app.get('/pokemart/v2/catalog/pokemon', async (req, res, next) => {
     res.json({ count: Number((countRows as Row[])[0].count), limit, offset, results: (rows as Row[]).map(asPokemon) });
   } catch (error) { next(error); }
 });
-app.get('/pokemart/v2/catalog/pokemon/:id', async (req, res, next) => {
+app.get('/pokemart/v1/catalog/pokemon/:id', async (req, res, next) => {
   try {
     const id = pokemonId(req.params.id);
     const [rows] = await pool.query(`SELECT r.source_id AS id, r.name, r.types, r.sprite_url AS spriteUrl, l.price, l.stock FROM shop_listing l JOIN pokemon_reference r ON r.source_id=l.pokemon_source_id WHERE l.active=TRUE AND r.source_id=?`, [id]);
@@ -230,13 +230,13 @@ app.get('/pokemart/v2/catalog/pokemon/:id', async (req, res, next) => {
     res.json(asPokemon((rows as Row[])[0]));
   } catch (error) { next(error); }
 });
-app.get('/pokemart/v2/wallet', authenticate, async (req, res, next) => {
+app.get('/pokemart/v1/wallet', authenticate, async (req, res, next) => {
   try { const id = userId(res); const [rows] = await pool.query('SELECT user_id AS userId, balance FROM user_wallet WHERE user_id=?', [id]); if (!(rows as Row[]).length) throw new AppError(404, 'USER_NOT_FOUND', 'User not found'); res.json((rows as Row[])[0]); } catch (error) { next(error); }
 });
-app.get('/pokemart/v2/inventory', authenticate, async (req, res, next) => {
+app.get('/pokemart/v1/inventory', authenticate, async (req, res, next) => {
   try { const id = userId(res); const [rows] = await pool.query(`SELECT i.pokemon_source_id AS pokemonId, r.name, i.quantity FROM user_inventory i JOIN pokemon_reference r ON r.source_id=i.pokemon_source_id WHERE i.user_id=? ORDER BY i.pokemon_source_id`, [id]); const results = (rows as Row[]).map((row) => ({ ...row, quantity: Number(row.quantity) })); res.json({ count: results.length, results }); } catch (error) { next(error); }
 });
-app.get('/pokemart/v2/purchases', authenticate, async (req, res, next) => {
+app.get('/pokemart/v1/purchases', authenticate, async (req, res, next) => {
   try {
     const id = userId(res); const { limit, offset } = pageParams(req);
     const [countRows] = await pool.query('SELECT COUNT(*) AS count FROM purchases WHERE user_id=?', [id]);
@@ -244,7 +244,7 @@ app.get('/pokemart/v2/purchases', authenticate, async (req, res, next) => {
     res.json({ count: Number((countRows as Row[])[0].count), limit, offset, results: (rows as Row[]).map(asPurchase) });
   } catch (error) { next(error); }
 });
-app.get('/pokemart/v2/purchases/:id', authenticate, async (req, res, next) => {
+app.get('/pokemart/v1/purchases/:id', authenticate, async (req, res, next) => {
   try {
     const id = userId(res); const purchaseId = req.params.id;
     if (typeof purchaseId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(purchaseId)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'id', message: 'must be a UUID' }]);
@@ -287,11 +287,11 @@ async function createPurchase(userId: string, body: unknown): Promise<{ status: 
     throw error;
   } finally { connection.release(); }
 }
-app.post('/pokemart/v2/purchases', authenticate, async (req, res, next) => {
+app.post('/pokemart/v1/purchases', authenticate, async (req, res, next) => {
   try {
     const id = userId(res);
     const result = await createPurchase(id, req.body);
-    res.setHeader('Location', `/pokemart/v2/purchases/${result.body.id}`); res.status(result.status).json(result.body);
+    res.setHeader('Location', `/pokemart/v1/purchases/${result.body.id}`); res.status(result.status).json(result.body);
   } catch (error) { next(error); }
 });
 app.use((error: any, req: Request, res: Response, _next: NextFunction) => {

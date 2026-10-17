@@ -6,13 +6,13 @@ The formal contract is `specs/pokemart-openapi.yaml`. This file describes the ru
 
 ## 1. Path prefix and versioning
 
-- All business endpoints use the prefix `/pokemart/v2`.
+- All business endpoints use the prefix `/pokemart/v1`.
 - The version segment changes only for breaking changes to request or response shape, status codes, or error codes.
 - Health endpoints `/health` and `/ready` are not versioned.
 
 ## 2. Authentication and caller identity
 
-Catalog reads are public. `POST /pokemart/v2/auth/login` verifies a user's email/password against the stored scrypt hash and returns a one-hour HS256 access token. `GET /pokemart/v2/auth/me`, wallet, inventory, and purchase operations require `Authorization: Bearer <accessToken>`.
+Catalog reads are public. `POST /pokemart/v1/auth/login` verifies a user's email/password against the stored scrypt hash and returns a one-hour HS256 access token. `GET /pokemart/v1/auth/me`, wallet, inventory, and purchase operations require `Authorization: Bearer <accessToken>`.
 
 The API validates the signature, algorithm, issuer, audience, issue/expiry times, and the active user row on every protected request. It takes `user_id` from the verified JWT `sub` claim; it does not trust `X-User-Id`. Missing, malformed, expired, invalid, or inactive-user tokens return `401 UNAUTHORIZED`. Incorrect login credentials return the generic `401 INVALID_CREDENTIALS`.
 
@@ -22,15 +22,15 @@ The BFF forwards tokens unchanged. The internal API is still intended to remain 
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/pokemart/v2/auth/login` | Verify credentials and issue a bearer access token |
-| `GET` | `/pokemart/v2/auth/me` | Return the active authenticated profile |
-| `GET` | `/pokemart/v2/catalog/pokemon` | Paged catalog of listed Pokémon |
-| `GET` | `/pokemart/v2/catalog/pokemon/{id}` | One Pokémon with its listing |
-| `GET` | `/pokemart/v2/wallet` | Wallet of the caller |
-| `GET` | `/pokemart/v2/inventory` | Owned Pokémon of the caller |
-| `POST` | `/pokemart/v2/purchases` | Create a purchase using the supplied purchase ID |
-| `GET` | `/pokemart/v2/purchases` | Paged purchase history of the caller |
-| `GET` | `/pokemart/v2/purchases/{id}` | One purchase of the caller |
+| `POST` | `/pokemart/v1/auth/login` | Verify credentials and issue a bearer access token |
+| `GET` | `/pokemart/v1/auth/me` | Return the active authenticated profile |
+| `GET` | `/pokemart/v1/catalog/pokemon` | Paged catalog of listed Pokémon |
+| `GET` | `/pokemart/v1/catalog/pokemon/{id}` | One Pokémon with its listing |
+| `GET` | `/pokemart/v1/wallet` | Wallet of the caller |
+| `GET` | `/pokemart/v1/inventory` | Owned Pokémon of the caller |
+| `POST` | `/pokemart/v1/purchases` | Create a purchase using the supplied purchase ID |
+| `GET` | `/pokemart/v1/purchases` | Paged purchase history of the caller |
+| `GET` | `/pokemart/v1/purchases/{id}` | One purchase of the caller |
 | `GET` | `/health` | Liveness, no dependency checks |
 | `GET` | `/ready` | Readiness: MySQL reachable and schema initialized |
 

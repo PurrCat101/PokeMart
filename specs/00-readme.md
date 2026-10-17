@@ -7,7 +7,7 @@
 ![PokéMart API test architecture flow](images/pokemart-api-test-architecture-flow.png)
 
 - **BFF** เป็นทางเข้าสำหรับ client ที่ `/api` ตรวจ request, ส่งต่อไปยัง service และดูแล contract ฝั่ง public
-- **PokéMart API** อยู่ใต้ `/pokemart/v2` และเป็นเจ้าของ business rules, purchase, duplicate detection และการเข้าถึงฐานข้อมูล
+- **PokéMart API** อยู่ใต้ `/pokemart/v1` และเป็นเจ้าของ business rules, purchase, duplicate detection และการเข้าถึงฐานข้อมูล
 - **MySQL** เก็บข้อมูลร้าน, wallet, inventory และประวัติการซื้อ
 - **WireMock** ใช้จำลอง BFF สำหรับ contract tests เท่านั้น การทดสอบ integration จริงต้องเรียก BFF และ service จริง
 - การทดสอบและการเริ่มระบบไม่ควรต้องเรียก PokéAPI แบบ live
@@ -61,7 +61,7 @@ Public API:
 - `POST /api/purchases` (ส่ง `purchaseId`, `pokemonId`, `quantity` ใน JSON body)
 - `GET /health` และ `GET /ready`
 
-Internal service ใช้ endpoints ที่สอดคล้องกันภายใต้ `/pokemart/v2` เช่น `/pokemart/v2/catalog/pokemon`, `/pokemart/v2/auth/login`, `/pokemart/v2/wallet` และ `/pokemart/v2/purchases`; wallet, inventory และ purchase resources ต้องใช้ bearer JWT
+Internal service ใช้ endpoints ที่สอดคล้องกันภายใต้ `/pokemart/v1` เช่น `/pokemart/v1/catalog/pokemon`, `/pokemart/v1/auth/login`, `/pokemart/v1/wallet` และ `/pokemart/v1/purchases`; wallet, inventory และ purchase resources ต้องใช้ bearer JWT
 
 ## คำสั่ง build และทดสอบ
 

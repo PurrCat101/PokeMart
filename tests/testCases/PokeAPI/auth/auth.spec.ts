@@ -3,7 +3,7 @@ import { expectPublicError } from '../../../support/utils/expectPublicError';
 import { internalHeaders } from '../support';
 
 test('INT-AUTH-001 current-user endpoint accepts a signed access token', async ({ request, testEnvironment }) => {
-  const response = await request.get('/pokemart/v2/auth/me', {
+  const response = await request.get('/pokemart/v1/auth/me', {
     headers: internalHeaders(testEnvironment.userId, 'tc-pokeapi-auth-me'),
   });
   expect(response.status()).toBe(200);
@@ -14,7 +14,7 @@ test('INT-AUTH-001 current-user endpoint accepts a signed access token', async (
 
 test('INT-AUTH-002 current-user endpoint rejects missing and invalid tokens', async ({ request }) => {
   const requestId = 'tc-pokeapi-auth-unauthorized';
-  const missing = await request.get('/pokemart/v2/auth/me', {
+  const missing = await request.get('/pokemart/v1/auth/me', {
     headers: { 'X-Request-Id': requestId },
   });
   await expectPublicError(missing, {
@@ -25,7 +25,7 @@ test('INT-AUTH-002 current-user endpoint rejects missing and invalid tokens', as
     details: [],
   });
 
-  const invalid = await request.get('/pokemart/v2/auth/me', {
+  const invalid = await request.get('/pokemart/v1/auth/me', {
     headers: { 'X-Request-Id': requestId, Authorization: 'Bearer invalid.token.value' },
   });
   await expectPublicError(invalid, {

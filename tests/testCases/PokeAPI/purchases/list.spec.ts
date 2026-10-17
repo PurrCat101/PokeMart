@@ -3,7 +3,7 @@ import { expectPublicError } from '../../../support/utils/expectPublicError';
 import { internalHeaders } from '../support';
 
 test('INT-PURCHASE-LIST-001 GET purchase history returns paginated internal records', async ({ request, testEnvironment }) => {
-  const response = await request.get('/pokemart/v2/purchases?limit=2&offset=0', {
+  const response = await request.get('/pokemart/v1/purchases?limit=2&offset=0', {
     headers: internalHeaders(testEnvironment.userId, 'tc-pokeapi-purchase-list'),
   });
   expect(response.status()).toBe(200);
@@ -33,7 +33,7 @@ test('INT-PURCHASE-LIST-002 GET purchase history validates pagination, unknown q
     { query: 'offset=1.5', code: 'VALIDATION_ERROR', details: [{ field: 'offset', message: 'must be an integer' }] },
     { query: 'unexpected=true', code: 'UNKNOWN_QUERY_PARAMETER', details: [{ field: 'unexpected', message: 'is not supported' }] },
   ]) {
-    const response = await request.get(`/pokemart/v2/purchases?${scenario.query}`, {
+    const response = await request.get(`/pokemart/v1/purchases?${scenario.query}`, {
       headers: internalHeaders(testEnvironment.userId, requestId),
     });
     await expectPublicError(response, {
@@ -45,7 +45,7 @@ test('INT-PURCHASE-LIST-002 GET purchase history validates pagination, unknown q
     });
   }
 
-  const noIdentity = await request.get('/pokemart/v2/purchases', {
+  const noIdentity = await request.get('/pokemart/v1/purchases', {
     headers: { 'X-Request-Id': requestId },
   });
   await expectPublicError(noIdentity, {
