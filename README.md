@@ -4,10 +4,7 @@
 
 ## สถาปัตยกรรม
 
-```text
-Playwright ──> BFF (public API) ──> PokéMart API (internal service) ──> MySQL
-     └───────> WireMock (จำลอง BFF สำหรับ contract tests)
-```
+![PokéMart API test architecture flow](specs/images/pokemart-api-test-architecture-flow.png)
 
 | Service | URL เมื่อรัน local | หน้าที่ |
 |---|---|---|
