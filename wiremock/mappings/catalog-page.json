@@ -1,0 +1,28 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/api/pokemon"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Request-Id": "wiremock-request"
+    },
+    "jsonBody": {
+      "totalCount": 1,
+      "page": { "limit": 20, "offset": 0 },
+      "items": [
+        {
+          "pokemon": {
+            "id": 1,
+            "name": "bulbasaur",
+            "types": ["grass", "poison"],
+            "spriteUrl": "https://example.test/1.png"
+          },
+          "listing": { "price": 300, "availableStock": 5 }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "request": { "method": "GET", "urlPath": "/health" },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json", "X-Request-Id": "wiremock-request" },
+    "jsonBody": { "status": "ok" }
+  }
+}

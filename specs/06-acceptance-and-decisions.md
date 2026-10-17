@@ -1,0 +1,71 @@
+# 06 — Acceptance Criteria and Decisions
+
+## 16. Acceptance criteria
+
+### Reference data
+- The data source, selected generation, and snapshot retrieval date are documented.
+- Tests do not need a live network call to PokéAPI.
+- Pokémon IDs and names match the 151-record Generation I snapshot.
+- Shop price and stock are clearly identified as lab-owned data.
+
+### API contract
+- `specs/openapi.yaml` documents all endpoints, including `purchaseId` in the `POST /api/purchases` body.
+- `GET /api/pokemon` defines `limit` (default 20, range 1–100) and `offset` (default 0, minimum 0).
+- Invalid pagination values return the documented client error.
+- Ordering is stable and responses never contain more than `limit` results.
+- Purchase rules, side effects, and purchase-ID retry behavior are documented before implementation.
+
+### Purchase ID and retry behavior
+- A missing or malformed `purchaseId` returns `400`.
+- A failed, uncommitted purchase does not reserve its ID; retrying with the same ID can succeed.
+- A committed ID sent again returns `409 PURCHASE_DUPLICATE`, and wallet/stock/inventory do not change again.
+- Concurrent requests with the same ID create at most one purchase.
+- A 5xx or dependency failure where no purchase committed allows retry with the same ID; an uncertain outcome can be checked using `GET /api/purchases/{purchaseId}`.
+
+### Database and application
+- A fresh database volume initializes successfully.
+- Required tables, keys, constraints (including the unique primary key on `purchases.id`), and indexes exist; new volumes do not create `idempotency_keys`.
+- Baseline seed records exist after initialization and are not duplicated on restart.
+- Successful purchases update all related state consistently.
+- Failed purchases do not leave partial changes.
+- Tests do not depend on execution order or accidentally mutate baseline data.
+
+### Automation
+- Mocked-BFF tests run without the real BFF.
+- Real integration tests exercise the real BFF, PokéMart API, and MySQL.
+- Assertions are readable and failures are diagnosable.
+- Test structure follows the team's Playwright conventions once supplied.
+
+### Functional test strategy
+- E2E tests cover complete purchase journeys through the BFF and verify important persisted side effects.
+- API validation tests systematically cover contract and schema, query, path, and body validation, boundary values, status codes, and error schemas.
+- The purchase-retry group covers the documented retry, duplicate, and no-double-charge behavior.
+- Mocked contract tests and real-system E2E tests are clearly distinguishable and not presented as equivalent coverage.
+- Test data is deterministic, isolated, repeatable, and independent of execution order.
+
+### Observability and performance readiness
+- Services expose documented health and readiness endpoints.
+- Structured logs contain request IDs and request duration without leaking secrets.
+- The architecture documents metrics to expose and can add Prometheus and Grafana without redesigning application APIs.
+- Optional observability services do not block ordinary functional tests.
+- A future k6 workload can use a prebuilt, versioned dataset and record the environment and workload configuration.
+- Makefile commands are documented, implemented only when ready, and distinguish safe stop commands from destructive reset commands.
+
+## 17. Decisions
+
+### Decided
+
+- **Purchase retry:** the client generates a UUID `purchaseId` in the JSON body. Failed, uncommitted requests may reuse the ID; committed IDs return `409 PURCHASE_DUPLICATE`. There is no `Idempotency-Key` header or replay response.
+- **Order identifier:** client-generated UUID `purchaseId`. Human-readable order numbers are out of scope.
+- **Authentication:** fixed development user `lab-user-001`.
+- **Error body format:** `{ error: { code, message, requestId, details } }`.
+- **Unknown query parameters:** rejected with `400 UNKNOWN_QUERY_PARAMETER`.
+
+### Still open
+
+- Whether to extend the pinned reference dataset beyond Generation I.
+- Whether the catalog snapshot is stored in MySQL or served from a local static source while shop fields are stored separately.
+- Whether `purchase_items` is a separate table or single-item purchases live on `purchases`.
+- Whether catalog search and filter parameters are included in the first iteration.
+- Team Playwright folder structure and conventions (pending the team repository).
+- Whether a UI is needed after the API lab is complete.

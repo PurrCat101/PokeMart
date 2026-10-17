@@ -1,0 +1,545 @@
+openapi: 3.0.3
+info:
+  title: PokéMart API (service contract)
+  version: 2.0.0
+  description: |
+    Service contract for the PokéMart API. Called by the BFF only. Not a public entry point.
+    Business endpoints use the prefix `/pokemart/v2`. Health endpoints are not versioned.
+
+    Business behavior is aligned with the public BFF contract, but internal response schemas are service-owned.
+    Every business request must include `X-User-Id`, set by the BFF.
+servers:
+  - url: http://localhost:3000
+    description: Local lab (host port published by Docker Compose, for api-validation tests only)
+
+tags:
+  - name: Catalog
+  - name: Wallet
+  - name: Inventory
+  - name: Purchases
+  - name: Health
+
+paths:
+  /pokemart/v2/catalog/pokemon:
+    get:
+      tags: [Catalog]
+      operationId: listCatalogPokemon
+      summary: Paged catalog of listed Pokémon
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/XRequestIdRequest'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: A page of catalog Pokémon
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PokemonPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /pokemart/v2/catalog/pokemon/{id}:
+    get:
+      tags: [Catalog]
+      operationId: getCatalogPokemon
+      summary: One Pokémon with its listing
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/XRequestIdRequest'
+        - $ref: '#/components/parameters/PokemonId'
+      responses:
+        '200':
+          description: Pokémon with listing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pokemon'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /pokemart/v2/wallet:
+    get:
+      tags: [Wallet]
+      operationId: getWallet
+      summary: Wallet of the caller
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/XRequestIdRequest'
+      responses:
+        '200':
+          description: Wallet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Wallet'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /pokemart/v2/inventory:
+    get:
+      tags: [Inventory]
+      operationId: getInventory
+      summary: Owned Pokémon of the caller
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/XRequestIdRequest'
+      responses:
+        '200':
+          description: Inventory
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Inventory'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /pokemart/v2/purchases:
+    post:
+      tags: [Purchases]
+      operationId: createPurchase
+      summary: Create a purchase using a client-generated purchase ID
+      description: |
+        The caller generates a purchaseId before sending the request and reuses it only when retrying
+        that same purchase attempt. The purchase ID, stock change, wallet change, and inventory change
+        are committed in one transaction. Failed transactions do not reserve the purchaseId, so a retry
+        with the same ID can succeed. Reusing an ID that was already committed returns 409 PURCHASE_DUPLICATE.
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/XRequestIdRequest'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseRequest'
+      responses:
+        '201':
+          description: Purchase created
+          headers:
+            Location:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Purchase'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    get:
+      tags: [Purchases]
+      operationId: listPurchases
+      summary: Paged purchase history of the caller
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/XRequestIdRequest'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: A page of purchases
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchasePage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /pokemart/v2/purchases/{id}:
+    get:
+      tags: [Purchases]
+      operationId: getPurchase
+      summary: One purchase of the caller
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/XRequestIdRequest'
+        - $ref: '#/components/parameters/PurchaseId'
+      responses:
+        '200':
+          description: Purchase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Purchase'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /health:
+    get:
+      tags: [Health]
+      operationId: getHealth
+      summary: Liveness, no dependency checks
+      responses:
+        '200':
+          description: Process is alive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+
+  /ready:
+    get:
+      tags: [Health]
+      operationId: getReady
+      summary: Readiness, MySQL reachable and schema initialized
+      responses:
+        '200':
+          description: Ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ready'
+        '503':
+          description: Not ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ready'
+
+components:
+  parameters:
+    UserId:
+      name: X-User-Id
+      in: header
+      required: true
+      description: Caller identity set by the BFF. Clients must not send it.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+        pattern: '^[A-Za-z0-9_-]+$'
+        example: lab-user-001
+    XRequestIdRequest:
+      name: X-Request-Id
+      in: header
+      required: false
+      description: Correlation ID from the BFF. Generated if absent or invalid.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+        pattern: '^[A-Za-z0-9_-]+$'
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    Offset:
+      name: offset
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    PokemonId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    PurchaseId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    Pokemon:
+      type: object
+      required: [id, name, types, spriteUrl, price, stock]
+      additionalProperties: false
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        name:
+          type: string
+        types:
+          type: array
+          items:
+            type: string
+        spriteUrl:
+          type: string
+          nullable: true
+        price:
+          type: integer
+          minimum: 0
+        stock:
+          type: integer
+          minimum: 0
+
+    PokemonPage:
+      type: object
+      required: [count, limit, offset, results]
+      additionalProperties: false
+      properties:
+        count:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+        offset:
+          type: integer
+        results:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/Pokemon'
+
+    Wallet:
+      type: object
+      required: [userId, balance]
+      additionalProperties: false
+      properties:
+        userId:
+          type: string
+        balance:
+          type: integer
+          minimum: 0
+
+    InventoryItem:
+      type: object
+      required: [pokemonId, name, quantity]
+      additionalProperties: false
+      properties:
+        pokemonId:
+          type: integer
+          minimum: 1
+        name:
+          type: string
+        quantity:
+          type: integer
+          minimum: 1
+
+    Inventory:
+      type: object
+      required: [count, results]
+      additionalProperties: false
+      properties:
+        count:
+          type: integer
+          minimum: 0
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/InventoryItem'
+
+    PurchaseRequest:
+      type: object
+      required: [purchaseId, pokemonId, quantity]
+      additionalProperties: false
+      properties:
+        purchaseId:
+          type: string
+          format: uuid
+          description: Client-generated UUID reused only when retrying this purchase attempt.
+        pokemonId:
+          type: integer
+          minimum: 1
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 99
+
+    Purchase:
+      type: object
+      required: [id, pokemonId, pokemonName, quantity, unitPrice, totalPrice, createdAt]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        pokemonId:
+          type: integer
+          minimum: 1
+        pokemonName:
+          type: string
+        quantity:
+          type: integer
+          minimum: 1
+        unitPrice:
+          type: integer
+          minimum: 0
+        totalPrice:
+          type: integer
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+
+    PurchasePage:
+      type: object
+      required: [count, limit, offset, results]
+      additionalProperties: false
+      properties:
+        count:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+        offset:
+          type: integer
+        results:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/Purchase'
+
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+
+    Ready:
+      type: object
+      required: [status, checks]
+      properties:
+        status:
+          type: string
+          enum: [ready, not_ready]
+        checks:
+          type: object
+          required: [mysql]
+          properties:
+            mysql:
+              type: string
+              enum: [ok, unavailable, uninitialized]
+
+    Error:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, requestId]
+          additionalProperties: false
+          properties:
+            code:
+              type: string
+              enum:
+                - VALIDATION_ERROR
+                - UNKNOWN_QUERY_PARAMETER
+                - INVALID_JSON
+                - UNSUPPORTED_MEDIA_TYPE
+                - POKEMON_NOT_FOUND
+                - USER_NOT_FOUND
+                - PURCHASE_NOT_FOUND
+                - POKEMON_NOT_FOR_SALE
+                - INSUFFICIENT_STOCK
+                - INSUFFICIENT_FUNDS
+                - PURCHASE_DUPLICATE
+                - DEPENDENCY_UNAVAILABLE
+                - INTERNAL_ERROR
+            message:
+              type: string
+            requestId:
+              type: string
+            details:
+              type: array
+              items:
+                type: object
+                required: [field, message]
+                properties:
+                  field:
+                    type: string
+                  message:
+                    type: string
+
+  responses:
+    BadRequest:
+      description: Invalid input
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: Not for sale, insufficient stock, or duplicate purchase ID
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    UnsupportedMediaType:
+      description: Body is not application/json
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    UnprocessableEntity:
+      description: Business rule violation, such as insufficient wallet funds
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InternalError:
+      description: Unexpected error. No internal details are exposed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ServiceUnavailable:
+      description: MySQL unavailable
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

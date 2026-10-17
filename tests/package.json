@@ -1,0 +1,18 @@
+{
+  "name": "@pokemart/tests",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "test:mocked": "playwright test --project=contract-mocked",
+    "test:api": "playwright test --project=api-validation",
+    "test:purchase-retry": "playwright test --project=integration --grep @purchase-retry",
+    "test:e2e": "playwright test --project=integration --grep @e2e"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "@types/node": "22.18.6",
+    "mysql2": "3.14.4",
+    "typescript": "5.9.3"
+  }
+}

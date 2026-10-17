@@ -1,0 +1,13 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/purchases",
+    "headers": { "X-WireMock-Scenario": { "equalTo": "insufficient-funds" } }
+  },
+  "response": {
+    "status": 422,
+    "headers": { "Content-Type": "application/json", "X-Request-Id": "wiremock-request" },
+    "jsonBody": { "error": { "code": "INSUFFICIENT_FUNDS", "message": "Insufficient funds", "requestId": "wiremock-request", "details": [] } }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "request": { "method": "GET", "urlPath": "/api/wallet" },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json", "X-Request-Id": "wiremock-request" },
+    "jsonBody": { "wallet": { "userId": "lab-user-001", "balance": 10000 } }
+  }
+}

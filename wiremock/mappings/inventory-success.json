@@ -1,0 +1,12 @@
+{
+  "request": { "method": "GET", "urlPath": "/api/inventory" },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json", "X-Request-Id": "wiremock-request" },
+    "jsonBody": {
+      "items": [
+        { "pokemon": { "id": 1, "name": "bulbasaur" }, "quantity": 2 }
+      ]
+    }
+  }
+}

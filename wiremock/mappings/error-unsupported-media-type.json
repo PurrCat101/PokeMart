@@ -1,0 +1,13 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/purchases",
+    "headers": { "X-WireMock-Scenario": { "equalTo": "unsupported-media-type" } }
+  },
+  "response": {
+    "status": 415,
+    "headers": { "Content-Type": "application/json", "X-Request-Id": "wiremock-request" },
+    "jsonBody": { "error": { "code": "UNSUPPORTED_MEDIA_TYPE", "message": "Content-Type must be application/json", "requestId": "wiremock-request", "details": [] } }
+  }
+}

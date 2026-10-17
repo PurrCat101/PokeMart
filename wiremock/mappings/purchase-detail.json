@@ -1,0 +1,17 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/api/purchases/00000000-0000-4000-8000-000000000001"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json", "X-Request-Id": "wiremock-request" },
+    "jsonBody": {
+      "purchaseId": "00000000-0000-4000-8000-000000000001",
+      "pokemon": { "id": 1, "name": "bulbasaur" },
+      "quantity": 1,
+      "pricing": { "unitPrice": 300, "totalPrice": 300 },
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  }
+}

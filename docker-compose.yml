@@ -1,0 +1,67 @@
+services:
+  mysql:
+    image: mysql:8.4.5
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-pokemart_lab}
+      MYSQL_USER: ${MYSQL_USER:-pokemart_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change_me_for_local_development}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change_me_root_local}
+    ports: ["${MYSQL_HOST_PORT:-3306}:3306"]
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./database/schema/001_create_shop_tables.sql:/docker-entrypoint-initdb.d/001_create_shop_tables.sql:ro
+      - ./database/seed/001_seed_shop_data.sql:/docker-entrypoint-initdb.d/101_seed_shop_data.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-pchange_me_root_local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  pokemart-api:
+    build:
+      context: .
+      dockerfile: apps/pokemart-api/Dockerfile
+    environment:
+      PORT: 3000
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-pokemart_lab}
+      MYSQL_USER: ${MYSQL_USER:-pokemart_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change_me_for_local_development}
+    ports: ["3000:3000"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  bff:
+    build:
+      context: .
+      dockerfile: apps/bff/Dockerfile
+    environment:
+      PORT: 3001
+      POKEMART_API_BASE_URL: http://pokemart-api:3000
+      LAB_USER_ID: ${LAB_USER_ID:-lab-user-001}
+    ports: ["3001:3001"]
+    depends_on:
+      pokemart-api:
+        condition: service_started
+
+  wiremock:
+    image: wiremock/wiremock:3.10.0
+    ports: ["8080:8080"]
+    volumes:
+      - ./wiremock/mappings:/home/wiremock/mappings:ro
+
+  swagger-ui:
+    image: swaggerapi/swagger-ui:v5.18.3
+    ports: ["8081:8080"]
+    environment:
+      URLS: '[{"url":"/openapi.yaml","name":"BFF Public API"},{"url":"/pokemart-openapi.yaml","name":"PokéMart Internal API"}]'
+      URLS_PRIMARY_NAME: BFF Public API
+    volumes:
+      - ./specs/openapi.yaml:/usr/share/nginx/html/openapi.yaml:ro
+      - ./specs/pokemart-openapi.yaml:/usr/share/nginx/html/pokemart-openapi.yaml:ro
+
+volumes:
+  mysql-data:

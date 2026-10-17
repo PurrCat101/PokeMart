@@ -1,0 +1,16 @@
+{
+  "request": { "method": "GET", "urlPath": "/api/pokemon/1" },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json", "X-Request-Id": "wiremock-request" },
+    "jsonBody": {
+      "pokemon": {
+        "id": 1,
+        "name": "bulbasaur",
+        "types": ["grass", "poison"],
+        "spriteUrl": "https://example.test/1.png"
+      },
+      "listing": { "price": 300, "availableStock": 5 }
+    }
+  }
+}

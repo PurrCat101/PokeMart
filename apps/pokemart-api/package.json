@@ -1,0 +1,19 @@
+{
+  "name": "@pokemart/api",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "express": "5.1.0",
+    "mysql2": "3.14.4",
+    "pino": "9.9.0",
+    "tsx": "4.20.6"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.3",
+    "@types/node": "22.18.6"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/purchases",
+    "bodyPatterns": [
+      { "equalToJson": "{\"purchaseId\":\"00000000-0000-4000-8000-000000000001\",\"pokemonId\":1,\"quantity\":1}", "ignoreArrayOrder": true }
+    ]
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "Content-Type": "application/json",
+      "Location": "/api/purchases/00000000-0000-4000-8000-000000000001",
+      "X-Request-Id": "wiremock-request"
+    },
+    "jsonBody": {
+      "purchaseId": "00000000-0000-4000-8000-000000000001",
+      "pokemon": { "id": 1, "name": "bulbasaur" },
+      "quantity": 1,
+      "pricing": { "unitPrice": 300, "totalPrice": 300 },
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  }
+}

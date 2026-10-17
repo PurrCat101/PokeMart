@@ -1,0 +1,369 @@
+openapi: 3.0.3
+info:
+  title: PokéMart BFF API
+  version: 2.0.0
+  description: Public client-facing API. Version 2 response DTOs are intentionally distinct from the internal PokéMart API DTOs.
+servers:
+  - url: http://localhost:3001
+paths:
+  /api/pokemon:
+    get:
+      summary: List active catalog Pokémon
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          $ref: '#/components/responses/PokemonPage'
+        '400':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /api/pokemon/{id}:
+    get:
+      summary: Get a catalog Pokémon and its listing
+      parameters:
+        - $ref: '#/components/parameters/PokemonId'
+      responses:
+        '200':
+          $ref: '#/components/responses/Pokemon'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /api/wallet:
+    get:
+      summary: Get the authenticated user's wallet
+      responses:
+        '200':
+          $ref: '#/components/responses/Wallet'
+        '404':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /api/inventory:
+    get:
+      summary: Get the authenticated user's Pokémon inventory
+      responses:
+        '200':
+          $ref: '#/components/responses/Inventory'
+        '503':
+          $ref: '#/components/responses/Error'
+  /api/purchases:
+    get:
+      summary: List the authenticated user's purchases
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          $ref: '#/components/responses/PurchasePage'
+        '400':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+    post:
+      summary: Purchase a Pokémon
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseRequest'
+      responses:
+        '201':
+          description: Purchase created
+          headers:
+            Location:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Purchase'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: Purchase ID already committed, Pokémon not for sale, or insufficient stock
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '415':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /api/purchases/{id}:
+    get:
+      summary: Get a purchase
+      parameters:
+        - $ref: '#/components/parameters/PurchaseId'
+      responses:
+        '200':
+          $ref: '#/components/responses/Purchase'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /health:
+    get:
+      summary: Liveness check
+      responses:
+        '200':
+          description: Process is alive
+  /ready:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: Dependencies are ready
+        '503':
+          description: Dependency unavailable
+components:
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    Offset:
+      name: offset
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    PokemonId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    PurchaseId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    PokemonSummary:
+      type: object
+      required: [id, name, types, spriteUrl]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        name:
+          type: string
+        types:
+          type: array
+          items:
+            type: string
+        spriteUrl:
+          type: string
+          nullable: true
+    Pokemon:
+      type: object
+      required: [pokemon, listing]
+      properties:
+        pokemon:
+          $ref: '#/components/schemas/PokemonSummary'
+        listing:
+          type: object
+          required: [price, availableStock]
+          properties:
+            price:
+              type: integer
+              minimum: 0
+            availableStock:
+              type: integer
+              minimum: 0
+    Page:
+      type: object
+      required: [limit, offset]
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+    PokemonPage:
+      type: object
+      required: [totalCount, page, items]
+      properties:
+        totalCount:
+          type: integer
+          minimum: 0
+        page:
+          $ref: '#/components/schemas/Page'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Pokemon'
+    Wallet:
+      type: object
+      required: [wallet]
+      properties:
+        wallet:
+          type: object
+          required: [userId, balance]
+          properties:
+            userId:
+              type: string
+            balance:
+              type: integer
+              minimum: 0
+    InventoryItem:
+      type: object
+      required: [pokemon, quantity]
+      properties:
+        pokemon:
+          type: object
+          required: [id, name]
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+        quantity:
+          type: integer
+          minimum: 1
+    Inventory:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InventoryItem'
+    PurchaseRequest:
+      type: object
+      additionalProperties: false
+      required: [purchaseId, pokemonId, quantity]
+      properties:
+        purchaseId:
+          type: string
+          format: uuid
+          description: Client-generated UUID reused only when retrying this purchase attempt.
+        pokemonId:
+          type: integer
+          minimum: 1
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 99
+    Purchase:
+      type: object
+      required: [purchaseId, pokemon, quantity, pricing, createdAt]
+      properties:
+        purchaseId:
+          type: string
+          format: uuid
+        pokemon:
+          type: object
+          required: [id, name]
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+        quantity:
+          type: integer
+        pricing:
+          type: object
+          required: [unitPrice, totalPrice]
+          properties:
+            unitPrice:
+              type: integer
+            totalPrice:
+              type: integer
+        createdAt:
+          type: string
+          format: date-time
+    PurchasePage:
+      type: object
+      required: [totalCount, page, items]
+      properties:
+        totalCount:
+          type: integer
+        page:
+          $ref: '#/components/schemas/Page'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Purchase'
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, requestId]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            requestId:
+              type: string
+            details:
+              type: array
+              items:
+                type: object
+  responses:
+    Pokemon:
+      description: Pokémon with its shop listing
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Pokemon'
+    PokemonPage:
+      description: Page of listed Pokémon
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PokemonPage'
+    Wallet:
+      description: User wallet
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Wallet'
+    Inventory:
+      description: User inventory
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Inventory'
+    Purchase:
+      description: Purchase resource
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Purchase'
+    PurchasePage:
+      description: Page of purchases
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PurchasePage'
+    Error:
+      description: Error envelope
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
