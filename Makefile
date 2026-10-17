@@ -1,4 +1,4 @@
-.PHONY: help install build up down ps logs swagger test test-mocked test-api test-purchase-retry test-e2e db-seed db-reset
+.PHONY: help install build up down ps logs swagger test test-mocked test-api test-pokeapi test-purchase-retry test-e2e db-seed db-reset
 
 help: ## Show available local-lab commands (db-reset deletes local data)
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-20s %s\n", $$1, $$2}'
@@ -33,6 +33,9 @@ test-mocked: ## Run contract tests against WireMock
 
 test-api: ## Run API-validation tests against the real BFF
 	npm run test:api
+
+test-pokeapi: ## Run internal PokéMart API endpoint tests directly
+	npm run test:pokeapi
 
 test-purchase-retry: ## Verify purchase ID retries and duplicate detection
 	npm run test:purchase-retry

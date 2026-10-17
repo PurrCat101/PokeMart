@@ -21,7 +21,13 @@ export default defineConfig({
     {
       name: 'e2e',
       testMatch: ['e2e/**/*.spec.ts', 'purchases/retry.spec.ts', 'purchases/business-errors.spec.ts', 'purchases/concurrency.spec.ts', 'purchases/lifecycle.spec.ts'],
+      testIgnore: ['**/PokeAPI/**'],
       use: { baseURL: testConfig.bffBaseUrl },
+    },
+    {
+      name: 'pokeapi',
+      testMatch: ['PokeAPI/**/*.spec.ts'],
+      use: { baseURL: testConfig.pokemartApiBaseUrl },
     },
   ],
 });

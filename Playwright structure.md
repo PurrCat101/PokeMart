@@ -24,8 +24,23 @@ tests/
 │   ├── purchases/
 │   │   ├── retry.spec.ts
 │   │   └── validation.spec.ts
-│   └── e2e/
-│       └── browse-wallet.spec.ts
+│   ├── e2e/
+│   │   └── browse-wallet.spec.ts
+│   └── PokeAPI/
+│       ├── catalog/
+│       │   ├── detail.spec.ts
+│       │   └── list.spec.ts
+│       ├── health/get.spec.ts
+│       ├── inventory/get.spec.ts
+│       ├── purchases/
+│       │   ├── concurrency.spec.ts
+│       │   ├── create.spec.ts
+│       │   ├── detail.spec.ts
+│       │   ├── list.spec.ts
+│       │   └── retry.spec.ts
+│       ├── ready/get.spec.ts
+│       ├── support.ts
+│       └── wallet/get.spec.ts
 ├── support/
 │   ├── fixtures/
 │   ├── models/
@@ -41,6 +56,7 @@ Select the environment before running tests. PowerShell example:
 ```powershell
 $env:TEST_ENV='test'; npm test
 $env:TEST_ENV='sit'; npm test
+npm run test:pokeapi
 ```
 
-The test environment defaults to `test`. Keep credentials out of committed environment files. Database-backed purchase tests in non-test environments require explicit MySQL settings for a dedicated test database.
+The test environment defaults to `test`. `npm run test:pokeapi` runs only internal PokéMart API cases and uses `POKEMART_API_BASE_URL`. Keep credentials out of committed environment files. Database-backed purchase tests in non-test environments require explicit MySQL settings for a dedicated test database.

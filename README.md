@@ -109,15 +109,17 @@ make swagger
 |---|---|---|
 | `make test-mocked` | รัน WireMock scenarios และตรวจ mock error-code mappings | ใช่ (WireMock) |
 | `make test-api` | รัน API validation กับ BFF จริง | ใช่ |
+| `make test-pokeapi` | รัน API tests ตรงกับ internal PokéMart API แยกตาม endpoint | ใช่ |
 | `make test-purchase-retry` | ตรวจ retry ด้วย `purchaseId` เดิมและ duplicate หลัง commit | ใช่; เชื่อม MySQL เพื่อ snapshot/restore test state |
 | `make test-e2e` | รัน real-system journeys และตรวจ persistent state | ใช่ |
-| `make test` | รันทุก Playwright project: WireMock, API และ E2E | ใช่ |
+| `make test` | รันทุก Playwright project: WireMock, BFF API, internal PokéMart API และ E2E | ใช่ |
 
 ตัวอย่างลำดับรันตามปกติ:
 
 ```bash
 make test-mocked
 make test-api
+make test-pokeapi
 make test-purchase-retry
 make test-e2e
 ```
@@ -128,7 +130,7 @@ make test-e2e
 make test
 ```
 
-ทุก suite ใช้ test files แยกตาม target และหน้าที่: `tests/testCases/mocked-bff/`, `pokemon/`, `purchases/` และ `e2e/` ผลจาก WireMock ยืนยันเฉพาะ contract ของ mapping ไม่ได้ยืนยัน business logic หรือ persistence ของระบบจริง
+ทุก suite แยก test files ตาม target และ endpoint: `tests/testCases/mocked-bff/` สำหรับ WireMock, `pokemon/` และ `purchases/` สำหรับ public BFF, `PokeAPI/<endpoint>/` สำหรับ internal PokéMart API โดยตรง และ `e2e/` สำหรับ journeys ผ่าน BFF ผลจาก WireMock ยืนยันเฉพาะ contract ของ mapping ไม่ได้ยืนยัน business logic หรือ persistence ของระบบจริง ส่วน `PokeAPI` ตรวจ internal DTO/error behavior โดยไม่ใช้ BFF.
 
 ดู targets ทั้งหมดได้ด้วย:
 
@@ -154,7 +156,7 @@ make test-api
 
 ใน PowerShell ที่ติดตั้ง GNU Make และ shell ที่ Makefile ต้องใช้แล้ว สามารถเลือก environment ด้วย `$env:TEST_ENV='sit'; make test-api` ได้เช่นกัน
 
-กำหนดค่า SIT/STG จริงใน `tests/configs/.env.sit` หรือ `.env.stg` ก่อนใช้งาน ไฟล์ตัวอย่างมี URL placeholder และห้ามใส่ credentials จริงลงใน Git การทดสอบ `purchase-retry` และ `e2e` เปลี่ยนข้อมูล wallet, stock, inventory และสร้าง/ลบ purchase เพื่อยืนยันพฤติกรรม ดังนั้นต้องใช้ user และ MySQL database ที่แยกไว้สำหรับ test โดยเฉพาะ ห้ามชี้ไปยัง production หรือข้อมูล shared ที่ไม่อนุญาตให้แก้ไข ใน environment ที่ไม่ใช่ `test` การเชื่อมต่อฐานข้อมูลจะ fail หากไม่ได้กำหนด `MYSQL_HOST`, `MYSQL_DATABASE`, `MYSQL_USER` และ `MYSQL_PASSWORD` ไว้ชัดเจน
+กำหนดค่า SIT/STG จริงใน `tests/configs/.env.sit` หรือ `.env.stg` ก่อนใช้งาน ไฟล์ตัวอย่างมี URL placeholder และห้ามใส่ credentials จริงลงใน Git การทดสอบ `test-pokeapi`, `purchase-retry` และ `e2e` เปลี่ยนข้อมูล wallet, stock, inventory และสร้าง/ลบ purchase เพื่อยืนยันพฤติกรรม ดังนั้นต้องใช้ user และ MySQL database ที่แยกไว้สำหรับ test โดยเฉพาะ ห้ามชี้ไปยัง production หรือข้อมูล shared ที่ไม่อนุญาตให้แก้ไข ใน environment ที่ไม่ใช่ `test` การเชื่อมต่อฐานข้อมูลจะ fail หากไม่ได้กำหนด `MYSQL_HOST`, `MYSQL_DATABASE`, `MYSQL_USER` และ `MYSQL_PASSWORD` ไว้ชัดเจน
 
 `MYSQL_HOST_PORT` ใน `.env` คือ port ที่ Docker เปิดบน host ส่วน `MYSQL_PORT` ในไฟล์ `tests/configs/.env.*` คือ port ที่ test runner ใช้เชื่อมต่อจาก host ทั้งสองค่าต้องตรงกัน เช่น `MYSQL_HOST_PORT=3307` ต้องคู่กับ `MYSQL_PORT=3307`
 
@@ -203,6 +205,6 @@ Client สร้าง UUID `purchaseId` ก่อนเริ่มซื้อ
 - Internal PokéMart API OpenAPI: [specs/pokemart-openapi.yaml](specs/pokemart-openapi.yaml)
 - API behavior และ error contracts: [specs/03-api-contract.md](specs/03-api-contract.md)
 - Testing approach: [specs/04-testing.md](specs/04-testing.md)
-- Public API test design, traceability และ WireMock coverage: [specs/08-test-design.md](specs/08-test-design.md)
+- Public/internal API test design, traceability และ coverage gaps: [specs/08-test-design.md](specs/08-test-design.md)
 - Database, seed และ migration: [database/README.md](database/README.md)
 - โครงสร้าง Playwright: [Playwright structure.md](Playwright%20structure.md)

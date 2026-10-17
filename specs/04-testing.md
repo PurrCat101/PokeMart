@@ -23,6 +23,7 @@ Test files are organized by purpose:
 - `tests/testCases/mocked-bff/`: WireMock-specific request/response contracts and mapping scenarios.
 - `tests/testCases/pokemon/` and `tests/testCases/purchases/validation.spec.ts`: real BFF API validation.
 - `tests/testCases/purchases/retry.spec.ts` and `tests/testCases/e2e/`: real-system purchase and E2E flows.
+- `tests/testCases/PokeAPI/<endpoint>/`: internal PokéMart API contract tests, organized by endpoint and run directly against `POKEMART_API_BASE_URL`.
 
 `tests/configs/.env.test` and `.env.sit` hold environment-specific URLs and test data. The fixture supplies target-specific user, Pokémon, page size, purchase ID, and mock scenario headers without sharing test files.
 
@@ -57,7 +58,20 @@ Coverage includes:
 - Side effects where the endpoint changes state; failed operations must not leave unintended changes.
 - Keep WireMock mapping-contract tests separate from real BFF API validation tests.
 
-Tags distinguish `e2e` and `purchase-flow`; Playwright projects distinguish `wiremock`, `api`, and `e2e`.
+Tags distinguish `e2e` and `purchase-flow`; Playwright projects distinguish `wiremock`, `api`, `pokeapi`, and `e2e`. Run the direct internal-service suite with `npm run test:pokeapi` or `make test-pokeapi`.
+The `e2e` project explicitly excludes `PokeAPI` paths so endpoint-specific internal cases cannot be selected by the broader real-purchase filename patterns.
+
+### D. Internal PokéMart API suite
+
+The `pokeapi` project checks `specs/pokemart-openapi.yaml` directly, without going through the BFF. Endpoint test files live in `tests/testCases/PokeAPI/<endpoint>/`:
+
+- `catalog/list` and `catalog/detail`: internal catalog DTO, pagination, malformed IDs, unknown query parameters, missing identity, and not-found behavior.
+- `wallet/get` and `inventory/get`: required `X-User-Id`, wallet-not-found, empty inventory, and internal response shapes.
+- `purchases/create`, `list`, and `detail`: request validation, content type, business errors, purchase history, tenant-scoped reads, and internal DTOs.
+- `purchases/retry` and `purchases/concurrency`: retry after rollback, same-ID concurrent duplicate, and two distinct IDs competing for the last stock unit.
+- `health/get` and `ready/get`: process liveness and readiness with initialized MySQL.
+
+State-changing tests use unique purchase UUIDs, snapshot/restore wallet, stock, and inventory, and delete test purchases in cleanup. Only a dedicated test database may be used. Database-failure and unexpected-service-error responses require isolated fault injection and are not claimed as covered.
 
 ### C. Purchase-ID retry test group
 
@@ -107,4 +121,4 @@ The initial application must not depend on live PokéAPI calls during each reque
 
 ## 8.3 Reporting rule
 
-WireMock and real-system results are reported separately. A passing mocked contract test does not prove that the real BFF, service, database, or persistence effects behave the same way.
+WireMock fixture, public BFF, direct internal PokéMart API, and end-to-end results are reported separately. A passing mocked contract test does not prove that the real BFF, internal service, database, or persistence effects behave the same way. A direct internal API pass does not prove the BFF's upstream error mapping.

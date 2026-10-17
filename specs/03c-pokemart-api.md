@@ -77,6 +77,11 @@ Same rules as `05-operations.md` section 12. In addition, the PokéMart API logs
 - API validation tests for this service run against `specs/pokemart-openapi.yaml` directly, to check internal contract details that the BFF does not expose (for example, the `X-User-Id` rule).
 - The public BFF tests must not be replaced by these tests. Report them separately, as `04-testing.md` section 8.3 requires.
 - Concurrency tests for stock (two purchases competing for the last unit) run against this service and through the BFF. Only one of them may succeed.
+- Direct internal service automation lives under `tests/testCases/PokeAPI/<endpoint>/` and runs with the Playwright project `pokeapi` (`npm run test:pokeapi` / `make test-pokeapi`).
+- The endpoint directories cover catalog list/detail, wallet, inventory, purchase create/list/detail, retry/concurrency, health, and readiness. State-changing tests snapshot and restore the dedicated test database.
+- Direct-service concurrency verifies both same-ID duplicate processing and distinct purchases competing for the last stock unit.
+- Latest verified execution: `npm run test:pokeapi` passed all 21 internal API cases; the full `npm test` run passed 94 cases across WireMock, BFF API, E2E, and internal API projects.
+- The current suite does not inject MySQL outages, uninitialized database state, or unexpected service exceptions; their 503/500 responses remain open fault-injection coverage.
 
 ## 10. Open points
 

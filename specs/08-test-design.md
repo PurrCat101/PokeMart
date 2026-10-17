@@ -1,8 +1,8 @@
-# 08 — Public API Test Design
+# 08 — Public and Internal API Test Design
 
 ## 1. Scope and sources
 
-This design covers the public BFF contract in [`openapi.yaml`](./openapi.yaml), with business rules from [`03-api-contract.md`](./03-api-contract.md) and BFF behavior from [`03b-bff.md`](./03b-bff.md). The internal service contract in [`pokemart-openapi.yaml`](./pokemart-openapi.yaml) is not directly exercised by these Playwright projects.
+This design covers the public BFF contract in [`openapi.yaml`](./openapi.yaml) and the internal service contract in [`pokemart-openapi.yaml`](./pokemart-openapi.yaml), with business rules from [`03-api-contract.md`](./03-api-contract.md) and service-specific rules from [`03c-pokemart-api.md`](./03c-pokemart-api.md). The `api` project targets the BFF; the `pokeapi` project targets the internal service directly. They are reported separately.
 
 The WireMock project replaces the BFF and checks configured public response fixtures. It does not execute BFF validation, upstream error mapping, or PokéMart API business logic. The `X-WireMock-Scenario` header selects a fixture; it is test control, not a public API input.
 
@@ -125,14 +125,12 @@ The aggregate tests in `tests/testCases/mocked-bff/contract.spec.ts` map scenari
 
 | Track | Executed command | Result |
 |---|---|---|
-| WireMock public fixtures | `npm run test:mocked` | 13 passed |
-| Real BFF/API validation and reads | `npm run test:api` | 52 passed |
-| Real purchase/E2E journeys | `npm run test:e2e` | 8 passed |
-| All Playwright projects | `npm test` | 73 passed |
+| All Playwright projects | `npm test` | 94 passed: 13 WireMock, 52 BFF API, 8 E2E, and 21 direct internal API |
+| Direct internal API | `npm run test:pokeapi` | 21 passed |
 | TypeScript test type-check | `npx tsc -p tests/tsconfig.json --noEmit` | Passed |
 | Application build | `npm run build` | Passed |
 
-The full suite passed after the final code changes. These results do not establish coverage for routes or upstream failure modes not exercised by these projects.
+The full run confirms each project executes only its intended target. In particular, the `e2e` project excludes `PokeAPI` cases so broad purchase-file patterns cannot run direct internal tests against the BFF base URL.
 
 ### Open items and contract gaps
 
@@ -140,10 +138,57 @@ The full suite passed after the final code changes. These results do not establi
 2. **Public error schema is less strict than the implementation/documentation.** `details` is not required in `openapi.yaml` and its item schema is unspecified, although BFF responses always include it and `03-api-contract.md` describes it as part of the envelope.
 3. **Correlation response header is not declared on every public OpenAPI response.** `03-api-contract.md` and `03b-bff.md` require `X-Request-Id` on every response; current tests validate representative success/error responses.
 4. **Real upstream-failure mapping is not executed.** WireMock fixtures prove only the fixtures' response bodies. No isolated fault-injection profile currently demonstrates connection refusal, timeout, upstream 5xx, malformed upstream payload, or the BFF's 500 behavior.
-5. **User-not-found is fixture-only.** The configured test identity has a wallet; a real missing-user test needs a safe test identity/data setup.
-6. **Internal PokéMart API routes are not directly tested by these Playwright projects.** The suite exercises the public BFF and end-to-end behavior; internal API contract verification is a separate scope.
-7. **No shared-service shutdown is performed for fault tests.** Tests must not stop the API container when using a shared environment; add a test-only fault injection or dedicated isolated stack before claiming this coverage.
+5. **Public BFF wallet `USER_NOT_FOUND` is fixture-only.** Internal API tests exercise this error with a non-existent user, but the configured public BFF identity has a wallet.
+6. **Internal database fault modes remain untested.** MySQL outage, schema-uninitialized readiness (`/ready` 503), and unexpected service exception (`500 INTERNAL_ERROR`) require an isolated fault-injection profile.
+7. **No shared-service shutdown is performed for fault tests.** Tests must not stop the API container when using a shared environment; add test-only fault injection or a dedicated isolated stack before claiming fault-path coverage.
+8. **Internal identity is not authentication.** `X-User-Id` is trusted by design. Do not expose the service outside its trusted network without adding service authentication and restricting the host-published port.
 
 ### Coverage summary
 
-All nine public BFF route/method combinations have at least one exact success response assertion in the WireMock suite, and every one of the 13 public error codes used by the current BFF/service error contracts is represented by an exact fixture assertion. Real API validation, read behavior, purchase business errors, commit/retry/duplicate/concurrency, and state restoration are exercised by the current test runs. The mock track's 503/500 results are fixture coverage only. Do not describe this as complete upstream fault-mapping or internal PokéMart API coverage until the open items above are resolved.
+All nine public BFF route/method combinations have at least one exact success response assertion in the WireMock suite, and every one of the 13 public error codes used by the current BFF/service error contracts is represented by an exact fixture assertion. The direct `pokeapi` project now covers all nine internal route/method combinations, business errors, transactional retries, and concurrency, but not database fault paths. The mock track's 503/500 results are fixture coverage only. Do not describe this as complete upstream fault-mapping or dependency-failure coverage until the open items below are resolved.
+
+## 9. Internal PokéMart API direct coverage
+
+The `pokeapi` Playwright project targets `POKEMART_API_BASE_URL` directly. Each endpoint lives in its own folder under `tests/testCases/PokeAPI/`.
+
+| Method and path | Direct test coverage | Case files |
+|---|---|---|
+| `GET /health` | Exact 200 liveness payload; generated request ID; no business identity required | `health/get.spec.ts` |
+| `GET /ready` | Exact 200 readiness payload when MySQL is initialized | `ready/get.spec.ts` |
+| `GET /pokemart/v2/catalog/pokemon` | Internal DTO, default and boundary pagination, empty page, invalid/unknown query, missing/malformed `X-User-Id` | `catalog/list.spec.ts` |
+| `GET /pokemart/v2/catalog/pokemon/{id}` | Exact internal Pokémon/listing shape; malformed and nonexistent IDs; missing identity | `catalog/detail.spec.ts` |
+| `GET /pokemart/v2/wallet` | Exact wallet DTO; missing identity; `USER_NOT_FOUND` | `wallet/get.spec.ts` |
+| `GET /pokemart/v2/inventory` | Internal item shape, empty inventory, missing identity | `inventory/get.spec.ts` |
+| `POST /pokemart/v2/purchases` | Exact 201 DTO/Location; duplicate ID even with changed body; body/media validation; missing identity; missing Pokémon, inactive listing, stock, funds; state unchanged on failure | `purchases/create.spec.ts` |
+| `POST /pokemart/v2/purchases` retry | Failed transaction does not reserve ID; same ID succeeds after state is corrected | `purchases/retry.spec.ts` |
+| `POST /pokemart/v2/purchases` concurrency | Same ID commits once; distinct IDs competing for final stock allow one commit; verify DB state | `purchases/concurrency.spec.ts` |
+| `GET /pokemart/v2/purchases` | Exact service page/item DTO, pagination validation, unknown query, missing identity | `purchases/list.spec.ts` |
+| `GET /pokemart/v2/purchases/{id}` | Invalid UUID, nonexistent UUID, missing identity; successful ownership-scoped detail read is checked after create | `purchases/detail.spec.ts`, `purchases/create.spec.ts` |
+
+Internal API error-code coverage (excluding fault-only codes):
+
+| Code | Triggering condition | Direct case |
+|---|---|---|
+| `VALIDATION_ERROR` | Missing/malformed `X-User-Id`, invalid pagination/path ID/body | Catalog, wallet, inventory, purchase create/list/detail specs |
+| `UNKNOWN_QUERY_PARAMETER` | Unsupported catalog/history query | `catalog/list.spec.ts`, `purchases/list.spec.ts` |
+| `INVALID_JSON` | Malformed JSON | `purchases/create.spec.ts` |
+| `UNSUPPORTED_MEDIA_TYPE` | Purchase body sent as `text/plain` | `purchases/create.spec.ts` |
+| `POKEMON_NOT_FOUND` | Missing catalog Pokémon during purchase | `purchases/create.spec.ts` |
+| `USER_NOT_FOUND` | Wallet requested for unknown user | `wallet/get.spec.ts` |
+| `PURCHASE_NOT_FOUND` | Unknown or another user's purchase ID | `purchases/detail.spec.ts`, `purchases/create.spec.ts` |
+| `POKEMON_NOT_FOR_SALE` | Listing deactivated | `purchases/create.spec.ts` |
+| `INSUFFICIENT_STOCK` | Quantity exceeds stock, including valid maximum quantity 99 | `purchases/create.spec.ts` |
+| `INSUFFICIENT_FUNDS` | Wallet set to zero; same ID retried after restoration | `purchases/create.spec.ts`, `purchases/retry.spec.ts` |
+| `PURCHASE_DUPLICATE` | Committed ID reused; concurrent same-ID submissions | `purchases/create.spec.ts`, `purchases/concurrency.spec.ts` |
+| `DEPENDENCY_UNAVAILABLE` | MySQL request failure | Not run; requires isolated DB fault injection |
+| `INTERNAL_ERROR` | Unexpected service exception | Not run; requires safe fault injection |
+
+The project uses one worker. Mutating cases snapshot and restore wallet/stock/inventory and remove created purchase rows in `finally` cleanup. Never direct this project at production or an unapproved shared database.
+
+### Remaining completion gaps
+
+1. Add an isolated, test-only fault-injection mechanism for MySQL request outage, `/ready` unavailable/uninitialized responses, and unexpected internal exceptions; do not stop a shared API or database.
+2. Exercise the BFF's real upstream mapping for connection refusal, timeout, upstream 5xx, and malformed upstream response separately from WireMock's configured fixtures.
+3. Tighten both OpenAPI documents: require and define error `details`, declare `X-Request-Id` on every response, and enumerate endpoint-specific error-code/status mappings instead of generic error references.
+4. Add an explicitly authenticated service-to-service identity before exposing the internal API beyond its trusted Compose network. Current `X-User-Id` is a lab trust header, not authorization.
+5. Keep public BFF, internal API, and WireMock reports separate; passing one layer is not evidence for another layer's behavior.

@@ -10,6 +10,7 @@
     "test": "npm run test --workspace=@pokemart/tests",
     "test:mocked": "npm run test:mocked --workspace=@pokemart/tests",
     "test:api": "npm run test:api --workspace=@pokemart/tests",
+    "test:pokeapi": "npm run test:pokeapi --workspace=@pokemart/tests",
     "test:purchase-retry": "npm run test:purchase-retry --workspace=@pokemart/tests",
     "test:e2e": "npm run test:e2e --workspace=@pokemart/tests"
   },

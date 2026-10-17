@@ -6,6 +6,7 @@
     "test": "playwright test",
     "test:mocked": "playwright test --project=wiremock",
     "test:api": "playwright test --project=api",
+    "test:pokeapi": "playwright test --project=pokeapi",
     "test:purchase-retry": "playwright test --project=e2e --grep @purchase-flow",
     "test:e2e": "playwright test --project=e2e"
   },

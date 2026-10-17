@@ -89,7 +89,7 @@ app.use((req, _res, next) => {
   if (req.method === 'POST' && req.path === '/pokemart/v2/purchases' && !req.is('application/json')) return next(new AppError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Content-Type must be application/json'));
   next();
 });
-app.use(express.json({ strict: true }));
+app.use(express.json({ strict: false }));
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 app.get('/ready', async (_req, res) => {
