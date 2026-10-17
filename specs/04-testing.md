@@ -66,7 +66,7 @@ The `e2e` project explicitly excludes `PokeAPI` paths so endpoint-specific inter
 The `pokeapi` project checks `specs/pokemart-openapi.yaml` directly, without going through the BFF. Endpoint test files live in `tests/testCases/PokeAPI/<endpoint>/`:
 
 - `catalog/list` and `catalog/detail`: internal catalog DTO, pagination, malformed IDs, unknown query parameters, missing identity, and not-found behavior.
-- `wallet/get` and `inventory/get`: required `X-User-Id`, wallet-not-found, empty inventory, and internal response shapes.
+- `auth`: valid login/token/profile and rejected credentials/tokens. `wallet/get` and `inventory/get`: authenticated user identity, wallet-not-found, empty inventory, and internal response shapes.
 - `purchases/create`, `list`, and `detail`: request validation, content type, business errors, purchase history, tenant-scoped reads, and internal DTOs.
 - `purchases/retry` and `purchases/concurrency`: retry after rollback, same-ID concurrent duplicate, and two distinct IDs competing for the last stock unit.
 - `health/get` and `ready/get`: process liveness and readiness with initialized MySQL.

@@ -19,7 +19,8 @@ export default defineConfig({
     },
     {
       name: 'api',
-      testMatch: ['pokemon/**/*.spec.ts', 'purchases/validation.spec.ts', 'purchases/read.spec.ts'],
+      testMatch: ['auth/**/*.spec.ts', 'pokemon/**/*.spec.ts', 'purchases/validation.spec.ts', 'purchases/read.spec.ts'],
+      testIgnore: ['PokeAPI/**'],
       dependencies: ['real-state-setup'],
       use: { baseURL: testConfig.bffBaseUrl },
     },

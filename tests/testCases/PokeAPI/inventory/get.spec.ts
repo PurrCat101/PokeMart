@@ -21,10 +21,10 @@ test('INT-INVENTORY-001 GET inventory returns internal item fields in stable ord
   expect(body).not.toHaveProperty('items');
 });
 
-test('INT-INVENTORY-002 GET inventory returns an empty list for a user without inventory and validates identity', async ({ request }) => {
+test('INT-INVENTORY-002 GET inventory returns an empty list for an authenticated user without inventory', async ({ request }) => {
   const requestId = 'tc-pokeapi-inventory-empty';
   const emptyResponse = await request.get('/pokemart/v2/inventory', {
-    headers: internalHeaders('pokeapi-user-no-inventory', requestId),
+    headers: internalHeaders('lab-empty-user-001', requestId),
   });
   expect(emptyResponse.status()).toBe(200);
   expect(await emptyResponse.json()).toEqual({ count: 0, results: [] });
@@ -33,10 +33,10 @@ test('INT-INVENTORY-002 GET inventory returns an empty list for a user without i
     headers: { 'X-Request-Id': requestId },
   });
   await expectPublicError(noIdentity, {
-    status: 400,
-    code: 'VALIDATION_ERROR',
-    message: 'Request validation failed',
+    status: 401,
+    code: 'UNAUTHORIZED',
+    message: 'A valid bearer token is required',
     requestId,
-    details: [{ field: 'X-User-Id', message: 'is required and must be valid' }],
+    details: [],
   });
 });

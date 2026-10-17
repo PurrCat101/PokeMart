@@ -18,6 +18,11 @@ export const testConfig = {
   bffBaseUrl: process.env.BFF_BASE_URL ?? 'http://localhost:3001',
   pokemartApiBaseUrl: process.env.POKEMART_API_BASE_URL ?? 'http://localhost:3000',
   wiremockBaseUrl: process.env.WIREMOCK_BASE_URL ?? 'http://localhost:8080',
+  auth: {
+    email: process.env.AUTH_TEST_EMAIL ?? 'lab-user-001@example.test',
+    password: process.env.AUTH_TEST_PASSWORD ?? 'PokeMartLab!2026',
+    jwtSecret: process.env.AUTH_JWT_SECRET ?? 'local-only-insecure-pokemart-jwt-secret-change-before-deploy',
+  },
   environments: {
     wiremock: {
       userId: process.env.WIREMOCK_USER_ID ?? 'lab-user-001',

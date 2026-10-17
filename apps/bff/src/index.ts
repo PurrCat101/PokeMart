@@ -8,11 +8,10 @@ type JsonRecord = Record<string, unknown>;
 const app = express();
 const port = Number(process.env.PORT ?? 3001);
 const upstreamBase = (process.env.POKEMART_API_BASE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
-const userId = process.env.LAB_USER_ID ?? 'lab-user-001';
 const serviceName = 'bff';
 const validRequestId = /^[A-Za-z0-9_-]{1,64}$/;
 const validUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const knownCodes = new Set(['VALIDATION_ERROR', 'UNKNOWN_QUERY_PARAMETER', 'INVALID_JSON', 'UNSUPPORTED_MEDIA_TYPE', 'POKEMON_NOT_FOUND', 'USER_NOT_FOUND', 'PURCHASE_NOT_FOUND', 'POKEMON_NOT_FOR_SALE', 'INSUFFICIENT_STOCK', 'INSUFFICIENT_FUNDS', 'PURCHASE_DUPLICATE']);
+const knownCodes = new Set(['VALIDATION_ERROR', 'UNKNOWN_QUERY_PARAMETER', 'INVALID_JSON', 'UNSUPPORTED_MEDIA_TYPE', 'UNAUTHORIZED', 'INVALID_CREDENTIALS', 'POKEMON_NOT_FOUND', 'USER_NOT_FOUND', 'PURCHASE_NOT_FOUND', 'POKEMON_NOT_FOR_SALE', 'INSUFFICIENT_STOCK', 'INSUFFICIENT_FUNDS', 'PURCHASE_DUPLICATE']);
 const swaggerOrigins = new Set(['http://localhost:8081', 'http://127.0.0.1:8081']);
 
 function log(fields: Record<string, unknown>) { console.log(JSON.stringify({ timestamp: new Date().toISOString(), service: serviceName, environment: process.env.NODE_ENV ?? 'development', ...fields })); }
@@ -48,6 +47,21 @@ function mapWallet(value: unknown) {
     throw new AppError(503, 'DEPENDENCY_UNAVAILABLE', 'PokéMart API returned an invalid wallet');
   }
   return { wallet: { userId: wallet.userId, balance: wallet.balance } };
+}
+function mapAuthUser(value: unknown) {
+  const user = asRecord(value);
+  if (typeof user.userId !== 'string' || typeof user.email !== 'string' || typeof user.displayName !== 'string') {
+    throw new AppError(503, 'DEPENDENCY_UNAVAILABLE', 'PokéMart API returned an invalid user profile');
+  }
+  return { userId: user.userId, email: user.email, displayName: user.displayName };
+}
+function mapLogin(value: unknown) {
+  const result = asRecord(value);
+  const user = mapAuthUser(result.user);
+  if (typeof result.accessToken !== 'string' || result.tokenType !== 'Bearer' || typeof result.expiresIn !== 'number') {
+    throw new AppError(503, 'DEPENDENCY_UNAVAILABLE', 'PokéMart API returned an invalid login response');
+  }
+  return { accessToken: result.accessToken, tokenType: result.tokenType, expiresIn: result.expiresIn, user };
 }
 function mapInventory(value: unknown) {
   const inventory = asRecord(value);
@@ -119,7 +133,7 @@ async function callUpstream(req: Request, path: string, method = 'GET', body?: u
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), timeout); const started = Date.now();
     try {
-      const response = await fetch(`${upstreamBase}${path}`, { method, signal: controller.signal, headers: { 'X-Request-Id': resRequestId(req), 'X-User-Id': userId, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+      const response = await fetch(`${upstreamBase}${path}`, { method, signal: controller.signal, headers: { 'X-Request-Id': resRequestId(req), ...(req.header('authorization') ? { Authorization: req.header('authorization') as string } : {}), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
       log({ severity: 'info', requestId: resRequestId(req), upstreamStatus: response.status, upstreamDurationMs: Date.now() - started }); clearTimeout(timer); return response;
     } catch (error) { clearTimeout(timer); failure = error; }
   }
@@ -137,6 +151,8 @@ async function relay(req: Request, res: ExpressResponse, path: string, method = 
   }
   const location = upstream.headers.get('location');
   if (location) res.setHeader('Location', location);
+  const authenticate = upstream.headers.get('www-authenticate');
+  if (authenticate) res.setHeader('WWW-Authenticate', authenticate);
   if (upstream.status < 400 && mapResponse) payload = mapResponse(payload);
   if (upstream.status === 201 && payload && typeof payload === 'object' && 'purchaseId' in payload) {
     res.setHeader('Location', `/api/purchases/${payload.purchaseId}`);
@@ -150,7 +166,7 @@ app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Request-Id');
+    res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Request-Id');
     res.setHeader('Access-Control-Expose-Headers', 'X-Request-Id, Location');
   }
   if (req.method === 'OPTIONS') return res.sendStatus(204);
@@ -161,13 +177,15 @@ app.use((req, res, next) => {
   res.setHeader('X-Request-Id', resRequestId(req)); const start = Date.now();
   res.on('finish', () => log({ severity: 'info', requestId: resRequestId(req), method: req.method, route: req.route?.path ?? req.path, statusCode: res.statusCode, durationMs: Date.now() - start })); next();
 });
-app.use((req, _res, next) => req.method === 'POST' && req.path === '/api/purchases' && !req.is('application/json') ? next(new AppError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Content-Type must be application/json')) : next());
+app.use((req, _res, next) => req.method === 'POST' && ['/api/auth/login', '/api/purchases'].includes(req.path) && !req.is('application/json') ? next(new AppError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Content-Type must be application/json')) : next());
 app.use(express.json({ strict: false }));
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 app.get('/ready', async (req, res, next) => {
   try { const result = await callUpstream(req, '/ready'); if (result.status !== 200) return res.status(503).json({ status: 'not_ready', checks: { pokemartApi: 'unavailable' } }); return res.json({ status: 'ready', checks: { pokemartApi: 'ok' } }); } catch (error) { next(error); }
 });
+app.post('/api/auth/login', async (req, res, next) => { try { await relay(req, res, '/pokemart/v2/auth/login', 'POST', req.body, mapLogin); } catch (error) { next(error); } });
+app.get('/api/auth/me', async (req, res, next) => { try { await relay(req, res, '/pokemart/v2/auth/me', 'GET', undefined, (payload) => ({ user: mapAuthUser(asRecord(payload).user) })); } catch (error) { next(error); } });
 app.get('/api/pokemon', async (req, res, next) => { try { const { limit, offset } = pageParams(req); await relay(req, res, `/pokemart/v2/catalog/pokemon?limit=${limit}&offset=${offset}`, 'GET', undefined, mapCatalog); } catch (error) { next(error); } });
 app.get('/api/pokemon/:id', async (req, res, next) => { try { positivePathId(req.params.id); await relay(req, res, `/pokemart/v2/catalog/pokemon/${req.params.id}`, 'GET', undefined, mapPokemon); } catch (error) { next(error); } });
 app.get('/api/wallet', async (req, res, next) => { try { await relay(req, res, '/pokemart/v2/wallet', 'GET', undefined, mapWallet); } catch (error) { next(error); } });

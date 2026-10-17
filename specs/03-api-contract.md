@@ -9,12 +9,15 @@ The formal contract is `specs/openapi.yaml`. This file describes behavior and ru
 - Errors use one envelope: `{ "error": { "code", "message", "requestId", "details" } }`. Codes are stable and machine-readable.
 - Unknown query parameters on GET endpoints return `400 UNKNOWN_QUERY_PARAMETER`.
 - Request bodies must be `application/json`; otherwise `415 UNSUPPORTED_MEDIA_TYPE`.
-- Authentication is replaced by a fixed development user, `lab-user-001`. This is a learning simplification, not a production security design.
+- `POST /api/auth/login` verifies the seeded demo account and returns a one-hour HS256 bearer token. `GET /api/auth/me` returns the token's active user profile. No registration, password reset, refresh token, or production-grade rate limiting is included.
+- Catalog reads are public. Wallet, inventory, and purchase endpoints require `Authorization: Bearer <accessToken>`; the API derives `user_id` from the validated token and ignores client-supplied `X-User-Id`.
 
 ## Endpoints
 
 | Method | Path | Purpose |
 |---|---|---|
+| `POST` | `/api/auth/login` | Exchange email/password for an access token |
+| `GET` | `/api/auth/me` | Return the current token's user profile |
 | `GET` | `/api/pokemon` | List catalog Pokémon with pagination |
 | `GET` | `/api/pokemon/:id` | Get Pokémon reference details and shop listing |
 | `GET` | `/api/wallet` | Get the lab user's wallet |
@@ -24,6 +27,8 @@ The formal contract is `specs/openapi.yaml`. This file describes behavior and ru
 | `GET` | `/api/purchases/:id` | Get purchase details |
 | `GET` | `/health` | Liveness |
 | `GET` | `/ready` | Readiness (includes PokéMart API check) |
+
+The local seeded demo account is `lab-user-001@example.test` / `PokeMartLab!2026`. Treat these credentials and the default JWT signing secret as local practice values only. A frontend stores the `accessToken` and sends it in the `Authorization` header; it should discard the token when signing out.
 
 ## 7.1 Catalog pagination
 

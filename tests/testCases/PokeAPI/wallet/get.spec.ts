@@ -13,19 +13,19 @@ test('INT-WALLET-001 GET wallet returns the identified user wallet', async ({ re
   });
 });
 
-test('INT-WALLET-002 GET wallet requires identity and reports unknown users', async ({ request }) => {
+test('INT-WALLET-002 GET wallet requires authentication and reports users without wallets', async ({ request }) => {
   const requestId = 'tc-pokeapi-wallet-error';
   const noIdentity = await request.get('/pokemart/v2/wallet', { headers: { 'X-Request-Id': requestId } });
   await expectPublicError(noIdentity, {
-    status: 400,
-    code: 'VALIDATION_ERROR',
-    message: 'Request validation failed',
+    status: 401,
+    code: 'UNAUTHORIZED',
+    message: 'A valid bearer token is required',
     requestId,
-    details: [{ field: 'X-User-Id', message: 'is required and must be valid' }],
+    details: [],
   });
 
   const unknownUser = await request.get('/pokemart/v2/wallet', {
-    headers: internalHeaders('pokeapi-user-does-not-exist', requestId),
+    headers: internalHeaders('lab-empty-user-001', requestId),
   });
   await expectPublicError(unknownUser, {
     status: 404,

@@ -61,7 +61,7 @@ Public API:
 - `POST /api/purchases` (ส่ง `purchaseId`, `pokemonId`, `quantity` ใน JSON body)
 - `GET /health` และ `GET /ready`
 
-Internal service ใช้ endpoints ที่สอดคล้องกันภายใต้ `/pokemart/v2` เช่น `/pokemart/v2/catalog/pokemon`, `/pokemart/v2/wallet` และ `/pokemart/v2/purchases` โดย business endpoints ต้องมี `X-User-Id` ตาม contract ปัจจุบัน
+Internal service ใช้ endpoints ที่สอดคล้องกันภายใต้ `/pokemart/v2` เช่น `/pokemart/v2/catalog/pokemon`, `/pokemart/v2/auth/login`, `/pokemart/v2/wallet` และ `/pokemart/v2/purchases`; wallet, inventory และ purchase resources ต้องใช้ bearer JWT
 
 ## คำสั่ง build และทดสอบ
 
@@ -101,8 +101,8 @@ npm run test:e2e
 
 ### Identity
 
-- ใช้ `LAB_USER_ID`, `X-User-Id`, `userId`, `user_id`, `user_wallet` และ `user_inventory` ให้สอดคล้องกัน
-- Fixed user ปัจจุบันคือ `lab-user-001`; ยังเป็นค่า development ไม่ใช่ authentication จริง
+- ใช้ `userId`, `user_id`, `users`, `user_wallet` และ `user_inventory` ให้สอดคล้องกัน
+- มี local demo login ด้วย email/password และ JWT สำหรับฝึก; ยังไม่ใช่ production-grade authentication
 - Database volume เดิมต้อง migrate หนึ่งครั้งด้วย `database/migrations/001_rename_player_identity.sql`; volume ใหม่ได้ schema ใหม่ทันที
 - Volume เดิมที่มีตาราง `idempotency_keys` ให้รัน `database/migrations/002_drop_idempotency_keys.sql` หลัง migration 001
 

@@ -24,7 +24,11 @@
 
 ### Database and application
 - A fresh database volume initializes successfully.
+- The seeded demo account can log in and receive a signed, one-hour access token; invalid credentials, missing/invalid tokens, and inactive users are rejected.
+- Wallet, inventory, and purchase operations derive identity from a verified token; client-supplied `X-User-Id` cannot select another user's records.
+- Catalog reads remain accessible without authentication.
 - Required tables, keys, constraints (including the unique primary key on `purchases.id`), and indexes exist; new volumes do not create `idempotency_keys`.
+- User-owned tables reference `users.user_id` with declared foreign keys.
 - Baseline seed records exist after initialization and are not duplicated on restart.
 - Successful purchases update all related state consistently.
 - Failed purchases do not leave partial changes.
@@ -57,7 +61,7 @@
 
 - **Purchase retry:** the client generates a UUID `purchaseId` in the JSON body. Failed, uncommitted requests may reuse the ID; committed IDs return `409 PURCHASE_DUPLICATE`. There is no `Idempotency-Key` header or replay response.
 - **Order identifier:** client-generated UUID `purchaseId`. Human-readable order numbers are out of scope.
-- **Authentication:** fixed development user `lab-user-001`.
+- **Authentication:** local demo login uses email/password, scrypt password hashes, and one-hour HS256 bearer tokens. The local seeded account is `lab-user-001@example.test`; there is no public registration, password reset, refresh token, or production-grade rate limiting.
 - **Error body format:** `{ error: { code, message, requestId, details } }`.
 - **Unknown query parameters:** rejected with `400 UNKNOWN_QUERY_PARAMETER`.
 

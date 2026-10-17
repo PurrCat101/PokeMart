@@ -7,12 +7,13 @@ info:
     Business endpoints use the prefix `/pokemart/v2`. Health endpoints are not versioned.
 
     Business behavior is aligned with the public BFF contract, but internal response schemas are service-owned.
-    Every business request must include `X-User-Id`, set by the BFF.
+    Catalog reads are public. Wallet, inventory, and purchase resources require a bearer JWT.
 servers:
   - url: http://localhost:3000
     description: Local lab (host port published by Docker Compose, for api-validation tests only)
 
 tags:
+  - name: Authentication
   - name: Catalog
   - name: Wallet
   - name: Inventory
@@ -20,6 +21,61 @@ tags:
   - name: Health
 
 paths:
+  /pokemart/v2/auth/login:
+    post:
+      tags: [Authentication]
+      operationId: login
+      summary: Exchange credentials for an access token
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdRequest'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login succeeded
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/InvalidCredentials'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /pokemart/v2/auth/me:
+    get:
+      tags: [Authentication]
+      operationId: getCurrentUser
+      summary: Return the active profile represented by a bearer token
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdRequest'
+      responses:
+        '200':
+          description: Current user profile
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUser'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /pokemart/v2/catalog/pokemon:
     get:
       tags: [Catalog]
@@ -29,7 +85,6 @@ paths:
         Errors: 400 `VALIDATION_ERROR` or `UNKNOWN_QUERY_PARAMETER`;
         500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE`.
       parameters:
-        - $ref: '#/components/parameters/UserId'
         - $ref: '#/components/parameters/XRequestIdRequest'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
@@ -59,7 +114,6 @@ paths:
         Errors: 400 `VALIDATION_ERROR`; 404 `POKEMON_NOT_FOUND`;
         500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE`.
       parameters:
-        - $ref: '#/components/parameters/UserId'
         - $ref: '#/components/parameters/XRequestIdRequest'
         - $ref: '#/components/parameters/PokemonId'
       responses:
@@ -82,6 +136,8 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
 
   /pokemart/v2/wallet:
+    security:
+      - bearerAuth: []
     get:
       tags: [Wallet]
       operationId: getWallet
@@ -90,7 +146,6 @@ paths:
         Errors: 400 `VALIDATION_ERROR`; 404 `USER_NOT_FOUND`;
         500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE`.
       parameters:
-        - $ref: '#/components/parameters/UserId'
         - $ref: '#/components/parameters/XRequestIdRequest'
       responses:
         '200':
@@ -104,6 +159,8 @@ paths:
                 $ref: '#/components/schemas/Wallet'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
@@ -112,6 +169,8 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
 
   /pokemart/v2/inventory:
+    security:
+      - bearerAuth: []
     get:
       tags: [Inventory]
       operationId: getInventory
@@ -120,7 +179,6 @@ paths:
         Errors: 400 `VALIDATION_ERROR`; 500 `INTERNAL_ERROR`;
         503 `DEPENDENCY_UNAVAILABLE`.
       parameters:
-        - $ref: '#/components/parameters/UserId'
         - $ref: '#/components/parameters/XRequestIdRequest'
       responses:
         '200':
@@ -134,12 +192,16 @@ paths:
                 $ref: '#/components/schemas/Inventory'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalError'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
 
   /pokemart/v2/purchases:
+    security:
+      - bearerAuth: []
     post:
       tags: [Purchases]
       operationId: createPurchase
@@ -154,7 +216,6 @@ paths:
         415 `UNSUPPORTED_MEDIA_TYPE`; 422 `INSUFFICIENT_FUNDS`;
         500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE`.
       parameters:
-        - $ref: '#/components/parameters/UserId'
         - $ref: '#/components/parameters/XRequestIdRequest'
       requestBody:
         required: true
@@ -177,6 +238,8 @@ paths:
                 $ref: '#/components/schemas/Purchase'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
@@ -197,7 +260,6 @@ paths:
         Errors: 400 `VALIDATION_ERROR` or `UNKNOWN_QUERY_PARAMETER`;
         500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE`.
       parameters:
-        - $ref: '#/components/parameters/UserId'
         - $ref: '#/components/parameters/XRequestIdRequest'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
@@ -213,12 +275,16 @@ paths:
                 $ref: '#/components/schemas/PurchasePage'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalError'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
 
   /pokemart/v2/purchases/{id}:
+    security:
+      - bearerAuth: []
     get:
       tags: [Purchases]
       operationId: getPurchase
@@ -227,7 +293,6 @@ paths:
         Errors: 400 `VALIDATION_ERROR`; 404 `PURCHASE_NOT_FOUND`;
         500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE`.
       parameters:
-        - $ref: '#/components/parameters/UserId'
         - $ref: '#/components/parameters/XRequestIdRequest'
         - $ref: '#/components/parameters/PurchaseId'
       responses:
@@ -242,6 +307,8 @@ paths:
                 $ref: '#/components/schemas/Purchase'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
@@ -271,7 +338,7 @@ paths:
     get:
       tags: [Health]
       operationId: getReady
-      summary: Readiness, MySQL reachable and schema initialized
+      summary: Readiness, MySQL reachable and shop/user schema initialized
       parameters:
         - $ref: '#/components/parameters/XRequestIdRequest'
       responses:
@@ -295,6 +362,11 @@ paths:
                 $ref: '#/components/schemas/Ready'
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   headers:
     XRequestId:
       description: Correlation ID present on every response.
@@ -304,17 +376,6 @@ components:
         maxLength: 64
         pattern: '^[A-Za-z0-9_-]+$'
   parameters:
-    UserId:
-      name: X-User-Id
-      in: header
-      required: true
-      description: Caller identity set by the BFF. Clients must not send it.
-      schema:
-        type: string
-        minLength: 1
-        maxLength: 64
-        pattern: '^[A-Za-z0-9_-]+$'
-        example: lab-user-001
     XRequestIdRequest:
       name: X-Request-Id
       in: header
@@ -358,6 +419,59 @@ components:
         format: uuid
 
   schemas:
+    LoginRequest:
+      type: object
+      required: [email, password]
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          minLength: 1
+          maxLength: 128
+          writeOnly: true
+
+    UserProfile:
+      type: object
+      required: [userId, email, displayName]
+      additionalProperties: false
+      properties:
+        userId:
+          type: string
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+
+    LoginResponse:
+      type: object
+      required: [accessToken, tokenType, expiresIn, user]
+      additionalProperties: false
+      properties:
+        accessToken:
+          type: string
+          description: Short-lived HS256 JWT access token.
+        tokenType:
+          type: string
+          enum: [Bearer]
+        expiresIn:
+          type: integer
+          example: 3600
+        user:
+          $ref: '#/components/schemas/UserProfile'
+
+    CurrentUser:
+      type: object
+      required: [user]
+      additionalProperties: false
+      properties:
+        user:
+          $ref: '#/components/schemas/UserProfile'
+
     Pokemon:
       type: object
       required: [id, name, types, spriteUrl, price, stock]
@@ -539,6 +653,8 @@ components:
                 - UNKNOWN_QUERY_PARAMETER
                 - INVALID_JSON
                 - UNSUPPORTED_MEDIA_TYPE
+                - UNAUTHORIZED
+                - INVALID_CREDENTIALS
                 - POKEMON_NOT_FOUND
                 - USER_NOT_FOUND
                 - PURCHASE_NOT_FOUND
@@ -566,6 +682,28 @@ components:
   responses:
     BadRequest:
       description: Invalid input
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Missing, invalid, expired, or incorrect authentication credentials
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        WWW-Authenticate:
+          schema:
+            type: string
+            example: Bearer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InvalidCredentials:
+      description: Email or password is incorrect
       headers:
         X-Request-Id:
           $ref: '#/components/headers/XRequestId'

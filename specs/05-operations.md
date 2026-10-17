@@ -82,10 +82,12 @@ MYSQL_PORT=3306
 MYSQL_DATABASE=pokemart_lab
 MYSQL_USER=pokemart_user
 MYSQL_PASSWORD=change_me_for_local_development
-LAB_USER_ID=lab-user-001
+AUTH_JWT_SECRET=local-only-insecure-pokemart-jwt-secret-change-before-deploy
+AUTH_TEST_EMAIL=lab-user-001@example.test
+AUTH_TEST_PASSWORD=PokeMartLab!2026
 ```
 
-Services inside Compose use service names such as `mysql` and `wiremock`. Host-run tests use published host ports. `localhost` inside a container refers to that same container.
+The JWT secret and demo credentials above are local-only practice values. Tests that target another user or environment must configure matching `AUTH_TEST_EMAIL`, `AUTH_TEST_PASSWORD`, `AUTH_JWT_SECRET`, and `REAL_USER_ID`. Services inside Compose use service names such as `mysql` and `wiremock`. Host-run tests use published host ports. `localhost` inside a container refers to that same container.
 
 ## 14. Makefile command interface
 

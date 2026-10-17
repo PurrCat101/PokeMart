@@ -93,6 +93,31 @@ MySQL จะสร้าง schema และ seed data เมื่อเริ�
 
 > ค่าใน `.env.example` เป็น local-development values เท่านั้น ห้ามใช้กับ shared/production environment หรือ commit `.env` และ credentials จริง
 
+## ทดลอง login และเรียก API
+
+เมื่อระบบพร้อมแล้ว สามารถทดลอง login ด้วย demo account ที่ seed มาได้ (สำหรับ local lab เท่านั้น):
+
+### Windows — PowerShell
+
+```powershell
+$login = Invoke-RestMethod -Method Post http://localhost:3001/api/auth/login -ContentType 'application/json' -Body '{"email":"lab-user-001@example.test","password":"PokeMartLab!2026"}'
+$headers = @{ Authorization = "Bearer $($login.accessToken)" }
+Invoke-RestMethod http://localhost:3001/api/auth/me -Headers $headers
+Invoke-RestMethod http://localhost:3001/api/wallet -Headers $headers
+```
+
+### macOS — Terminal
+
+```zsh
+TOKEN=$(curl --fail --silent --show-error -X POST http://localhost:3001/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"lab-user-001@example.test","password":"PokeMartLab!2026"}' | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).accessToken")
+curl --fail --silent --show-error http://localhost:3001/api/auth/me -H "Authorization: Bearer $TOKEN"
+curl --fail --silent --show-error http://localhost:3001/api/wallet -H "Authorization: Bearer $TOKEN"
+```
+
+Login returns a one-hour JWT. A frontend should send it as `Authorization: Bearer <accessToken>` for wallet, inventory, and purchase requests; catalog reads are public. No signup or password-reset flow is included. Replace the local-only `AUTH_JWT_SECRET`, enable HTTPS, and add rate limiting and a refresh/revocation strategy before exposing this flow beyond the lab.
+
 ## 3. รันทดสอบ — Step by step
 
 เริ่มจาก WireMock เพื่อฝึก mapping แล้วค่อยทดสอบ API จริงและ end-to-end:
@@ -224,7 +249,7 @@ Client สร้าง UUID `purchaseId` ก่อนเริ่มซื้อ
 
 ![PokéMart database tables and entity relationships](database/schema/erd.svg)
 
-เส้นทึบคือ foreign key ที่ประกาศใน MySQL; เส้นประคือการเชื่อมโยงด้วย `user_id` ที่ใช้ใน lab แต่ไม่มี `users` table หรือ foreign key คัดลอก DBML ไปใช้ใน dbdiagram.io ได้จาก [database/schema/pokemart.dbml](database/schema/pokemart.dbml); ดูรายละเอียดคอลัมน์และ constraints ที่ [database/README.md](database/README.md).
+ทุกเส้นใน ERD คือ foreign key ที่ประกาศใน MySQL รวมถึง `users.user_id` ที่เชื่อมกับ wallet, inventory และ purchases คัดลอก DBML ไปใช้ใน dbdiagram.io ได้จาก [database/schema/pokemart.dbml](database/schema/pokemart.dbml); ดูรายละเอียดคอลัมน์และ constraints ที่ [database/README.md](database/README.md).
 
 ราคา derive จาก base experience ปัดทีละ 50 และจำกัดช่วง 200–1500 ส่วน stock ลดลงตาม experience tier และมี variation แบบ deterministic จาก Pokémon ID ทำให้ seed ซ้ำได้ผลเดิม Runtime และ tests ไม่เรียก PokéAPI ดูรายละเอียดที่ [database/README.md](database/README.md) และข้อมูลใน [database/seed/001_seed_shop_data.sql](database/seed/001_seed_shop_data.sql)
 

@@ -30,10 +30,10 @@ test('INT-PURCHASE-DETAIL-001 GET purchase detail distinguishes invalid and abse
     headers: { 'X-Request-Id': requestId },
   });
   await expectPublicError(noIdentity, {
-    status: 400,
-    code: 'VALIDATION_ERROR',
-    message: 'Request validation failed',
+    status: 401,
+    code: 'UNAUTHORIZED',
+    message: 'A valid bearer token is required',
     requestId,
-    details: [{ field: 'X-User-Id', message: 'is required and must be valid' }],
+    details: [],
   });
 });

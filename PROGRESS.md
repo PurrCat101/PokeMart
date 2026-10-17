@@ -5,12 +5,13 @@ Last updated: 2026-10-17
 ## Done
 
 - [x] Created the npm workspace, TypeScript configuration, and two Express services.
-- [x] Implemented BFF routes under `/api`, request-ID propagation, input validation, upstream timeout/retry behavior, fixed development user identity, response DTO mapping, and dependency error mapping.
+- [x] Implemented BFF routes under `/api`, request-ID propagation, input validation, upstream timeout/retry behavior, JWT forwarding, response DTO mapping, and dependency error mapping.
 - [x] Implemented PokéMart service catalog, wallet, inventory, purchase history, and transactional purchase updates with client-generated purchase IDs and duplicate detection.
 - [x] Added MySQL schema, constraints, indexes, and deterministic Generation I seed data; retired idempotency-key storage.
+- [x] Added `users`, password hashes, user foreign keys, demo login, and one-hour HS256 bearer authentication for user-owned API resources.
 - [x] Added Docker Compose (MySQL, BFF, PokéMart API, WireMock, Swagger UI), Dockerfiles, environment template, and Make targets.
 - [x] Added distinct public and service OpenAPI contracts, Swagger UI selection, and WireMock success/error mappings.
-- [x] Documented PokeAPI snapshot, deterministic pricing/stock rules, user identity migration, and destructive database-reset warning.
+- [x] Documented PokeAPI snapshot, deterministic pricing/stock rules, auth setup, user identity migration, and destructive database-reset warning.
 - [x] Updated purchase flow to use a client-generated UUID `purchaseId` in the request body, with retry-after-rollback and `409 PURCHASE_DUPLICATE` after commit.
 - [x] Removed idempotency-key storage and documented the existing-volume migration that drops the retired table.
 - [x] Added a real retry/duplicate test that restores its wallet, stock, inventory, and purchase data after execution.

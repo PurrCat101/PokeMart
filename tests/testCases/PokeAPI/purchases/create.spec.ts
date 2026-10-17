@@ -52,7 +52,7 @@ test('INT-PURCHASE-CREATE-001 POST purchase commits once, exposes service DTO, a
     expect(await detailResponse.json()).toEqual(createdBody);
 
     const otherUserResponse = await request.get(`/pokemart/v2/purchases/${purchaseId}`, {
-      headers: internalHeaders('pokeapi-other-test-user', requestId),
+      headers: internalHeaders('lab-empty-user-001', requestId),
     });
     await expectPublicError(otherUserResponse, {
       status: 404,
@@ -152,11 +152,11 @@ test('INT-PURCHASE-CREATE-002 POST purchase rejects invalid payloads and media t
       headers: { 'X-Request-Id': requestId },
     });
     await expectPublicError(missingIdentity, {
-      status: 400,
-      code: 'VALIDATION_ERROR',
-      message: 'Request validation failed',
+      status: 401,
+      code: 'UNAUTHORIZED',
+      message: 'A valid bearer token is required',
       requestId,
-      details: [{ field: 'X-User-Id', message: 'is required and must be valid' }],
+      details: [],
     });
     expect(await snapshotPurchaseState(database, testEnvironment.userId, testEnvironment.pokemonId)).toEqual(beforeMissingIdentity);
   } finally {

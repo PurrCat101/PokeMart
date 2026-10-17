@@ -29,6 +29,7 @@ services:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-pokemart_lab}
       MYSQL_USER: ${MYSQL_USER:-pokemart_user}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change_me_for_local_development}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-local-only-insecure-pokemart-jwt-secret-change-before-deploy}
     ports: ["3000:3000"]
     depends_on:
       mysql:
@@ -41,7 +42,6 @@ services:
     environment:
       PORT: 3001
       POKEMART_API_BASE_URL: http://pokemart-api:3000
-      LAB_USER_ID: ${LAB_USER_ID:-lab-user-001}
     ports: ["3001:3001"]
     depends_on:
       pokemart-api:

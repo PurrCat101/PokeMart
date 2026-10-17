@@ -6,6 +6,15 @@ CREATE TABLE pokemon_reference (
   sprite_url VARCHAR(512) NULL
 );
 
+CREATE TABLE users (
+  user_id VARCHAR(64) PRIMARY KEY,
+  email VARCHAR(254) NOT NULL UNIQUE,
+  display_name VARCHAR(100) NOT NULL,
+  password_hash VARCHAR(255) NULL,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
+);
+
 CREATE TABLE shop_listing (
   pokemon_source_id INT PRIMARY KEY,
   price INT NOT NULL,
@@ -19,6 +28,7 @@ CREATE TABLE shop_listing (
 CREATE TABLE user_wallet (
   user_id VARCHAR(64) PRIMARY KEY,
   balance INT NOT NULL,
+  CONSTRAINT fk_wallet_user FOREIGN KEY (user_id) REFERENCES users(user_id),
   CONSTRAINT chk_wallet_balance CHECK (balance >= 0)
 );
 
@@ -27,6 +37,7 @@ CREATE TABLE user_inventory (
   pokemon_source_id INT NOT NULL,
   quantity INT NOT NULL,
   PRIMARY KEY (user_id, pokemon_source_id),
+  CONSTRAINT fk_inventory_user FOREIGN KEY (user_id) REFERENCES users(user_id),
   CONSTRAINT fk_inventory_pokemon FOREIGN KEY (pokemon_source_id) REFERENCES pokemon_reference(source_id),
   CONSTRAINT chk_inventory_quantity CHECK (quantity > 0)
 );
@@ -39,6 +50,7 @@ CREATE TABLE purchases (
   unit_price INT NOT NULL,
   total_price INT NOT NULL,
   created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_purchase_user FOREIGN KEY (user_id) REFERENCES users(user_id),
   CONSTRAINT fk_purchase_pokemon FOREIGN KEY (pokemon_source_id) REFERENCES pokemon_reference(source_id),
   CONSTRAINT chk_purchase_quantity CHECK (quantity BETWEEN 1 AND 99),
   INDEX idx_purchase_user_created (user_id, created_at DESC, id DESC)

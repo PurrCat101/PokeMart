@@ -10,17 +10,20 @@ The formal contract is `specs/pokemart-openapi.yaml`. This file describes the ru
 - The version segment changes only for breaking changes to request or response shape, status codes, or error codes.
 - Health endpoints `/health` and `/ready` are not versioned.
 
-## 2. Caller identity
+## 2. Authentication and caller identity
 
-Every business endpoint requires the header `X-User-Id`, which the BFF sets to `lab-user-001`.
+Catalog reads are public. `POST /pokemart/v2/auth/login` verifies a user's email/password against the stored scrypt hash and returns a one-hour HS256 access token. `GET /pokemart/v2/auth/me`, wallet, inventory, and purchase operations require `Authorization: Bearer <accessToken>`.
 
-- Missing or malformed header → `400 VALIDATION_ERROR` with a detail for `X-User-Id`.
-- The PokéMart API trusts this header because it is only reachable inside the Compose network. This is a learning simplification. If the service were reachable from outside, this would be a security hole, and the spec would need a real service-to-service credential.
+The API validates the signature, algorithm, issuer, audience, issue/expiry times, and the active user row on every protected request. It takes `user_id` from the verified JWT `sub` claim; it does not trust `X-User-Id`. Missing, malformed, expired, invalid, or inactive-user tokens return `401 UNAUTHORIZED`. Incorrect login credentials return the generic `401 INVALID_CREDENTIALS`.
+
+The BFF forwards tokens unchanged. The internal API is still intended to remain private to the trusted service network; production deployment also needs service-to-service restrictions, TLS, secret management, login rate limiting, and token revocation/refresh design.
 
 ## 3. Endpoints
 
 | Method | Path | Purpose |
 |---|---|---|
+| `POST` | `/pokemart/v2/auth/login` | Verify credentials and issue a bearer access token |
+| `GET` | `/pokemart/v2/auth/me` | Return the active authenticated profile |
 | `GET` | `/pokemart/v2/catalog/pokemon` | Paged catalog of listed Pokémon |
 | `GET` | `/pokemart/v2/catalog/pokemon/{id}` | One Pokémon with its listing |
 | `GET` | `/pokemart/v2/wallet` | Wallet of the caller |
@@ -64,7 +67,7 @@ The client-generated `purchaseId` is the primary key of the purchase row. A retr
 
 `/ready` returns `200` only when:
 - a trivial query against MySQL succeeds, and
-- the `shop_listing` table exists and contains at least one row (guards against running against an uninitialized volume).
+- the `shop_listing` and `users` tables exist and contain baseline rows (guards against running against an uninitialized or unmigrated volume).
 
 Otherwise it returns `503` with `checks.mysql` set to `"unavailable"` or `"uninitialized"`.
 
@@ -74,11 +77,11 @@ Same rules as `05-operations.md` section 12. In addition, the PokéMart API logs
 
 ## 9. Testing relationship
 
-- API validation tests for this service run against `specs/pokemart-openapi.yaml` directly, to check internal contract details that the BFF does not expose (for example, the `X-User-Id` rule).
+- API validation tests for this service run against `specs/pokemart-openapi.yaml` directly, including the internal token-validation boundary.
 - The public BFF tests must not be replaced by these tests. Report them separately, as `04-testing.md` section 8.3 requires.
 - Concurrency tests for stock (two purchases competing for the last unit) run against this service and through the BFF. Only one of them may succeed.
 - Direct internal service automation lives under `tests/testCases/PokeAPI/<endpoint>/` and runs with the Playwright project `pokeapi` (`npm run test:pokeapi` / `make test-pokeapi`).
-- The endpoint directories cover catalog list/detail, wallet, inventory, purchase create/list/detail, retry/concurrency, health, and readiness. State-changing tests snapshot and restore the dedicated test database.
+- The endpoint directories cover login/current-user, catalog list/detail, wallet, inventory, purchase create/list/detail, retry/concurrency, health, and readiness. State-changing tests snapshot and restore the dedicated test database.
 - Direct-service concurrency verifies both same-ID duplicate processing and distinct purchases competing for the last stock unit.
 - Before a real Playwright project runs, `tests/testCases/setup/real-state.setup.ts` restores the configured test user's wallet and selected listing (price, stock, active) to the configured baseline and deletes that user's inventory row for that Pokémon. Purchase history and the database volume are preserved; use only a dedicated test database and user.
 - Latest verified execution: `npm run test:pokeapi` passed all 21 internal API cases; the full `npm test` run passed 94 cases across WireMock, BFF API, E2E, and internal API projects.

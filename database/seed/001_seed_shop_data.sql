@@ -1,5 +1,7 @@
 -- Reference data: PokeAPI REST API v2, Generation I IDs 1-151.
 -- Retrieved 2026-10-17. Shop price/stock are lab-owned deterministic values, not PokeAPI data.
+SET NAMES utf8mb4;
+
 INSERT INTO pokemon_reference (source_id, name, base_experience, types, sprite_url) VALUES
   (1, 'bulbasaur', 64, "[\"grass\",\"poison\"]", 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/1.png'),
   (2, 'ivysaur', 142, "[\"grass\",\"poison\"]", 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/2.png'),
@@ -316,6 +318,25 @@ ON DUPLICATE KEY UPDATE
   price = VALUES(price),
   stock = VALUES(stock),
   active = VALUES(active);
+
+INSERT INTO users (user_id, email, display_name, password_hash, is_active)
+VALUES (
+  'lab-user-001',
+  'lab-user-001@example.test',
+  'PokéMart Lab User',
+  'scrypt$16384$8$1$B4ogYl9H5OdXpeDMU2nqIw$78Yct8q9I6o2YRWXLjT98fVCqz_sojm0bF-4fXq_sh5_xkXcvQx-7ErS3FFsKgdC7zGF7IuItadWHOM09h1HTA',
+  TRUE
+), (
+  'lab-empty-user-001',
+  'empty-user-001@example.invalid',
+  'PokéMart Test User Without Wallet',
+  NULL,
+  TRUE
+)
+ON DUPLICATE KEY UPDATE
+  email = VALUES(email),
+  display_name = VALUES(display_name),
+  is_active = VALUES(is_active);
 
 INSERT INTO user_wallet (user_id, balance) VALUES ('lab-user-001', 10000)
 ON DUPLICATE KEY UPDATE balance = VALUES(balance);

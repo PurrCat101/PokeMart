@@ -22,7 +22,7 @@ test('SYS-API-002 absent or malformed X-Request-Id is replaced with a valid gene
   expect(malformed.headers()['x-request-id']).not.toBe('contains spaces');
 });
 
-test('SYS-API-003 client-supplied X-User-Id cannot override the configured development identity', async ({ bffRequest, testEnvironment }) => {
+test('SYS-API-003 client-supplied X-User-Id cannot override the bearer-token identity', async ({ bffRequest, testEnvironment }) => {
   const response = await bffRequest.get('/api/wallet', {
     headers: { 'X-User-Id': 'attacker-chosen-user' },
   });

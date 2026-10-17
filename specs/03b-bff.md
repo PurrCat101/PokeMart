@@ -9,6 +9,7 @@ The BFF is the only public entry point for the lab. Clients and tests call the B
 The BFF:
 - validates request shape and public constraints before forwarding (path, query, headers, body);
 - forwards each request to the PokéMart API with the correlation header and request body;
+- forwards bearer tokens unchanged to the PokéMart API, which verifies them and derives the user identity;
 - maps upstream responses and errors to the public contract;
 - exposes its own `/health` and `/ready` endpoints.
 
@@ -29,13 +30,15 @@ Upstream paths use the service contract prefix `/pokemart/v2`. The PokéMart API
 
 | Method | Path | Upstream call | Success | Possible public errors |
 |---|---|---|---|---|
+| `POST` | `/api/auth/login` | `POST /pokemart/v2/auth/login` with email/password body | `200` | `400 VALIDATION_ERROR`; `401 INVALID_CREDENTIALS`; `503 DEPENDENCY_UNAVAILABLE` |
+| `GET` | `/api/auth/me` | `GET /pokemart/v2/auth/me` with bearer token | `200` | `401 UNAUTHORIZED`; `503 DEPENDENCY_UNAVAILABLE` |
 | `GET` | `/api/pokemon` | `GET /pokemart/v2/catalog/pokemon` with same `limit`, `offset` | `200` | `400 VALIDATION_ERROR` / `UNKNOWN_QUERY_PARAMETER`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
 | `GET` | `/api/pokemon/:id` | `GET /pokemart/v2/catalog/pokemon/{id}` | `200` | `400 VALIDATION_ERROR`; `404 POKEMON_NOT_FOUND`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
-| `GET` | `/api/wallet` | `GET /pokemart/v2/wallet` | `200` | `404 USER_NOT_FOUND`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
-| `GET` | `/api/inventory` | `GET /pokemart/v2/inventory` | `200` | `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
-| `POST` | `/api/purchases` | `POST /pokemart/v2/purchases` with body containing `purchaseId` | `201` | `400 VALIDATION_ERROR` / `INVALID_JSON`; `404 POKEMON_NOT_FOUND`; `409 PURCHASE_DUPLICATE` / `POKEMON_NOT_FOR_SALE` / `INSUFFICIENT_STOCK`; `415 UNSUPPORTED_MEDIA_TYPE`; `422 INSUFFICIENT_FUNDS`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
-| `GET` | `/api/purchases` | `GET /pokemart/v2/purchases` with `limit`, `offset` | `200` | `400 VALIDATION_ERROR` / `UNKNOWN_QUERY_PARAMETER`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
-| `GET` | `/api/purchases/:id` | `GET /pokemart/v2/purchases/{id}` | `200` | `400 VALIDATION_ERROR`; `404 PURCHASE_NOT_FOUND`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
+| `GET` | `/api/wallet` | `GET /pokemart/v2/wallet` with bearer token | `200` | `401 UNAUTHORIZED`; `404 USER_NOT_FOUND`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
+| `GET` | `/api/inventory` | `GET /pokemart/v2/inventory` with bearer token | `200` | `401 UNAUTHORIZED`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
+| `POST` | `/api/purchases` | `POST /pokemart/v2/purchases` with bearer token and `purchaseId` body | `201` | `400 VALIDATION_ERROR` / `INVALID_JSON`; `401 UNAUTHORIZED`; `404 POKEMON_NOT_FOUND`; `409 PURCHASE_DUPLICATE` / `POKEMON_NOT_FOR_SALE` / `INSUFFICIENT_STOCK`; `415 UNSUPPORTED_MEDIA_TYPE`; `422 INSUFFICIENT_FUNDS`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
+| `GET` | `/api/purchases` | `GET /pokemart/v2/purchases` with bearer token, `limit`, `offset` | `200` | `400 VALIDATION_ERROR` / `UNKNOWN_QUERY_PARAMETER`; `401 UNAUTHORIZED`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
+| `GET` | `/api/purchases/:id` | `GET /pokemart/v2/purchases/{id}` with bearer token | `200` | `400 VALIDATION_ERROR`; `401 UNAUTHORIZED`; `404 PURCHASE_NOT_FOUND`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
 | `GET` | `/health` | none | `200` | none |
 | `GET` | `/ready` | `GET /ready` on PokéMart API | `200` or `503` | none |
 
@@ -46,6 +49,8 @@ The BFF and PokéMart API paths differ on purpose. The BFF is the public contrac
 - **`GET /api/pokemon`**: the BFF checks `limit` and `offset` against the public rules (1–100 and 0 or more). It forwards only the validated values. It does not add or change results.
 - **`GET /api/pokemon/:id`**: the BFF checks that `id` is a positive integer before calling upstream. This is the only place where a malformed ID returns a `400` without an upstream call.
 - **`POST /api/purchases`**: the BFF requires a valid UUID `purchaseId` in the JSON body and forwards the body and `X-Request-Id`. It does not retry POST requests automatically.
+- **`POST /api/auth/login`**: forwards JSON credentials without requiring a token. Login errors are generic and do not disclose whether an email exists.
+- **`GET /api/auth/me`** and user-owned endpoints: forward the client's bearer token; the PokéMart API performs signature and active-user validation. `X-User-Id` is not an identity source.
 - **`GET /api/wallet`** and **`GET /api/inventory`**: no business logic. Pure pass-through with error mapping.
 - **`/health`**: answers without calling any dependency. If the process can answer, this returns `200`.
 - **`/ready`**: returns `200` only if the PokéMart API `/ready` returns `200`. Otherwise returns `503` with `checks.pokemartApi: "unavailable"`.
@@ -56,14 +61,15 @@ The BFF and PokéMart API paths differ on purpose. The BFF is the public contrac
 |---|---|---|
 | `X-Request-Id` | client to BFF | Echo if valid (1–64 chars, `A-Za-z0-9_-`). Otherwise generate. |
 | `X-Request-Id` | BFF to PokéMart API | Always sent, same value as the BFF response. |
+| `Authorization` | client to BFF to PokéMart API | Forwarded unchanged for protected routes; never logged. |
 | `Location` | PokéMart API to BFF to client | Forwarded unchanged on `201`. |
 | `X-Request-Id` | every response | Always present, including errors and health checks. |
 
-## 5. Development user identity
+## 5. Authentication
 
-Authentication is replaced by a fixed development user, `lab-user-001`. The BFF adds the user identity to every upstream call as the `X-User-Id` header. The client does not send it, and the BFF overwrites any `X-User-Id` sent by the client. This is a learning simplification and not a security design.
+The API verifies email/password against the `users` table, where passwords are stored as scrypt hashes. Login returns a one-hour HS256 JWT. The API verifies the token signature, issuer, audience, expiry, and active user record on every wallet, inventory, and purchase request, then uses the token subject as `user_id`. Catalog reads remain public. The BFF forwards `Authorization` and does not create or modify user identity. Client-supplied `X-User-Id` is ignored.
 
-The identity is set using `LAB_USER_ID` so that replacing it with real authentication later changes one module.
+This local learning flow does not include registration, password recovery, refresh/revocation, login rate limiting, or production secret management. Use TLS and configure a high-entropy `AUTH_JWT_SECRET` before exposing any deployment.
 
 The BFF owns the public response DTOs and maps internal service responses rather than returning them directly. Public catalog pages use `totalCount`, `page`, and `items`; purchase responses use a `purchaseId`, nested Pokémon summary, and grouped pricing. The internal service contract remains independent.
 

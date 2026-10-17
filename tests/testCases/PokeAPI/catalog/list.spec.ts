@@ -66,7 +66,7 @@ test('INT-CAT-LIST-003 GET catalog rejects invalid and unknown query parameters'
   }
 });
 
-test('INT-CAT-LIST-004 GET catalog requires a valid X-User-Id header', async ({ request }) => {
+test('INT-CAT-LIST-004 GET catalog is public and ignores X-User-Id', async ({ request }) => {
   const requestId = 'tc-pokeapi-catalog-user';
   const cases: Array<Record<string, string>> = [
     { 'X-Request-Id': requestId },
@@ -74,12 +74,8 @@ test('INT-CAT-LIST-004 GET catalog requires a valid X-User-Id header', async ({ 
   ];
   for (const headers of cases) {
     const response = await request.get('/pokemart/v2/catalog/pokemon', { headers });
-    await expectPublicError(response, {
-      status: 400,
-      code: 'VALIDATION_ERROR',
-      message: 'Request validation failed',
-      requestId,
-      details: [{ field: 'X-User-Id', message: 'is required and must be valid' }],
-    });
+    expect(response.status()).toBe(200);
+    expect(response.headers()['x-request-id']).toBe(requestId);
+    expect(await response.json()).toMatchObject({ count: 151, results: expect.any(Array) });
   }
 });

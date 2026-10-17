@@ -16,11 +16,13 @@ Case IDs in this document provide stable traceability; existing automation title
 |---|---|---|---|---|---|
 | CAT-01 | `GET /api/pokemon` | List active listings; optional `limit` (1–100, default 20), `offset` (>=0, default 0) | 200 `PokemonPage` (`totalCount`, `page`, `items`) | 400 validation or unknown query; 503 dependency | Catalog read |
 | CAT-02 | `GET /api/pokemon/{id}` | Read a listed Pokémon; positive integer path ID | 200 `Pokemon` (`pokemon`, `listing`) | 400 invalid ID; 404 `POKEMON_NOT_FOUND`; 503 dependency | Catalog read |
-| WAL-01 | `GET /api/wallet` | Read the configured development user's wallet | 200 `Wallet` | 404 `USER_NOT_FOUND`; 503 dependency | Wallet read; fixed development identity |
-| INV-01 | `GET /api/inventory` | Read owned Pokémon | 200 `Inventory` (`items`) | 503 dependency | Inventory read |
-| PUR-01 | `GET /api/purchases` | Purchase history; same paging rules as catalog | 200 `PurchasePage` | 400 validation or unknown query; 503 dependency | Purchase history read |
-| PUR-02 | `POST /api/purchases` | JSON `{ purchaseId, pokemonId, quantity }`; UUID, positive integer, quantity 1–99 | 201 `Purchase`; `Location` identifies created resource | 400 validation/invalid JSON; 404 `POKEMON_NOT_FOUND`; 409 duplicate/not-for-sale/stock; 415 unsupported media; 422 insufficient funds; 503 dependency | Atomic purchase, wallet, stock, inventory, history |
-| PUR-03 | `GET /api/purchases/{id}` | Read purchase by UUID | 200 `Purchase` | 400 invalid UUID; 404 `PURCHASE_NOT_FOUND`; 503 dependency | Purchase history read |
+| AUTH-01 | `POST /api/auth/login` | JSON email/password | 200 access token and user profile | 400 validation; 401 `INVALID_CREDENTIALS` | Password hash verification |
+| AUTH-02 | `GET /api/auth/me` | Bearer access token | 200 user profile | 401 `UNAUTHORIZED` | JWT validation and active user check |
+| WAL-01 | `GET /api/wallet` | Read authenticated user's wallet | 200 `Wallet` | 401 `UNAUTHORIZED`; 404 `USER_NOT_FOUND`; 503 dependency | Wallet read; JWT identity |
+| INV-01 | `GET /api/inventory` | Read authenticated user's Pokémon | 200 `Inventory` (`items`) | 401 `UNAUTHORIZED`; 503 dependency | Inventory read |
+| PUR-01 | `GET /api/purchases` | Authenticated purchase history; same paging rules as catalog | 200 `PurchasePage` | 400 validation or unknown query; 401 `UNAUTHORIZED`; 503 dependency | Purchase history read |
+| PUR-02 | `POST /api/purchases` | Bearer token and JSON `{ purchaseId, pokemonId, quantity }`; UUID, positive integer, quantity 1–99 | 201 `Purchase`; `Location` identifies created resource | 400 validation/invalid JSON; 401 `UNAUTHORIZED`; 404 `POKEMON_NOT_FOUND`; 409 duplicate/not-for-sale/stock; 415 unsupported media; 422 insufficient funds; 503 dependency | Atomic purchase, wallet, stock, inventory, history |
+| PUR-03 | `GET /api/purchases/{id}` | Read purchase by UUID with bearer token | 200 `Purchase` | 400 invalid UUID; 401 `UNAUTHORIZED`; 404 `PURCHASE_NOT_FOUND`; 503 dependency | Purchase history read |
 | SYS-01 | `GET /health` | Liveness; no parameters | 200 `{ status: "ok" }` | None documented | No dependency |
 | SYS-02 | `GET /ready` | Readiness check | 200 when upstream is ready | 503 when upstream is unavailable | Calls PokéMart API `/ready` |
 
@@ -47,13 +49,13 @@ The public BFF maps internal response DTOs: catalog pages use `totalCount/page/i
 | Purchase path ID | Valid UUID (including supported UUID versions); malformed UUID; valid, nonexistent UUID | `PUR-API-READ-003`, `PUR-API-PATH` |
 | Pagination | Omitted defaults; minimum and maximum limit; interior value; below/above range; negative, decimal, alphabetic, empty, whitespace, duplicate; offset zero and beyond available results; unknown parameter | `CAT-API-001`–`003`, `CAT-API-002`, `CAT-VAL-001`–`012`, `PUR-API-READ-003`–`006`, `PUR-VAL-PAGE-001` |
 | Request ID | Valid ID echoed; absent or malformed ID replaced with generated valid ID; echoed on success and exact error responses | `SYS-API-001`–`002`, exact error helper used by API tests |
-| Development identity | Client-supplied `X-User-Id` cannot override configured identity | `SYS-API-003` |
+| Authentication | Valid login/token/profile; invalid password; missing, malformed, or invalid token; client `X-User-Id` cannot override token subject | `AUTH-001`–`002`, `SYS-API-003` |
 | Purchase body properties | Missing, null, malformed UUID; missing/null/string/non-positive/decimal Pokémon ID; missing/null/string/zero/negative/decimal/too-large quantity; unknown field; non-object JSON | `PUR-VAL-001`–`017` |
 | Purchase body syntax/media | Malformed JSON versus syntactically valid non-object JSON; unsupported content type | `PUR-VAL-017`–`019` |
 | Resource/state | Pokémon missing, listing inactive, stock insufficient, wallet insufficient, committed duplicate, retry after failed transaction, concurrent duplicate | `PUR-API-PATH`, `PUR-BIZ-001`–`004`, `E2E-PUR-002`–`003` |
 | Responses and side effects | Exact error envelope (status, content type, request ID, code, message, details); closed public DTOs; success headers; no state mutation on rejected purchases; subsequent reads reflect committed state | `expectPublicError`, catalog/read/validation suites, `E2E-PUR-001`–`003` |
 
-`X-Request-Id` is a correlation header, not an idempotency key. A purchase retry reuses the body `purchaseId`; no `Idempotency-Key` header is used. The test suite does not require authentication because this lab uses a fixed development user.
+`X-Request-Id` is a correlation header, not an idempotency key. A purchase retry reuses the body `purchaseId`; no `Idempotency-Key` header is used. Real-system tests log in with the seeded local demo account and attach the resulting bearer token.
 
 ## 5. Equivalence partitions and boundaries
 
@@ -116,7 +118,7 @@ The aggregate tests in `tests/testCases/mocked-bff/contract.spec.ts` map scenari
 | Purchase business rejection | Snapshot state and set only the target condition (missing Pokémon, inactive listing, zero stock, zero balance) | Exact status/code/message/details; no purchase committed | Restore state in `finally`; close DB connection | P1 |
 | Purchase commit and duplicate | Snapshot initial state; POST valid body; inspect detail/history/wallet/inventory/catalog; POST committed ID again | 201 with `Location`; exact public DTO; one commit; duplicate 409 | Restore state and remove created purchase in `finally` | P1 |
 | Concurrent duplicate | Same purchase ID and request sent concurrently | Exactly `[201, 409]`; duplicate error exact; one stored row and one set of changes | Restore state and remove created purchase in `finally` | P1 |
-| Correlation / identity | Supply valid, missing, malformed request IDs and client `X-User-Id` | Echo or generate valid request ID; configured identity is returned | Read-only | P1 |
+| Correlation / identity | Supply valid, missing, malformed request IDs and client `X-User-Id` alongside a bearer token | Echo or generate valid request ID; token subject determines identity regardless of `X-User-Id` | Read-only | P1 |
 | Mocked contract response | Call route with scenario selector and representative request, including JSON/media cases | Exact fixture status, content type, request ID, full envelope/body | No real BFF or database involved | P2 |
 
 ## 8. Traceability, execution, and gaps
@@ -140,7 +142,7 @@ The OpenAPI documents now enumerate error codes by operation, require and define
 2. **Public BFF wallet `USER_NOT_FOUND` is fixture-only.** Internal API tests exercise this error with a non-existent user, but the configured public BFF identity has a wallet.
 3. **Internal database fault modes remain untested.** MySQL outage, schema-uninitialized readiness (`/ready` 503), and unexpected service exception (`500 INTERNAL_ERROR`) require an isolated fault-injection profile.
 4. **No shared-service shutdown is performed for fault tests.** Tests must not stop the API container when using a shared environment; add test-only fault injection or a dedicated isolated stack before claiming fault-path coverage.
-5. **Internal identity is not authentication.** `X-User-Id` is trusted by design. Do not expose the service outside its trusted network without adding service authentication and restricting the host-published port.
+5. **Authentication is lab-grade only.** JWTs protect user-owned endpoints, but production still needs secret management, TLS, rate limiting, and refresh/revocation. Keep the internal API private.
 
 ### Coverage summary
 
@@ -154,7 +156,7 @@ The `pokeapi` Playwright project targets `POKEMART_API_BASE_URL` directly. Each 
 |---|---|---|
 | `GET /health` | Exact 200 liveness payload; generated request ID; no business identity required | `health/get.spec.ts` |
 | `GET /ready` | Exact 200 readiness payload when MySQL is initialized | `ready/get.spec.ts` |
-| `GET /pokemart/v2/catalog/pokemon` | Internal DTO, default and boundary pagination, empty page, invalid/unknown query, missing/malformed `X-User-Id` | `catalog/list.spec.ts` |
+| `GET /pokemart/v2/catalog/pokemon` | Public internal DTO, default and boundary pagination, empty page, invalid/unknown query, ignores `X-User-Id` | `catalog/list.spec.ts` |
 | `GET /pokemart/v2/catalog/pokemon/{id}` | Exact internal Pokémon/listing shape; malformed and nonexistent IDs; missing identity | `catalog/detail.spec.ts` |
 | `GET /pokemart/v2/wallet` | Exact wallet DTO; missing identity; `USER_NOT_FOUND` | `wallet/get.spec.ts` |
 | `GET /pokemart/v2/inventory` | Internal item shape, empty inventory, missing identity | `inventory/get.spec.ts` |
@@ -168,7 +170,7 @@ Internal API error-code coverage (excluding fault-only codes):
 
 | Code | Triggering condition | Direct case |
 |---|---|---|
-| `VALIDATION_ERROR` | Missing/malformed `X-User-Id`, invalid pagination/path ID/body | Catalog, wallet, inventory, purchase create/list/detail specs |
+| `VALIDATION_ERROR` | Invalid pagination/path ID/body | Catalog, wallet, inventory, purchase create/list/detail specs |
 | `UNKNOWN_QUERY_PARAMETER` | Unsupported catalog/history query | `catalog/list.spec.ts`, `purchases/list.spec.ts` |
 | `INVALID_JSON` | Malformed JSON | `purchases/create.spec.ts` |
 | `UNSUPPORTED_MEDIA_TYPE` | Purchase body sent as `text/plain` | `purchases/create.spec.ts` |
@@ -188,5 +190,5 @@ The project uses one worker. Mutating cases snapshot and restore wallet/stock/in
 
 1. Add an isolated, test-only fault-injection mechanism for MySQL request outage, `/ready` unavailable/uninitialized responses, and unexpected internal exceptions; do not stop a shared API or database.
 2. Exercise the BFF's real upstream mapping for connection refusal, timeout, upstream 5xx, and malformed upstream response separately from WireMock's configured fixtures.
-3. Add an explicitly authenticated service-to-service identity before exposing the internal API beyond its trusted Compose network. Current `X-User-Id` is a lab trust header, not authorization.
+3. Add a service-to-service identity and production-grade token lifecycle controls before exposing the internal API beyond its trusted Compose network.
 4. Keep public BFF, internal API, and WireMock reports separate; passing one layer is not evidence for another layer's behavior.

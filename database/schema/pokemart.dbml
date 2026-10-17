@@ -27,8 +27,19 @@ Table shop_listing {
   Note: 'At most one shop listing per Pokémon. Price and stock are PokéMart-owned values.'
 }
 
+Table users {
+  user_id varchar(64) [pk, not null]
+  email varchar(254) [not null, unique]
+  display_name varchar(100) [not null]
+  password_hash varchar(255) [note: 'Nullable scrypt hash; never store a plaintext password.']
+  is_active boolean [not null, default: true]
+  created_at timestamp(3) [not null, default: `CURRENT_TIMESTAMP(3)`]
+
+  Note: 'User profile and login identity. Local seed credentials are for practice only.'
+}
+
 Table user_wallet {
-  user_id varchar(64) [pk, not null, note: 'Logical user identifier; there is no users table or user foreign key.']
+  user_id varchar(64) [pk, not null]
   balance int [not null]
 
   checks {
@@ -37,7 +48,7 @@ Table user_wallet {
 }
 
 Table user_inventory {
-  user_id varchar(64) [not null, note: 'Logical user identifier; there is no users table or user foreign key.']
+  user_id varchar(64) [not null]
   pokemon_source_id int [not null]
   quantity int [not null]
 
@@ -52,7 +63,7 @@ Table user_inventory {
 
 Table purchases {
   id char(36) [pk, not null, note: 'Client-generated purchase UUID; committed IDs are unique.']
-  user_id varchar(64) [not null, note: 'Logical user identifier; there is no users table or user foreign key.']
+  user_id varchar(64) [not null]
   pokemon_source_id int [not null]
   quantity int [not null]
   unit_price int [not null, note: 'Price snapshot at purchase time.']
@@ -73,3 +84,6 @@ Table purchases {
 Ref fk_listing_pokemon: pokemon_reference.source_id - shop_listing.pokemon_source_id
 Ref fk_inventory_pokemon: pokemon_reference.source_id < user_inventory.pokemon_source_id
 Ref fk_purchase_pokemon: pokemon_reference.source_id < purchases.pokemon_source_id
+Ref fk_wallet_user: users.user_id - user_wallet.user_id
+Ref fk_inventory_user: users.user_id < user_inventory.user_id
+Ref fk_purchase_user: users.user_id < purchases.user_id

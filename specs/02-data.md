@@ -18,7 +18,7 @@ Suggested files:
 
 - `database/schema/001_create_shop_tables.sql`
 - `database/seed/001_seed_shop_data.sql`
-- `database/migrations/002_drop_idempotency_keys.sql` (existing volumes only)
+- `database/migrations/003_add_users_and_foreign_keys.sql` (existing volumes only)
 - `database/README.md`
 
 The schema must support the shop listing/reference relationship, wallet, Pokémon ownership, and purchases. Keep reference fields separate from shop-owned price/stock fields where practical. Do not import every PokéAPI table unless there is a clear learning need.
@@ -26,15 +26,21 @@ The schema must support the shop listing/reference relationship, wallet, Pokémo
 ### Logical tables
 
 - `pokemon_reference`: source ID (PK), name, types, sprite URL. Read-only during tests.
+- `users`: stable user ID (PK), unique email, display name, nullable scrypt `password_hash`, active flag, and creation timestamp. The password hash is NULL for legacy profiles until credentials are provisioned.
 - `shop_listing`: pokemon source ID (PK/FK), price, stock, active flag. Lab-owned.
-- `user_wallet`: user ID (PK), balance. Balance must never go negative.
-- `user_inventory`: user ID + pokemon source ID (composite PK), quantity.
-- `purchases`: client-generated purchase UUID (PK), user ID, Pokémon source ID, quantity, unit price, total price, created timestamp. The primary key prevents a successfully processed purchase ID from being used a second time.
+- `user_wallet`: user ID (PK/FK to `users`), balance. Balance must never go negative; at most one wallet per user.
+- `user_inventory`: user ID (FK to `users`) + pokemon source ID (FK to `pokemon_reference`) as a composite PK, quantity.
+- `purchases`: client-generated purchase UUID (PK), user ID (FK to `users`), Pokémon source ID (FK to `pokemon_reference`), quantity, unit price, total price, created timestamp. The primary key prevents a successfully processed purchase ID from being used a second time.
 - `purchase_items` is optional for the first iteration; a single-item purchase may be stored on `purchases`. Decide when the schema is finalized and record it here.
 There is no idempotency-key table. A client creates a UUID purchase ID before its first attempt and sends that same ID in the JSON body for retries of the same attempt. A committed `purchases.id` is the duplicate guard. Failed transactions roll back the purchase row and all wallet/stock/inventory changes, so the ID remains usable on retry.
 
 Requirements:
 - A fresh MySQL volume automatically initializes schema and baseline shop seed data.
+- The seed creates a local demo profile and scrypt password hash; it must never store plaintext credentials.
+- The demo login issues a one-hour HS256 JWT. The API validates JWTs for wallet, inventory, and purchase resources; catalog reads remain public.
+- Configure `AUTH_JWT_SECRET` outside the local lab with at least 32 random bytes. Never use the Compose development fallback in a deployed environment.
+- Authentication is a local learning flow only: no public sign-up, password reset, refresh token, or production-grade abuse controls.
+- Existing volumes backfill user profiles before adding foreign keys; imported profiles have no login password until credentials are provisioned.
 - Use a dedicated development/test database and non-production credentials.
 - Seed data is deterministic and documented.
 - Do not insert baseline seed data on every container restart. The official MySQL image runs initialization scripts only when the data directory is empty.

@@ -27,10 +27,11 @@ Learning goals:
 - Separate mocked-BFF and real-system test runs.
 - Deterministic test-data setup, cleanup, and reset workflows suitable for repeatable functional tests and future performance runs.
 - Basic structured application logs and health/readiness endpoints from the first implementation.
+- Local demo email/password login with hashed credentials and short-lived JWTs for user-owned API resources.
 - A Makefile as the common entry point for frequently used development and test commands.
 
 ### Out of scope for the first iteration
-- Production-grade authentication/authorization.
+- Production-grade authentication/authorization, registration, password recovery, refresh/revocation, and login abuse controls.
 - Frontend UI.
 - Real-money transactions or real Pokémon trading.
 - Live PokéAPI calls during ordinary test execution.

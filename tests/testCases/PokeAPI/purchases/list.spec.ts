@@ -26,7 +26,7 @@ test('INT-PURCHASE-LIST-001 GET purchase history returns paginated internal reco
   expect(body).not.toHaveProperty('items');
 });
 
-test('INT-PURCHASE-LIST-002 GET purchase history validates pagination, unknown query, and identity', async ({ request, testEnvironment }) => {
+test('INT-PURCHASE-LIST-002 GET purchase history validates pagination, unknown query, and authentication', async ({ request, testEnvironment }) => {
   const requestId = 'tc-pokeapi-purchase-list-error';
   for (const scenario of [
     { query: 'limit=101', code: 'VALIDATION_ERROR', details: [{ field: 'limit', message: 'must be between 1 and 100' }] },
@@ -49,10 +49,10 @@ test('INT-PURCHASE-LIST-002 GET purchase history validates pagination, unknown q
     headers: { 'X-Request-Id': requestId },
   });
   await expectPublicError(noIdentity, {
-    status: 400,
-    code: 'VALIDATION_ERROR',
-    message: 'Request validation failed',
+    status: 401,
+    code: 'UNAUTHORIZED',
+    message: 'A valid bearer token is required',
     requestId,
-    details: [{ field: 'X-User-Id', message: 'is required and must be valid' }],
+    details: [],
   });
 });
