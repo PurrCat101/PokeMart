@@ -134,14 +134,13 @@ The full run confirms each project executes only its intended target. In particu
 
 ### Open items and contract gaps
 
-1. **Public OpenAPI does not enumerate the error codes per operation.** It declares status responses and a generic `code: string`; the mapping above is corroborated from business/BFF documents and executable tests, but the public OpenAPI alone cannot generate the error matrix.
-2. **Public error schema is less strict than the implementation/documentation.** `details` is not required in `openapi.yaml` and its item schema is unspecified, although BFF responses always include it and `03-api-contract.md` describes it as part of the envelope.
-3. **Correlation response header is not declared on every public OpenAPI response.** `03-api-contract.md` and `03b-bff.md` require `X-Request-Id` on every response; current tests validate representative success/error responses.
-4. **Real upstream-failure mapping is not executed.** WireMock fixtures prove only the fixtures' response bodies. No isolated fault-injection profile currently demonstrates connection refusal, timeout, upstream 5xx, malformed upstream payload, or the BFF's 500 behavior.
-5. **Public BFF wallet `USER_NOT_FOUND` is fixture-only.** Internal API tests exercise this error with a non-existent user, but the configured public BFF identity has a wallet.
-6. **Internal database fault modes remain untested.** MySQL outage, schema-uninitialized readiness (`/ready` 503), and unexpected service exception (`500 INTERNAL_ERROR`) require an isolated fault-injection profile.
-7. **No shared-service shutdown is performed for fault tests.** Tests must not stop the API container when using a shared environment; add test-only fault injection or a dedicated isolated stack before claiming fault-path coverage.
-8. **Internal identity is not authentication.** `X-User-Id` is trusted by design. Do not expose the service outside its trusted network without adding service authentication and restricting the host-published port.
+The OpenAPI documents now enumerate error codes by operation, require and define the error `details` field, and declare `X-Request-Id` on every response. These contract improvements do not close runtime coverage gaps:
+
+1. **Real upstream-failure mapping is not executed.** WireMock fixtures prove only the fixtures' response bodies. No isolated fault-injection profile currently demonstrates connection refusal, timeout, upstream 5xx, malformed upstream payload, or the BFF's 500 behavior.
+2. **Public BFF wallet `USER_NOT_FOUND` is fixture-only.** Internal API tests exercise this error with a non-existent user, but the configured public BFF identity has a wallet.
+3. **Internal database fault modes remain untested.** MySQL outage, schema-uninitialized readiness (`/ready` 503), and unexpected service exception (`500 INTERNAL_ERROR`) require an isolated fault-injection profile.
+4. **No shared-service shutdown is performed for fault tests.** Tests must not stop the API container when using a shared environment; add test-only fault injection or a dedicated isolated stack before claiming fault-path coverage.
+5. **Internal identity is not authentication.** `X-User-Id` is trusted by design. Do not expose the service outside its trusted network without adding service authentication and restricting the host-published port.
 
 ### Coverage summary
 
@@ -189,6 +188,5 @@ The project uses one worker. Mutating cases snapshot and restore wallet/stock/in
 
 1. Add an isolated, test-only fault-injection mechanism for MySQL request outage, `/ready` unavailable/uninitialized responses, and unexpected internal exceptions; do not stop a shared API or database.
 2. Exercise the BFF's real upstream mapping for connection refusal, timeout, upstream 5xx, and malformed upstream response separately from WireMock's configured fixtures.
-3. Tighten both OpenAPI documents: require and define error `details`, declare `X-Request-Id` on every response, and enumerate endpoint-specific error-code/status mappings instead of generic error references.
-4. Add an explicitly authenticated service-to-service identity before exposing the internal API beyond its trusted Compose network. Current `X-User-Id` is a lab trust header, not authorization.
-5. Keep public BFF, internal API, and WireMock reports separate; passing one layer is not evidence for another layer's behavior.
+3. Add an explicitly authenticated service-to-service identity before exposing the internal API beyond its trusted Compose network. Current `X-User-Id` is a lab trust header, not authorization.
+4. Keep public BFF, internal API, and WireMock reports separate; passing one layer is not evidence for another layer's behavior.

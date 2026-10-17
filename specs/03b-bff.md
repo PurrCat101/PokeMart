@@ -29,13 +29,13 @@ Upstream paths use the service contract prefix `/pokemart/v2`. The PokéMart API
 
 | Method | Path | Upstream call | Success | Possible public errors |
 |---|---|---|---|---|
-| `GET` | `/api/pokemon` | `GET /pokemart/v2/catalog/pokemon` with same `limit`, `offset` | `200` | `400 VALIDATION_ERROR`, `400 UNKNOWN_QUERY_PARAMETER`, `503` |
-| `GET` | `/api/pokemon/:id` | `GET /pokemart/v2/catalog/pokemon/{id}` | `200` | `400`, `404 POKEMON_NOT_FOUND`, `503` |
-| `GET` | `/api/wallet` | `GET /pokemart/v2/wallet` | `200` | `503` |
-| `GET` | `/api/inventory` | `GET /pokemart/v2/inventory` | `200` | `503` |
-| `POST` | `/api/purchases` | `POST /pokemart/v2/purchases` with body containing `purchaseId` | `201` | `400`, `404`, `409`, `415`, `422`, `503` |
-| `GET` | `/api/purchases` | `GET /pokemart/v2/purchases` with `limit`, `offset` | `200` | `400`, `503` |
-| `GET` | `/api/purchases/:id` | `GET /pokemart/v2/purchases/{id}` | `200` | `400`, `404 PURCHASE_NOT_FOUND`, `503` |
+| `GET` | `/api/pokemon` | `GET /pokemart/v2/catalog/pokemon` with same `limit`, `offset` | `200` | `400 VALIDATION_ERROR` / `UNKNOWN_QUERY_PARAMETER`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
+| `GET` | `/api/pokemon/:id` | `GET /pokemart/v2/catalog/pokemon/{id}` | `200` | `400 VALIDATION_ERROR`; `404 POKEMON_NOT_FOUND`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
+| `GET` | `/api/wallet` | `GET /pokemart/v2/wallet` | `200` | `404 USER_NOT_FOUND`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
+| `GET` | `/api/inventory` | `GET /pokemart/v2/inventory` | `200` | `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
+| `POST` | `/api/purchases` | `POST /pokemart/v2/purchases` with body containing `purchaseId` | `201` | `400 VALIDATION_ERROR` / `INVALID_JSON`; `404 POKEMON_NOT_FOUND`; `409 PURCHASE_DUPLICATE` / `POKEMON_NOT_FOR_SALE` / `INSUFFICIENT_STOCK`; `415 UNSUPPORTED_MEDIA_TYPE`; `422 INSUFFICIENT_FUNDS`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
+| `GET` | `/api/purchases` | `GET /pokemart/v2/purchases` with `limit`, `offset` | `200` | `400 VALIDATION_ERROR` / `UNKNOWN_QUERY_PARAMETER`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
+| `GET` | `/api/purchases/:id` | `GET /pokemart/v2/purchases/{id}` | `200` | `400 VALIDATION_ERROR`; `404 PURCHASE_NOT_FOUND`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
 | `GET` | `/health` | none | `200` | none |
 | `GET` | `/ready` | `GET /ready` on PokéMart API | `200` or `503` | none |
 

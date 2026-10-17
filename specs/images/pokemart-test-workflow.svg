@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="620" viewBox="0 0 1440 620" role="img" aria-labelledby="title description">
+  <title id="title">PokéMart API test lab workflow</title>
+  <desc id="description">Read API requirements, design coverage, write WireMock mappings and Playwright tests, then run each target and inspect the report. Includes a safe full-practice mode.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#eef2ff"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#1e293b" flood-opacity=".09"/>
+    </filter>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M1 1 L9 5 L1 9" fill="none" stroke="#64748b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <style>
+      text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; fill: #172033; }
+      .muted { fill: #526079; }
+      .small { font-size: 16px; }
+      .card-title { font-size: 20px; font-weight: 700; }
+      .step { font-size: 15px; font-weight: 700; letter-spacing: 1.4px; }
+    </style>
+  </defs>
+
+  <rect width="1440" height="620" rx="28" fill="url(#background)"/>
+  <text x="64" y="66" font-size="15" font-weight="700" letter-spacing="2" fill="#4f46e5">POKÉMART API AUTOMATION LAB</text>
+  <text x="64" y="111" font-size="32" font-weight="750">From API requirements to your own test suite</text>
+  <text x="64" y="144" font-size="17" class="muted">Use the OpenAPI contracts as the source of truth. Keep mocked and real-system evidence separate.</text>
+
+  <g filter="url(#shadow)">
+    <rect x="64" y="195" width="292" height="200" rx="20" fill="#ffffff"/>
+    <rect x="64" y="195" width="292" height="8" rx="4" fill="#3b82f6"/>
+    <rect x="380" y="195" width="292" height="200" rx="20" fill="#ffffff"/>
+    <rect x="380" y="195" width="292" height="8" rx="4" fill="#f59e0b"/>
+    <rect x="696" y="195" width="292" height="200" rx="20" fill="#ffffff"/>
+    <rect x="696" y="195" width="292" height="8" rx="4" fill="#10b981"/>
+    <rect x="1012" y="195" width="364" height="200" rx="20" fill="#ffffff"/>
+    <rect x="1012" y="195" width="364" height="8" rx="4" fill="#8b5cf6"/>
+  </g>
+
+  <path d="M358 292 H372" stroke="#64748b" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <path d="M674 292 H688" stroke="#64748b" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <path d="M990 292 H1004" stroke="#64748b" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <g>
+    <circle cx="96" cy="239" r="18" fill="#dbeafe"/>
+    <text x="96" y="245" text-anchor="middle" class="step" fill="#1d4ed8">01</text>
+    <text x="126" y="245" class="step" fill="#1d4ed8">READ REQUIREMENTS</text>
+    <text x="88" y="292" class="card-title">Understand the API</text>
+    <text x="88" y="326" class="small muted">OpenAPI + behavior specs</text>
+    <text x="88" y="352" class="small muted">Endpoints, schemas, status</text>
+    <text x="88" y="378" class="small muted">codes and business rules</text>
+
+    <circle cx="412" cy="239" r="18" fill="#fef3c7"/>
+    <text x="412" y="245" text-anchor="middle" class="step" fill="#b45309">02</text>
+    <text x="442" y="245" class="step" fill="#b45309">DESIGN COVERAGE</text>
+    <text x="404" y="292" class="card-title">Plan observable cases</text>
+    <text x="404" y="326" class="small muted">Success + validation</text>
+    <text x="404" y="352" class="small muted">Errors + boundaries</text>
+    <text x="404" y="378" class="small muted">State changes + traceability</text>
+
+    <circle cx="728" cy="239" r="18" fill="#d1fae5"/>
+    <text x="728" y="245" text-anchor="middle" class="step" fill="#047857">03</text>
+    <text x="758" y="245" class="step" fill="#047857">IMPLEMENT YOURSELF</text>
+    <text x="720" y="292" class="card-title">Build mocks and tests</text>
+    <text x="720" y="326" class="small muted">Write WireMock mappings</text>
+    <text x="720" y="352" class="small muted">Author Playwright API specs</text>
+    <text x="720" y="378" class="small muted">Keep target suites separate</text>
+
+    <circle cx="1044" cy="239" r="18" fill="#ede9fe"/>
+    <text x="1044" y="245" text-anchor="middle" class="step" fill="#6d28d9">04</text>
+    <text x="1074" y="245" class="step" fill="#6d28d9">RUN + REVIEW</text>
+    <text x="1036" y="292" class="card-title">Verify each target</text>
+    <text x="1036" y="326" class="small muted">WireMock · BFF API · internal API</text>
+    <text x="1036" y="352" class="small muted">E2E · HTML report · failures</text>
+    <text x="1036" y="378" class="small muted">Record gaps; mocks are not real tests</text>
+  </g>
+
+  <rect x="64" y="435" width="1312" height="126" rx="18" fill="#fff7ed" stroke="#fed7aa" stroke-width="1.5"/>
+  <rect x="64" y="435" width="8" height="126" rx="4" fill="#f97316"/>
+  <text x="92" y="472" font-size="18" font-weight="750" fill="#9a3412">Full-practice mode</text>
+  <text x="92" y="502" font-size="16" class="muted">The existing tests/ and wiremock/ folders are worked examples. To rebuild them, use a separate Git worktree,</text>
+  <text x="92" y="528" font-size="16" class="muted">remove those folders only in that copy, then recreate mappings and tests from OpenAPI. Compare with the examples afterward.</text>
+
+  <text x="64" y="594" font-size="14" class="muted">Report: tests/playwright-report/  ·  Start with npm run test:mocked  ·  Never point state-changing tests at shared or production data</text>
+</svg>

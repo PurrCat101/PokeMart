@@ -9,7 +9,11 @@ paths:
   /api/pokemon:
     get:
       summary: List active catalog Pokémon
+      description: |
+        Errors: 400 `VALIDATION_ERROR` or `UNKNOWN_QUERY_PARAMETER`;
+        500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE`.
       parameters:
+        - $ref: '#/components/parameters/XRequestIdRequest'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
       responses:
@@ -17,12 +21,18 @@ paths:
           $ref: '#/components/responses/PokemonPage'
         '400':
           $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
         '503':
           $ref: '#/components/responses/Error'
   /api/pokemon/{id}:
     get:
       summary: Get a catalog Pokémon and its listing
+      description: |
+        Errors: 400 `VALIDATION_ERROR`; 404 `POKEMON_NOT_FOUND`;
+        500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE`.
       parameters:
+        - $ref: '#/components/parameters/XRequestIdRequest'
         - $ref: '#/components/parameters/PokemonId'
       responses:
         '200':
@@ -31,30 +41,49 @@ paths:
           $ref: '#/components/responses/Error'
         '404':
           $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
         '503':
           $ref: '#/components/responses/Error'
   /api/wallet:
     get:
       summary: Get the authenticated user's wallet
+      description: |
+        Errors: 404 `USER_NOT_FOUND`; 500 `INTERNAL_ERROR`;
+        503 `DEPENDENCY_UNAVAILABLE`.
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdRequest'
       responses:
         '200':
           $ref: '#/components/responses/Wallet'
         '404':
+          $ref: '#/components/responses/Error'
+        '500':
           $ref: '#/components/responses/Error'
         '503':
           $ref: '#/components/responses/Error'
   /api/inventory:
     get:
       summary: Get the authenticated user's Pokémon inventory
+      description: |
+        Errors: 500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE`.
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdRequest'
       responses:
         '200':
           $ref: '#/components/responses/Inventory'
+        '500':
+          $ref: '#/components/responses/Error'
         '503':
           $ref: '#/components/responses/Error'
   /api/purchases:
     get:
       summary: List the authenticated user's purchases
+      description: |
+        Errors: 400 `VALIDATION_ERROR` or `UNKNOWN_QUERY_PARAMETER`;
+        500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE`.
       parameters:
+        - $ref: '#/components/parameters/XRequestIdRequest'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
       responses:
@@ -62,10 +91,19 @@ paths:
           $ref: '#/components/responses/PurchasePage'
         '400':
           $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
         '503':
           $ref: '#/components/responses/Error'
     post:
       summary: Purchase a Pokémon
+      description: |
+        Errors: 400 `VALIDATION_ERROR` or `INVALID_JSON`; 404 `POKEMON_NOT_FOUND`;
+        409 `PURCHASE_DUPLICATE`, `POKEMON_NOT_FOR_SALE`, or `INSUFFICIENT_STOCK`;
+        415 `UNSUPPORTED_MEDIA_TYPE`; 422 `INSUFFICIENT_FUNDS`;
+        500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE`.
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdRequest'
       requestBody:
         required: true
         content:
@@ -79,6 +117,8 @@ paths:
             Location:
               schema:
                 type: string
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
           content:
             application/json:
               schema:
@@ -89,6 +129,9 @@ paths:
           $ref: '#/components/responses/Error'
         '409':
           description: Purchase ID already committed, Pokémon not for sale, or insufficient stock
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
           content:
             application/json:
               schema:
@@ -97,12 +140,18 @@ paths:
           $ref: '#/components/responses/Error'
         '422':
           $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
         '503':
           $ref: '#/components/responses/Error'
   /api/purchases/{id}:
     get:
       summary: Get a purchase
+      description: |
+        Errors: 400 `VALIDATION_ERROR`; 404 `PURCHASE_NOT_FOUND`;
+        500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE`.
       parameters:
+        - $ref: '#/components/parameters/XRequestIdRequest'
         - $ref: '#/components/parameters/PurchaseId'
       responses:
         '200':
@@ -111,24 +160,69 @@ paths:
           $ref: '#/components/responses/Error'
         '404':
           $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
         '503':
           $ref: '#/components/responses/Error'
   /health:
     get:
       summary: Liveness check
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdRequest'
       responses:
         '200':
           description: Process is alive
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
   /ready:
     get:
       summary: Readiness check
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdRequest'
       responses:
         '200':
           description: Dependencies are ready
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ready'
         '503':
           description: Dependency unavailable
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ready'
 components:
+  headers:
+    XRequestId:
+      description: Correlation ID present on every response.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+        pattern: '^[A-Za-z0-9_-]+$'
   parameters:
+    XRequestIdRequest:
+      name: X-Request-Id
+      in: header
+      required: false
+      description: Correlation ID echoed when valid; otherwise generated by the BFF.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+        pattern: '^[A-Za-z0-9_-]+$'
     Limit:
       name: limit
       in: query
@@ -306,16 +400,51 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Purchase'
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+    Ready:
+      type: object
+      required: [status, checks]
+      properties:
+        status:
+          type: string
+          enum: [ready, not_ready]
+        checks:
+          type: object
+          required: [pokemartApi]
+          properties:
+            pokemartApi:
+              type: string
+              enum: [ok, unavailable]
     Error:
       type: object
       required: [error]
       properties:
         error:
           type: object
-          required: [code, message, requestId]
+          required: [code, message, requestId, details]
           properties:
             code:
               type: string
+              enum:
+                - VALIDATION_ERROR
+                - UNKNOWN_QUERY_PARAMETER
+                - INVALID_JSON
+                - UNSUPPORTED_MEDIA_TYPE
+                - POKEMON_NOT_FOUND
+                - USER_NOT_FOUND
+                - PURCHASE_NOT_FOUND
+                - POKEMON_NOT_FOR_SALE
+                - INSUFFICIENT_STOCK
+                - INSUFFICIENT_FUNDS
+                - PURCHASE_DUPLICATE
+                - DEPENDENCY_UNAVAILABLE
+                - INTERNAL_ERROR
             message:
               type: string
             requestId:
@@ -324,45 +453,72 @@ components:
               type: array
               items:
                 type: object
+                required: [field, message]
+                properties:
+                  field:
+                    type: string
+                  message:
+                    type: string
   responses:
     Pokemon:
       description: Pokémon with its shop listing
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Pokemon'
     PokemonPage:
       description: Page of listed Pokémon
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/PokemonPage'
     Wallet:
       description: User wallet
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Wallet'
     Inventory:
       description: User inventory
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Inventory'
     Purchase:
       description: Purchase resource
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Purchase'
     PurchasePage:
       description: Page of purchases
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/PurchasePage'
     Error:
       description: Error envelope
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
       content:
         application/json:
           schema:

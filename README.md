@@ -6,162 +6,149 @@
 
 ![PokéMart API test architecture flow](specs/images/pokemart-api-test-architecture-flow.png)
 
+![PokéMart API test workflow from requirements to reports](specs/images/pokemart-test-workflow.svg)
+
 | Service | URL เมื่อรัน local | หน้าที่ |
 |---|---|---|
 | BFF | `http://localhost:3001` | Public API สำหรับ client และแปลง response เป็น DTO ฝั่ง public |
 | PokéMart API | `http://localhost:3000` | Internal service สำหรับ business rules และการเข้าถึงข้อมูล |
 | WireMock | `http://localhost:8080` | จำลอง public API สำหรับ contract tests |
 | Swagger UI | `http://localhost:8081` | เลือกดู BFF OpenAPI หรือ internal API OpenAPI |
-| MySQL | `localhost:3306` | เก็บ catalog, wallet, inventory และ purchase history |
+| MySQL | `localhost:3307` (host; port ใน container คือ `3306`) | เก็บ catalog, wallet, inventory และ purchase history |
 
-## สิ่งที่ต้องติดตั้งก่อน
+## 1. Prerequisites
 
-1. **Docker Desktop** พร้อม Docker Compose v2 ใช้รัน MySQL และ service containers
-2. **Node.js 22 LTS และ npm** ใช้ติดตั้ง Playwright และรัน test scripts
-3. **GNU Make** ใช้เรียกคำสั่งมาตรฐานของโปรเจ็กต์จาก Makefile
-4. **Git** หากต้อง clone repository
+จำเป็นต้องมี:
 
-ตรวจสอบว่าติดตั้งและเปิดใช้งานแล้ว:
+1. **Node.js 22 LTS และ npm**
+2. **Docker Desktop** (Windows/macOS) หรือ Docker Engine ที่มี Docker Compose v2 (Linux)
+3. **Git** เฉพาะเมื่อต้อง clone repository
 
-```bash
-node --version
+GNU Make เป็นทางเลือกเท่านั้น คู่มือนี้ใช้ `npm` และ `docker compose` ซึ่งใช้ได้ทั้ง Windows และ macOS โดยไม่ต้องติดตั้ง Make เพิ่ม
+
+เปิด Docker Desktop ให้ทำงานก่อนเริ่ม แล้วตรวจสอบใน terminal:
+
+```text
+node --version       # ควรเป็น v22.x
 npm --version
 docker --version
 docker compose version
-make --version
 ```
 
-บน Windows ให้เปิด Docker Desktop ก่อนใช้คำสั่ง Docker วิธีที่แนะนำสำหรับ Makefile นี้คือใช้ **MSYS2 UCRT64**:
+ใช้ **PowerShell** บน Windows หรือ **Terminal (zsh)** บน macOS แล้วเปิด terminal ที่ root ของ repository (โฟลเดอร์ที่มี `package.json` และ `docker-compose.yml`)
 
-1. ติดตั้ง MSYS2 จากเว็บไซต์ทางการ และเปิด terminal ชื่อ **MSYS2 UCRT64**
-2. ติดตั้ง GNU Make ใน terminal:
+## 2. Setup ครั้งแรก
 
-   ```bash
-   pacman -S --needed make
+### Windows — PowerShell
+
+1. สร้าง `.env` หากยังไม่มี แล้วเปิดไฟล์และตั้ง `MYSQL_HOST_PORT=3307` ให้ตรงกับ `MYSQL_PORT=3307` ใน `tests/configs/.env.test`:
+
+   ```powershell
+   if (-not (Test-Path .env)) { Copy-Item .env.example .env }
    ```
 
-3. ติดตั้ง Node.js 22 LTS บน Windows และตรวจว่า `node`/`npm` ใช้ได้จาก MSYS2 UCRT64 ด้วย
-4. ตรวจว่า `docker compose version` และ `make --version` ใช้ได้จาก terminal เดียวกัน
-5. เปิด terminal ที่ root ของโปรเจ็กต์ ซึ่งเป็นโฟลเดอร์เดียวกับ `Makefile`
+2. ติดตั้ง dependencies, build แอป และเริ่ม services:
 
-อีกทางเลือกคือใช้ WSL2 ติดตั้ง Make/Node ภายใน distro และเปิด Docker Desktop WSL integration ก่อนรันคำสั่ง การติดตั้ง Node บน Windows อย่างเดียวไม่ได้ทำให้ Node ใช้ได้จาก WSL โดยอัตโนมัติ
+   ```powershell
+   npm ci
+   npm run build
+   docker compose up -d --build
+   ```
 
-## ติดตั้งและเริ่มระบบครั้งแรก
+3. ตรวจสถานะและ readiness ก่อนทดสอบ:
 
-ขั้นตอน copy `.env` ใช้ PowerShell ส่วนคำสั่ง `make` ให้รันจาก MSYS2 UCRT64 หรือ WSL terminal ที่เตรียมไว้:
+   ```powershell
+   docker compose ps
+   curl.exe -fsS http://localhost:3001/health
+   curl.exe -fsS http://localhost:3001/ready
+   curl.exe -fsS http://localhost:3000/ready
+   ```
 
-### 1. ตั้งค่า environment สำหรับ Docker Compose
+### macOS — Terminal (zsh)
 
-```powershell
-Copy-Item .env.example .env
+1. สร้าง `.env` หากยังไม่มี แล้วตั้ง `MYSQL_HOST_PORT=3307` ให้ตรงกับ `MYSQL_PORT=3307` ใน `tests/configs/.env.test`:
+
+   ```zsh
+   if [ ! -f .env ]; then cp .env.example .env; fi
+   ```
+
+2. ติดตั้ง dependencies, build แอป และเริ่ม services:
+
+   ```zsh
+   npm ci
+   npm run build
+   docker compose up -d --build
+   ```
+
+3. ตรวจสถานะและ readiness ก่อนทดสอบ:
+
+   ```zsh
+   docker compose ps
+   curl --fail --silent --show-error http://localhost:3001/health
+   curl --fail --silent --show-error http://localhost:3001/ready
+   curl --fail --silent --show-error http://localhost:3000/ready
+   ```
+
+MySQL จะสร้าง schema และ seed data เมื่อเริ่มด้วย volume ใหม่ เปิด Swagger UI ที่ `http://localhost:8081` แล้วเลือก **BFF Public API** หรือ **PokéMart Internal API** ได้เลย
+
+> ค่าใน `.env.example` เป็น local-development values เท่านั้น ห้ามใช้กับ shared/production environment หรือ commit `.env` และ credentials จริง
+
+## 3. รันทดสอบ — Step by step
+
+เริ่มจาก WireMock เพื่อฝึก mapping แล้วค่อยทดสอบ API จริงและ end-to-end:
+
+| ขั้นตอน | npm command | ตรวจสอบอะไร | เป้าหมาย |
+|---|---|---|---|
+| 1 | `npm run test:mocked` | WireMock scenarios, mapping และ error response | WireMock; ไม่ทดสอบ logic ของ BFF จริง |
+| 2 | `npm run test:api` | Public API validation กับ BFF จริง | BFF + PokéMart API + MySQL |
+| 3 | `npm run test:pokeapi` | Contract ของ internal API แยกตาม endpoint | PokéMart API + MySQL |
+| 4 | `npm run test:purchase-retry` | Retry ด้วย `purchaseId` เดิมและ duplicate หลัง commit | ระบบจริง + MySQL |
+| 5 | `npm run test:e2e` | User journeys และผลกระทบต่อข้อมูล | BFF + PokéMart API + MySQL |
+| ทั้งหมด | `npm test` | ทุก Playwright project | ต้อง start Compose |
+
+รันตามลำดับตัวอย่าง:
+
+```text
+npm run test:mocked
+npm run test:api
+npm run test:pokeapi
+npm run test:purchase-retry
+npm run test:e2e
 ```
 
-เปิด `.env` แล้วตรวจค่า ports และ credentials สำหรับ local development ค่าในไฟล์ตัวอย่างเป็นค่าท้องถิ่น ไม่ควรนำไปใช้กับ shared หรือ production environment ไฟล์ `tests/configs/.env.test` ตั้ง `MYSQL_PORT=3307` ไว้ หากต้องการรัน purchase/E2E tests ให้ตั้ง `MYSQL_HOST_PORT=3307` ใน `.env` ให้ตรงกัน หรือแก้ `MYSQL_PORT` ใน test config ให้ตรงกับ host port ที่เลือก
+### ผลลัพธ์และ HTML report
 
-> อย่า commit `.env` หรือ credentials จริง
+Playwright แสดงผลใน terminal และสร้าง report ที่ `tests/playwright-report/` ทุกครั้งที่ทดสอบ หากต้องการเปิด HTML report:
 
-### 2. ติดตั้ง Node.js dependencies
-
-```bash
-make install
-```
-
-คำสั่งนี้เรียก `npm ci` ที่ root เพื่อใช้ dependency versions จาก `package-lock.json` ซึ่งรวม Playwright Test สำหรับ API automation ไว้แล้ว เทสปัจจุบันใช้ `APIRequestContext` จึงไม่ต้องติดตั้ง browser binaries ด้วย `npx playwright install`
-
-### 3. Build และ start services
-
-```bash
-make build
-make up
-```
-
-- `make build` compile BFF และ PokéMart API ด้วย TypeScript
-- `make up` build container images, start Docker Compose stack แบบ background และตรวจ readiness ของ BFF
-- MySQL จะสร้าง schema และ seed data เมื่อเริ่มด้วย volume ใหม่
-
-ตรวจสถานะและ readiness:
-
-```bash
-make ps
-curl.exe -fsS http://localhost:3001/health
-curl.exe -fsS http://localhost:3001/ready
-curl.exe -fsS http://localhost:3000/ready
-```
-
-ถ้าคำสั่ง readiness ยังไม่ผ่าน ให้ตรวจ `make ps` และ `make logs` ก่อนรัน tests
-
-### 4. เปิด Swagger UI
-
-```bash
-make swagger
-```
-
-เปิด URL ที่แสดง (`http://localhost:8081`) แล้วเลือก **BFF Public API** หรือ **PokéMart Internal API** จากรายการสเปก
-
-## รันทดสอบด้วย Make
-
-การทดสอบหลักให้เรียกผ่าน Makefile:
-
-| คำสั่ง | ใช้ทำอะไร | ต้อง start Compose |
-|---|---|---|
-| `make test-mocked` | รัน WireMock scenarios และตรวจ mock error-code mappings | ใช่ (WireMock) |
-| `make test-api` | รัน API validation กับ BFF จริง | ใช่ |
-| `make test-pokeapi` | รัน API tests ตรงกับ internal PokéMart API แยกตาม endpoint | ใช่ |
-| `make test-purchase-retry` | ตรวจ retry ด้วย `purchaseId` เดิมและ duplicate หลัง commit | ใช่; เชื่อม MySQL เพื่อ snapshot/restore test state |
-| `make test-e2e` | รัน real-system journeys และตรวจ persistent state | ใช่ |
-| `make test` | รันทุก Playwright project: WireMock, BFF API, internal PokéMart API และ E2E | ใช่ |
-
-ตัวอย่างลำดับรันตามปกติ:
-
-```bash
-make test-mocked
-make test-api
-make test-pokeapi
-make test-purchase-retry
-make test-e2e
-```
-
-หรือรันทั้งหมดครั้งเดียว:
-
-```bash
-make test
-```
-
-Playwright สร้าง HTML report ไว้ที่ `tests/playwright-report` หลังรันทดสอบ เปิดดูได้ด้วย:
-
-```bash
+```text
 npm run test:report
 ```
+
+ตรวจผลผ่าน terminal ได้ทันที หรือเปิด report เพื่อดู pass/fail, error details และ test ที่ล้มเหลว อย่าตีความ WireMock pass ว่าเป็นหลักฐานว่า BFF หรือฐานข้อมูลจริงทำงานถูกต้อง
 
 ทุก suite แยก test files ตาม target และ endpoint: `tests/testCases/mocked-bff/` สำหรับ WireMock, `pokemon/` และ `purchases/` สำหรับ public BFF, `PokeAPI/<endpoint>/` สำหรับ internal PokéMart API โดยตรง และ `e2e/` สำหรับ journeys ผ่าน BFF ผลจาก WireMock ยืนยันเฉพาะ contract ของ mapping ไม่ได้ยืนยัน business logic หรือ persistence ของระบบจริง ส่วน `PokeAPI` ตรวจ internal DTO/error behavior โดยไม่ใช้ BFF.
 
 `npm test` รัน WireMock และ real-system projects แยกกัน ไม่ได้ส่ง purchase ซ้ำจาก WireMock ไปยังฐานข้อมูลจริง แต่ละ purchase test ใช้ UUID ใหม่และตรวจ duplicate ภายในเคสของตัวเอง ก่อน project `api`, `e2e` หรือ `pokeapi` เริ่ม จะมี setup ตั้ง wallet ของ `REAL_USER_ID` และ listing ของ `REAL_POKEMON_ID` กลับเป็น `REAL_WALLET_BALANCE`, `REAL_POKEMON_PRICE`, `REAL_POKEMON_STOCK` และ active พร้อมลบ inventory row ของ user/โปเกมอนคู่นั้น การตั้งค่านี้ไม่ลบ purchase history หรือ reset Docker volume; purchase tests ยัง snapshot/restore state และลบ purchase ที่สร้างเอง
 
-> **สำคัญ:** setup นี้เขียนข้อมูลใน MySQL จึงต้องใช้ database และ user สำหรับทดสอบที่แยกจากข้อมูลใช้งานจริงเท่านั้น การรัน real-system tests จะคืนยอด wallet และ listing ที่เลือกเป็นค่าตั้งต้นตาม config เสมอ; ใช้ `make test-mocked` หากต้องการทดสอบ WireMock โดยไม่เรียก setup หรือเชื่อม MySQL
-
-ดู targets ทั้งหมดได้ด้วย:
-
-```bash
-make help
-```
+> **สำคัญ:** setup นี้เขียนข้อมูลใน MySQL จึงต้องใช้ database และ user สำหรับทดสอบที่แยกจากข้อมูลใช้งานจริงเท่านั้น การรัน real-system tests จะคืนยอด wallet และ listing ที่เลือกเป็นค่าตั้งต้นตาม config เสมอ; ใช้ `npm run test:mocked` หากต้องการทดสอบ WireMock โดยไม่เรียก setup หรือเชื่อม MySQL
 
 ## เลือก environment ของ test
 
 `TEST_ENV` ใช้เลือก URLs และ test data โดยไม่เปลี่ยน test case ค่าเริ่มต้นคือ `test` และโหลดจาก `tests/configs/.env.test`; ตัวเลือกอื่นที่เตรียมไว้คือ `sit` และ `stg`:
 
-```bash
-export TEST_ENV=test
-make test
+PowerShell:
+
+```powershell
+$env:TEST_ENV='test'; npm test
+$env:TEST_ENV='sit'; npm run test:api
 ```
 
-หรือเลือก SIT:
+macOS / zsh:
 
-```bash
-export TEST_ENV=sit
-make test-api
+```zsh
+TEST_ENV=test npm test
+TEST_ENV=sit npm run test:api
 ```
-
-ใน PowerShell ที่ติดตั้ง GNU Make และ shell ที่ Makefile ต้องใช้แล้ว สามารถเลือก environment ด้วย `$env:TEST_ENV='sit'; make test-api` ได้เช่นกัน
 
 กำหนดค่า SIT/STG จริงใน `tests/configs/.env.sit` หรือ `.env.stg` ก่อนใช้งาน ไฟล์ตัวอย่างมี URL placeholder และห้ามใส่ credentials จริงลงใน Git การรัน real-system project จะ reset เฉพาะ wallet และ listing ที่ระบุ พร้อมลบ inventory row ของ user/โปเกมอนที่เลือก ดังนั้นต้องใช้ user และ MySQL database ที่แยกไว้สำหรับ test โดยเฉพาะ ห้ามชี้ไปยัง production หรือข้อมูล shared ที่ไม่อนุญาตให้แก้ไข ใน environment ที่ไม่ใช่ `test` การเชื่อมต่อฐานข้อมูลจะ fail หากไม่ได้กำหนด `MYSQL_HOST`, `MYSQL_DATABASE`, `MYSQL_USER` และ `MYSQL_PASSWORD` ไว้ชัดเจน
 
@@ -170,16 +157,47 @@ make test-api
 ## Build, stop และจัดการฐานข้อมูล
 
 ```bash
-make build
-make ps
-make logs
-make down
+npm run build
+docker compose ps
+docker compose logs -f
+docker compose down
 ```
 
-- `make logs` แสดง logs ต่อเนื่อง กด `Ctrl+C` เพื่อหยุดการติดตาม logs (ไม่ได้หยุด containers)
-- `make down` หยุด containers โดยไม่ลบ database volume
-- `make db-seed` ตรวจจำนวน catalog records ใน local database
-- `make db-reset` **ลบ Compose volumes และข้อมูล local ทั้งหมด** แล้วเริ่ม MySQL ใหม่ให้สร้าง schema/seed ตั้งต้น ห้ามใช้กับ SIT, shared หรือ production data
+- `docker compose logs -f` แสดง logs ต่อเนื่อง กด `Ctrl+C` เพื่อหยุดการติดตาม logs (ไม่ได้หยุด containers)
+- `docker compose down` หยุด containers โดยไม่ลบ database volume
+- GNU Make ยังคงใช้ได้เป็นทางเลือก: `make help` แสดง targets ทั้งหมด และ `make db-reset` **ลบ Compose volumes และข้อมูล local ทั้งหมด** ห้ามใช้กับ SIT, shared หรือ production data
+
+## แบบฝึกหัด: สร้าง WireMock และ tests เอง
+
+โฟลเดอร์ `tests/` และ `wiremock/` ที่ให้มาเป็นตัวอย่างเต็มรูปแบบ ให้อ่าน requirements ก่อน แล้วสร้าง mapping และ Playwright tests ของตัวเองจาก OpenAPI โดยไม่เปิดดูตัวอย่างระหว่างทำ หากต้องการเริ่มใหม่ทั้งสองโฟลเดอร์ ให้ทำใน worktree แยกเพื่อเก็บตัวอย่างและงานปัจจุบันไว้:
+
+```text
+git worktree add ..\PokeMart-practice -b practice/rebuild-tests
+```
+
+บน macOS ใช้ path แบบนี้:
+
+```zsh
+git worktree add ../PokeMart-practice -b practice/rebuild-tests
+```
+
+จากนั้นเข้าโฟลเดอร์และลบ `tests/` กับ `wiremock/` เฉพาะใน worktree ใหม่นั้น:
+
+```powershell
+Set-Location ..\PokeMart-practice
+Remove-Item -Recurse -Confirm -Path tests, wiremock
+```
+
+บน macOS:
+
+```zsh
+cd ../PokeMart-practice
+rm -ri tests wiremock
+```
+
+สร้างโครงสร้าง/config, mappings และ test cases ใหม่ โปรเจ็กต์ root กำหนด `tests` เป็น npm workspace จึงต้องสร้าง `tests/package.json` และ Playwright config กลับมาก่อนรัน `npm install`/tests
+
+เริ่มออกแบบจาก [BFF OpenAPI](specs/openapi.yaml), [internal API OpenAPI](specs/pokemart-openapi.yaml), [acceptance criteria](specs/06-acceptance-and-decisions.md) และ [test design / traceability](specs/08-test-design.md) ใช้ [แผนภาพ Drawdy](https://drawdy.io/?canvas=6ad37296732501d97c4f802f) ช่วยวางเส้นทางการเรียกและแยก real กับ mocked tests
 
 ## Purchase request และ retry
 

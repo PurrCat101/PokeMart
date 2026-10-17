@@ -25,6 +25,9 @@ paths:
       tags: [Catalog]
       operationId: listCatalogPokemon
       summary: Paged catalog of listed Pokémon
+      description: |
+        Errors: 400 `VALIDATION_ERROR` or `UNKNOWN_QUERY_PARAMETER`;
+        500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE`.
       parameters:
         - $ref: '#/components/parameters/UserId'
         - $ref: '#/components/parameters/XRequestIdRequest'
@@ -33,6 +36,9 @@ paths:
       responses:
         '200':
           description: A page of catalog Pokémon
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
           content:
             application/json:
               schema:
@@ -49,6 +55,9 @@ paths:
       tags: [Catalog]
       operationId: getCatalogPokemon
       summary: One Pokémon with its listing
+      description: |
+        Errors: 400 `VALIDATION_ERROR`; 404 `POKEMON_NOT_FOUND`;
+        500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE`.
       parameters:
         - $ref: '#/components/parameters/UserId'
         - $ref: '#/components/parameters/XRequestIdRequest'
@@ -56,6 +65,9 @@ paths:
       responses:
         '200':
           description: Pokémon with listing
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
           content:
             application/json:
               schema:
@@ -74,12 +86,18 @@ paths:
       tags: [Wallet]
       operationId: getWallet
       summary: Wallet of the caller
+      description: |
+        Errors: 400 `VALIDATION_ERROR`; 404 `USER_NOT_FOUND`;
+        500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE`.
       parameters:
         - $ref: '#/components/parameters/UserId'
         - $ref: '#/components/parameters/XRequestIdRequest'
       responses:
         '200':
           description: Wallet
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
           content:
             application/json:
               schema:
@@ -98,12 +116,18 @@ paths:
       tags: [Inventory]
       operationId: getInventory
       summary: Owned Pokémon of the caller
+      description: |
+        Errors: 400 `VALIDATION_ERROR`; 500 `INTERNAL_ERROR`;
+        503 `DEPENDENCY_UNAVAILABLE`.
       parameters:
         - $ref: '#/components/parameters/UserId'
         - $ref: '#/components/parameters/XRequestIdRequest'
       responses:
         '200':
           description: Inventory
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
           content:
             application/json:
               schema:
@@ -125,6 +149,10 @@ paths:
         that same purchase attempt. The purchase ID, stock change, wallet change, and inventory change
         are committed in one transaction. Failed transactions do not reserve the purchaseId, so a retry
         with the same ID can succeed. Reusing an ID that was already committed returns 409 PURCHASE_DUPLICATE.
+        Errors: 400 `VALIDATION_ERROR` or `INVALID_JSON`; 404 `POKEMON_NOT_FOUND`;
+        409 `PURCHASE_DUPLICATE`, `POKEMON_NOT_FOR_SALE`, or `INSUFFICIENT_STOCK`;
+        415 `UNSUPPORTED_MEDIA_TYPE`; 422 `INSUFFICIENT_FUNDS`;
+        500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE`.
       parameters:
         - $ref: '#/components/parameters/UserId'
         - $ref: '#/components/parameters/XRequestIdRequest'
@@ -141,6 +169,8 @@ paths:
             Location:
               schema:
                 type: string
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
           content:
             application/json:
               schema:
@@ -163,6 +193,9 @@ paths:
       tags: [Purchases]
       operationId: listPurchases
       summary: Paged purchase history of the caller
+      description: |
+        Errors: 400 `VALIDATION_ERROR` or `UNKNOWN_QUERY_PARAMETER`;
+        500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE`.
       parameters:
         - $ref: '#/components/parameters/UserId'
         - $ref: '#/components/parameters/XRequestIdRequest'
@@ -171,6 +204,9 @@ paths:
       responses:
         '200':
           description: A page of purchases
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
           content:
             application/json:
               schema:
@@ -187,6 +223,9 @@ paths:
       tags: [Purchases]
       operationId: getPurchase
       summary: One purchase of the caller
+      description: |
+        Errors: 400 `VALIDATION_ERROR`; 404 `PURCHASE_NOT_FOUND`;
+        500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE`.
       parameters:
         - $ref: '#/components/parameters/UserId'
         - $ref: '#/components/parameters/XRequestIdRequest'
@@ -194,6 +233,9 @@ paths:
       responses:
         '200':
           description: Purchase
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
           content:
             application/json:
               schema:
@@ -212,9 +254,14 @@ paths:
       tags: [Health]
       operationId: getHealth
       summary: Liveness, no dependency checks
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdRequest'
       responses:
         '200':
           description: Process is alive
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
           content:
             application/json:
               schema:
@@ -225,21 +272,37 @@ paths:
       tags: [Health]
       operationId: getReady
       summary: Readiness, MySQL reachable and schema initialized
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdRequest'
       responses:
         '200':
           description: Ready
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Ready'
         '503':
-          description: Not ready
+          description: Not ready; `checks.mysql` is `unavailable` or `uninitialized`.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Ready'
 
 components:
+  headers:
+    XRequestId:
+      description: Correlation ID present on every response.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+        pattern: '^[A-Za-z0-9_-]+$'
   parameters:
     UserId:
       name: X-User-Id
@@ -466,7 +529,7 @@ components:
       properties:
         error:
           type: object
-          required: [code, message, requestId]
+          required: [code, message, requestId, details]
           additionalProperties: false
           properties:
             code:
@@ -503,42 +566,63 @@ components:
   responses:
     BadRequest:
       description: Invalid input
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
     NotFound:
       description: Resource not found
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
     Conflict:
       description: Not for sale, insufficient stock, or duplicate purchase ID
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
     UnsupportedMediaType:
       description: Body is not application/json
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
     UnprocessableEntity:
       description: Business rule violation, such as insufficient wallet funds
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
     InternalError:
       description: Unexpected error. No internal details are exposed.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
     ServiceUnavailable:
       description: MySQL unavailable
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
       content:
         application/json:
           schema:
