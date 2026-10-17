@@ -1,0 +1,13 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPath": "/api/inventory",
+    "headers": { "X-WireMock-Scenario": { "equalTo": "inventory-empty" } }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json", "X-Request-Id": "wiremock-request" },
+    "jsonBody": { "items": [] }
+  }
+}

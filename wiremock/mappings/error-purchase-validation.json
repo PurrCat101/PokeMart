@@ -1,0 +1,13 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/purchases",
+    "headers": { "X-WireMock-Scenario": { "equalTo": "validation-error" } }
+  },
+  "response": {
+    "status": 400,
+    "headers": { "Content-Type": "application/json", "X-Request-Id": "wiremock-request" },
+    "jsonBody": { "error": { "code": "VALIDATION_ERROR", "message": "Request validation failed", "requestId": "wiremock-request", "details": [] } }
+  }
+}

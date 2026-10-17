@@ -31,16 +31,16 @@
 - Tests do not depend on execution order or accidentally mutate baseline data.
 
 ### Automation
-- Mocked-BFF tests run without the real BFF.
-- Real integration tests exercise the real BFF, PokéMart API, and MySQL.
+- Playwright cases are kept in separate WireMock, API-validation, purchase, and E2E suites; test files are not shared across targets.
+- Real-target purchase cases exercise the BFF, PokéMart API, MySQL, and persisted side effects.
+- WireMock-only mapping-integrity tests verify mock setup and mock-specific response scenarios.
 - Assertions are readable and failures are diagnosable.
 - Test structure follows the team's Playwright conventions once supplied.
 
 ### Functional test strategy
-- E2E tests cover complete purchase journeys through the BFF and verify important persisted side effects.
-- API validation tests systematically cover contract and schema, query, path, and body validation, boundary values, status codes, and error schemas.
-- The purchase-retry group covers the documented retry, duplicate, and no-double-charge behavior.
-- Mocked contract tests and real-system E2E tests are clearly distinguishable and not presented as equivalent coverage.
+- Separate WireMock and real-system suites cover the contract and behavior relevant to each target; mock and real results are not presented as equivalent coverage.
+- The purchase-retry test verifies retry and duplicate behavior against the real service and checks persistence side effects.
+- `TEST_ENV=test|sit` selects environment URLs and test data without changing suite structure or test cases.
 - Test data is deterministic, isolated, repeatable, and independent of execution order.
 
 ### Observability and performance readiness

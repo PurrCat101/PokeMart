@@ -6,6 +6,13 @@ export class MySQLConnection {
   private readonly pool: Pool;
 
   constructor(options: PoolOptions = testConfig.mysql) {
+    if (testConfig.environmentName !== 'test') {
+      const required = ['MYSQL_HOST', 'MYSQL_DATABASE', 'MYSQL_USER', 'MYSQL_PASSWORD'];
+      const missing = required.filter((key) => !process.env[key]);
+      if (missing.length) {
+        throw new Error(`Database-backed tests in "${testConfig.environmentName}" require ${missing.join(', ')} to point to a dedicated test database.`);
+      }
+    }
     this.pool = mysql.createPool(options);
   }
 

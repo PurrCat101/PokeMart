@@ -1,0 +1,13 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPath": "/ready",
+    "headers": { "X-WireMock-Scenario": { "equalTo": "not-ready" } }
+  },
+  "response": {
+    "status": 503,
+    "headers": { "Content-Type": "application/json", "X-Request-Id": "wiremock-request" },
+    "jsonBody": { "status": "not_ready", "checks": { "pokemartApi": "unavailable" } }
+  }
+}

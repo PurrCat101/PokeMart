@@ -40,19 +40,21 @@ Learning goals:
 
 ## 4. High-level architecture
 
-### Track A — Mocked BFF
+### Track A — WireMock contract suite
 
 `Playwright Test -> WireMock (mock BFF)`
 
-Purpose: write tests from the API contract before the real BFF is ready; validate request/response shape, query parameters, headers, status codes, and error contracts.
+Purpose: run WireMock-specific contract scenarios, validating request/response shape, query parameters, status codes, and error contracts against configured mock responses. Dedicated WireMock-only tests also verify mapping completeness.
 
-Limitation: tests against a mock prove behavior against the configured mock, not the real BFF implementation or its downstream mapping logic. Mocked tests must not be reported as equivalent to real-system coverage.
+Limitation: tests against a mock prove behavior against configured mappings, not the real BFF implementation, downstream mapping, persistence, or business logic. Results must not be reported as equivalent to real-system coverage.
 
 ### Track B — Real integration
 
 `Playwright Test -> Real BFF -> Real PokéMart API -> MySQL`
 
 The real integration path must not mock the BFF or PokéMart API. Mock only dependencies outside the system boundary when appropriate. The initial version must not require a live PokéAPI call to serve requests or execute tests.
+
+Real API validation and E2E cases live in their own suites and run against the configured BFF. `TEST_ENV=test|sit` selects URLs and test data from the matching environment file; Playwright projects select the test suite, not the environment.
 
 ### Responsibilities
 

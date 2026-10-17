@@ -16,11 +16,19 @@ Coverage categories: happy paths, required-field and type validation, boundaries
 
 ## 8.1 Functional test strategy: E2E flows and API validation
 
-The functional suite has two clearly identified layers. They serve different purposes and must not be collapsed into one large set of tests.
+The functional suite has separate WireMock and real-system cases; no scenario file is shared between targets. `TEST_ENV` selects the environment configuration (`test` by default, or `sit`) while Playwright projects select which test suite to run.
 
-### A. End-to-end (E2E) business flows
+Test files are organized by purpose:
 
-E2E tests validate a complete business journey through the public BFF API and real application services. They assert both the response and important persisted side effects.
+- `tests/testCases/mocked-bff/`: WireMock-specific request/response contracts and mapping scenarios.
+- `tests/testCases/pokemon/` and `tests/testCases/purchases/validation.spec.ts`: real BFF API validation.
+- `tests/testCases/purchases/retry.spec.ts` and `tests/testCases/e2e/`: real-system purchase and E2E flows.
+
+`tests/configs/.env.test` and `.env.sit` hold environment-specific URLs and test data. The fixture supplies target-specific user, Pokémon, page size, purchase ID, and mock scenario headers without sharing test files.
+
+### A. API and business scenarios
+
+WireMock and real-system scenarios are separately maintained. WireMock cases verify configured mock responses and mock mapping coverage; real-system cases verify public behavior and, where relevant, database side effects.
 
 Initial flows:
 
@@ -30,12 +38,10 @@ Initial flows:
 4. Retrieve a purchase by ID after a successful purchase and compare it with the creation response and persisted state.
 5. Retry a failed, uncommitted purchase with the same `purchaseId`; verify the retry can succeed. Retry after success and verify `409 PURCHASE_DUPLICATE` with no second state change.
 
-E2E principles:
-- Send requests through the BFF entry point; do not bypass the BFF for a business journey.
-- Use the real BFF, PokéMart API, and MySQL. WireMock may replace only a dependency outside the system boundary.
-- Keep each test independent; clean up records it creates, or use a disposable or resettable dataset.
-- Assert business outcomes and state changes, not internal implementation details.
-- Keep exhaustive field and query validation at the endpoint level for speed and clearer diagnostics.
+Scenario principles:
+- Keep target-specific test files in their respective folders.
+- Use environment configuration for URLs and test data rather than hard-coding environment-specific values in cases.
+- Keep each test independent; real purchase tests clean up records and restore their dedicated baseline data.
 
 ### B. API specification and validation tests
 
@@ -49,9 +55,9 @@ Coverage includes:
 - Not-found and conflict behavior.
 - Purchase-ID retry and duplicate behavior (see group C below).
 - Side effects where the endpoint changes state; failed operations must not leave unintended changes.
-- BFF contract tests against WireMock before the BFF exists, followed by tests against the real BFF.
+- Keep WireMock mapping-contract tests separate from real BFF API validation tests.
 
-Tag or project names must distinguish `e2e`, `api-validation`, `contract-mocked`, `integration`, and `purchase-retry`. Exact folder and tag syntax follows the team's Playwright conventions.
+Tags distinguish `e2e` and `purchase-flow`; Playwright projects distinguish `wiremock`, `api`, and `e2e`.
 
 ### C. Purchase-ID retry test group
 
@@ -70,7 +76,7 @@ Use separate categories of data:
 
 1. **Reference data:** versioned Pokémon data from a pinned `PokeAPI/api-data` snapshot. Read-only during tests.
 2. **Baseline business data:** deterministic catalog prices and stock, and a known development user and wallet, inserted by SQL seed scripts. Ordinary tests must not mutate these rows.
-3. **Test-owned data:** records created by an individual test, identified uniquely and cleaned up when appropriate. Purchase IDs created by tests must use unique UUIDs.
+3. **Test-owned data:** real-target records use unique purchase UUIDs and are cleaned up. WireMock may use a configured fixed ID matching its static stub data.
 4. **Performance dataset:** a larger, deliberately prepared dataset created by a separate setup command. Do not use ad hoc data generated during the measured load interval.
 
 Requirements:
@@ -82,7 +88,7 @@ Requirements:
 
 ## 9. WireMock strategy
 
-### WireMock as a temporary BFF
+### WireMock as a BFF contract target
 
 Configure mappings for:
 - successful catalog responses and pagination;
@@ -101,4 +107,4 @@ The initial application must not depend on live PokéAPI calls during each reque
 
 ## 8.3 Reporting rule
 
-Mocked-BFF results and real-system results are reported separately. A passing mocked contract test does not prove that the real BFF behaves the same way.
+WireMock and real-system results are reported separately. A passing mocked contract test does not prove that the real BFF, service, database, or persistence effects behave the same way.

@@ -1,0 +1,30 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPath": "/api/pokemon",
+    "queryParameters": {
+      "limit": { "equalTo": "2" },
+      "offset": { "equalTo": "0" }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json", "X-Request-Id": "wiremock-request" },
+    "jsonBody": {
+      "totalCount": 1,
+      "page": { "limit": 2, "offset": 0 },
+      "items": [
+        {
+          "pokemon": {
+            "id": 1,
+            "name": "bulbasaur",
+            "types": ["grass", "poison"],
+            "spriteUrl": "https://example.test/1.png"
+          },
+          "listing": { "price": 300, "availableStock": 5 }
+        }
+      ]
+    }
+  }
+}

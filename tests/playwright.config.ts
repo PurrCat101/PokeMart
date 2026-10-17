@@ -5,21 +5,22 @@ export default defineConfig({
   testDir: './testCases',
   timeout: 15_000,
   fullyParallel: false,
+  workers: 1,
   reporter: 'list',
   projects: [
     {
-      name: 'contract-mocked',
+      name: 'wiremock',
       testMatch: /mocked-bff\/.*\.spec\.ts/,
       use: { baseURL: testConfig.wiremockBaseUrl },
     },
     {
-      name: 'api-validation',
-      testMatch: /(pokemon|purchases)\/.*\.spec\.ts/,
+      name: 'api',
+      testMatch: ['pokemon/**/*.spec.ts', 'purchases/validation.spec.ts', 'purchases/read.spec.ts'],
       use: { baseURL: testConfig.bffBaseUrl },
     },
     {
-      name: 'integration',
-      testMatch: /e2e\/.*\.spec\.ts/,
+      name: 'e2e',
+      testMatch: ['e2e/**/*.spec.ts', 'purchases/retry.spec.ts', 'purchases/business-errors.spec.ts', 'purchases/concurrency.spec.ts', 'purchases/lifecycle.spec.ts'],
       use: { baseURL: testConfig.bffBaseUrl },
     },
   ],

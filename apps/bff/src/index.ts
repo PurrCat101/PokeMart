@@ -162,7 +162,7 @@ app.use((req, res, next) => {
   res.on('finish', () => log({ severity: 'info', requestId: resRequestId(req), method: req.method, route: req.route?.path ?? req.path, statusCode: res.statusCode, durationMs: Date.now() - start })); next();
 });
 app.use((req, _res, next) => req.method === 'POST' && req.path === '/api/purchases' && !req.is('application/json') ? next(new AppError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Content-Type must be application/json')) : next());
-app.use(express.json({ strict: true }));
+app.use(express.json({ strict: false }));
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 app.get('/ready', async (req, res, next) => {
@@ -173,7 +173,7 @@ app.get('/api/pokemon/:id', async (req, res, next) => { try { positivePathId(req
 app.get('/api/wallet', async (req, res, next) => { try { await relay(req, res, '/pokemart/v2/wallet', 'GET', undefined, mapWallet); } catch (error) { next(error); } });
 app.get('/api/inventory', async (req, res, next) => { try { await relay(req, res, '/pokemart/v2/inventory', 'GET', undefined, mapInventory); } catch (error) { next(error); } });
 app.get('/api/purchases', async (req, res, next) => { try { const { limit, offset } = pageParams(req); await relay(req, res, `/pokemart/v2/purchases?limit=${limit}&offset=${offset}`, 'GET', undefined, mapPurchasePage); } catch (error) { next(error); } });
-app.get('/api/purchases/:id', async (req, res, next) => { try { if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(req.params.id)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'id', message: 'must be a UUID' }]); await relay(req, res, `/pokemart/v2/purchases/${req.params.id}`, 'GET', undefined, mapPurchase); } catch (error) { next(error); } });
+app.get('/api/purchases/:id', async (req, res, next) => { try { if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(req.params.id)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'id', message: 'must be a UUID' }]); await relay(req, res, `/pokemart/v2/purchases/${req.params.id}`, 'GET', undefined, mapPurchase); } catch (error) { next(error); } });
 app.post('/api/purchases', async (req, res, next) => { try { validatePurchase(req.body); await relay(req, res, '/pokemart/v2/purchases', 'POST', req.body, mapPurchase); } catch (error) { next(error); } });
 app.use((error: any, req: Request, res: ExpressResponse, _next: NextFunction) => {
   const appError = error instanceof AppError ? error : error?.type === 'entity.parse.failed' ? new AppError(400, 'INVALID_JSON', 'Malformed JSON request body') : new AppError(500, 'INTERNAL_ERROR', 'An unexpected error occurred');

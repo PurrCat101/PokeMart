@@ -78,9 +78,11 @@ npm run test:purchase-retry
 npm run test:e2e
 ```
 
-- `test:mocked` ใช้ WireMock ตรวจ contract ของ BFF จำลอง
-- `test:api` ตรวจ API validation กับ BFF จริง
-- `test:purchase-retry` และ `test:e2e` เป็นการทดสอบระบบจริง โปรด start Compose stack ก่อน
+- Test cases แยกตามหน้าที่และ target: `tests/testCases/mocked-bff/`, `pokemon/`, `purchases/` และ `e2e/`; ไม่แชร์ไฟล์ scenario ระหว่าง WireMock กับระบบจริง
+- `test:mocked` รันเฉพาะ WireMock scenarios และตรวจ mock mappings
+- `test:api` รัน API validation กับ BFF จริง
+- `test:purchase-retry` และ `test:e2e` รัน flow จริง รวมการตรวจผลกระทบต่อ state และต้อง start Compose
+- เลือก URL และ test data ด้วย `TEST_ENV` (`test` เป็นค่าเริ่มต้น หรือ `sit`) ผ่าน `tests/configs/.env.test` และ `.env.sit` เช่น `$env:TEST_ENV='sit'; npm test` ใน PowerShell
 - ผลจาก mock ไม่เท่ากับการยืนยันพฤติกรรมของระบบจริง ขอบเขตการทดสอบแยกไว้ใน [`04-testing.md`](04-testing.md)
 
 คำสั่ง `make` ที่มีให้ใช้ ได้แก่ `make up`, `make down`, `make ps`, `make logs`, `make swagger`, `make test-*`, `make db-seed` และ `make db-reset` (ขึ้นกับ GNU Make ในเครื่อง) โดย `make down` ไม่ลบข้อมูล ส่วน `make db-reset` ลบ Compose volumes และข้อมูลฐานข้อมูลในเครื่อง

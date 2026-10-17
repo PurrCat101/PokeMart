@@ -14,12 +14,13 @@ Last updated: 2026-10-17
 - [x] Updated purchase flow to use a client-generated UUID `purchaseId` in the request body, with retry-after-rollback and `409 PURCHASE_DUPLICATE` after commit.
 - [x] Removed idempotency-key storage and documented the existing-volume migration that drops the retired table.
 - [x] Added a real retry/duplicate test that restores its wallet, stock, inventory, and purchase data after execution.
+- [x] Kept WireMock, real API validation, purchase, and E2E scenarios in separate Playwright test folders; `TEST_ENV` selects environment configuration without changing test cases.
 
 ## In progress / validation needed
 
 - [x] Installed pinned dependencies, generated `package-lock.json`, and compiled TypeScript successfully.
 - [x] Started Compose and verified health/readiness, a 151-record catalog, and distinct BFF/service response DTOs.
-- [x] Ran the starter Playwright suite successfully: 5 tests passed across mocked-contract, API-validation, and real-integration projects.
+- [x] Re-ran the separated Playwright suites after adding `TEST_ENV=test|sit`: 9 WireMock tests, 6 API tests, 1 purchase-retry test, 2 E2E tests, and 17 tests in the full run passed.
 - [x] Recreated and verified Swagger UI: its same-origin `http://localhost:8081/openapi.yaml` endpoint returns HTTP 200.
 - [x] Added local Swagger-to-BFF CORS support, including the `OPTIONS` preflight used by Swagger UI’s Try it out requests.
 - [x] Reorganized Playwright into its own `tests/` workspace with `testCases`, `support`, `resources`, and environment `configs`.
@@ -31,12 +32,11 @@ Last updated: 2026-10-17
 
 - The workstation already used host port `3306`; local `.env` sets `MYSQL_HOST_PORT=3307`. Container-to-container MySQL still uses `3306`.
 - `npm install` reported one high-severity transitive vulnerability. It was not auto-fixed because the suggested command uses a potentially breaking forced upgrade; review it deliberately with `npm audit`.
-- `npm run build` and full `npm test` pass (9 tests); focused mocked contract (3), API validation (4), and purchase retry (1) runs also pass.
-- The retry test confirms failed ID reuse, duplicate detection after commit, and exactly one wallet/stock change, then restores test data.
-- Existing Playwright coverage includes mocked BFF endpoint/error contract checks, real pagination/query validation, real BFF browse flow, purchase-ID validation, and a retry/duplicate purchase flow. Remaining real-system scenarios are tracked above rather than being presented as complete coverage.
+- Build passed; focused and full test runs passed with the separated suite layout.
+- The real purchase-retry test confirms failed ID reuse, duplicate detection after commit, and exactly one wallet/stock change, then restores test data.
 
 ## Deferred by the specification
 
-- [ ] Confirm the team’s existing Playwright structure before finalizing test folder/fixture conventions.
+- [x] Reorganized tests into separate target/purpose folders rather than sharing scenarios across WireMock and real targets.
 - [ ] Confirm current PokeAPI license/attribution requirements before redistributing the checked-in snapshot.
 - [ ] Optional observability stack and k6 performance scripts.

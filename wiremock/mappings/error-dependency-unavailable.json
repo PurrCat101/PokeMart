@@ -1,8 +1,7 @@
 {
   "priority": 1,
   "request": {
-    "method": "GET",
-    "urlPath": "/api/pokemon",
+    "urlPathPattern": "/api/.*",
     "headers": { "X-WireMock-Scenario": { "equalTo": "dependency-unavailable" } }
   },
   "response": {

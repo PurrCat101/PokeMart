@@ -1,0 +1,20 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPath": "/api/pokemon",
+    "queryParameters": {
+      "limit": { "equalTo": "2" },
+      "offset": { "equalTo": "999" }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json", "X-Request-Id": "wiremock-request" },
+    "jsonBody": {
+      "totalCount": 1,
+      "page": { "limit": 2, "offset": 999 },
+      "items": []
+    }
+  }
+}

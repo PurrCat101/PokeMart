@@ -1,7 +1,13 @@
-.PHONY: help up down ps logs swagger test test-mocked test-api test-purchase-retry test-e2e db-seed db-reset
+.PHONY: help install build up down ps logs swagger test test-mocked test-api test-purchase-retry test-e2e db-seed db-reset
 
 help: ## Show available local-lab commands (db-reset deletes local data)
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-20s %s\n", $$1, $$2}'
+
+install: ## Install pinned Node.js dependencies from package-lock.json
+	npm ci
+
+build: ## Compile the BFF and PokéMart API TypeScript projects
+	npm run build
 
 up: ## Start the core stack and wait for it to become ready
 	docker compose up -d --build
@@ -35,7 +41,7 @@ test-e2e: ## Run real BFF-to-MySQL journeys
 	npm run test:e2e
 
 db-seed: ## Confirm baseline data is present in the local lab
-	docker compose exec -T mysql mysql -upokemart_user -pchange_me_for_local_development pokemart_lab -e "SELECT COUNT(*) AS catalog_records FROM shop_listing;"
+	docker compose exec -T mysql sh -c 'mysql -u"$$MYSQL_USER" -p"$$MYSQL_PASSWORD" "$$MYSQL_DATABASE" -e "SELECT COUNT(*) AS catalog_records FROM shop_listing;"'
 
 db-reset: ## DESTRUCTIVE: recreate only the local Compose database volume
 	docker compose down -v

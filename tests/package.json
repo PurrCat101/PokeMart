@@ -4,10 +4,10 @@
   "private": true,
   "scripts": {
     "test": "playwright test",
-    "test:mocked": "playwright test --project=contract-mocked",
-    "test:api": "playwright test --project=api-validation",
-    "test:purchase-retry": "playwright test --project=integration --grep @purchase-retry",
-    "test:e2e": "playwright test --project=integration --grep @e2e"
+    "test:mocked": "playwright test --project=wiremock",
+    "test:api": "playwright test --project=api",
+    "test:purchase-retry": "playwright test --project=e2e --grep @purchase-flow",
+    "test:e2e": "playwright test --project=e2e"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",
