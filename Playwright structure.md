@@ -13,6 +13,8 @@ tests/
 │   ├── .env.sit
 │   └── .env.stg
 ├── testCases/
+│   ├── setup/
+│   │   └── real-state.setup.ts
 │   ├── mocked-bff/
 │   │   ├── browse-wallet.spec.ts
 │   │   ├── catalog.spec.ts
@@ -59,4 +61,4 @@ $env:TEST_ENV='sit'; npm test
 npm run test:pokeapi
 ```
 
-The test environment defaults to `test`. `npm run test:pokeapi` runs only internal PokéMart API cases and uses `POKEMART_API_BASE_URL`. Keep credentials out of committed environment files. Database-backed purchase tests in non-test environments require explicit MySQL settings for a dedicated test database.
+The test environment defaults to `test`. `npm run test:pokeapi` runs only internal PokéMart API cases and uses `POKEMART_API_BASE_URL`. Real `api`, `e2e`, and `pokeapi` projects depend on `setup/real-state.setup.ts`, which restores the configured test user's wallet and selected listing to baseline before the suite. It does not run for WireMock-only tests or reset the database volume/purchase history. Keep credentials out of committed environment files. Database-backed tests in non-test environments require explicit MySQL settings for a dedicated test database.

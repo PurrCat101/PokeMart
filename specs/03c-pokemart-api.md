@@ -80,6 +80,7 @@ Same rules as `05-operations.md` section 12. In addition, the PokéMart API logs
 - Direct internal service automation lives under `tests/testCases/PokeAPI/<endpoint>/` and runs with the Playwright project `pokeapi` (`npm run test:pokeapi` / `make test-pokeapi`).
 - The endpoint directories cover catalog list/detail, wallet, inventory, purchase create/list/detail, retry/concurrency, health, and readiness. State-changing tests snapshot and restore the dedicated test database.
 - Direct-service concurrency verifies both same-ID duplicate processing and distinct purchases competing for the last stock unit.
+- Before a real Playwright project runs, `tests/testCases/setup/real-state.setup.ts` restores the configured test user's wallet and selected listing (price, stock, active) to the configured baseline and deletes that user's inventory row for that Pokémon. Purchase history and the database volume are preserved; use only a dedicated test database and user.
 - Latest verified execution: `npm run test:pokeapi` passed all 21 internal API cases; the full `npm test` run passed 94 cases across WireMock, BFF API, E2E, and internal API projects.
 - The current suite does not inject MySQL outages, uninitialized database state, or unexpected service exceptions; their 503/500 responses remain open fault-injection coverage.
 

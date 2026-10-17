@@ -397,6 +397,7 @@ These are illustrative titles only. Actual expected statuses and error codes mus
 
 ### Quality and maintainability
 - [ ] Test data is deterministic and resettable.
+- [ ] Real-system suites establish the configured baseline for mutable test resources before running; reset only dedicated test data, not shared or production data.
 - [ ] Cases are independent where possible and do not rely on execution order unless they are explicitly E2E.
 - [ ] Each failure identifies the endpoint, input, expected behavior, and actual behavior.
 - [ ] Cases are traceable to requirements and spec versions.

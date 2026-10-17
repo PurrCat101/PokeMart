@@ -31,6 +31,8 @@ export const testConfig = {
       pokemonId: Number(process.env.REAL_POKEMON_ID ?? 1),
       pageSize: Number(process.env.REAL_PAGE_SIZE ?? 2),
       walletBalance: Number(process.env.REAL_WALLET_BALANCE ?? 10000),
+      pokemonPrice: Number(process.env.REAL_POKEMON_PRICE ?? 300),
+      pokemonStock: Number(process.env.REAL_POKEMON_STOCK ?? 23),
     },
   },
   mysql: {

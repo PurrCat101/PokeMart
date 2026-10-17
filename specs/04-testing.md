@@ -6,7 +6,7 @@
 - Use OOP when it improves encapsulation or reuse; do not make every helper a class.
 - Keep important assertions visible in the test body.
 - Avoid hidden cross-test dependencies.
-- Tests must be independently runnable and safe to repeat.
+- Tests must be independently runnable and safe to repeat. Before a real-system project, setup restores the configured test user's wallet and selected Pokémon listing to the configured baseline, then clears that user's inventory row for that Pokémon. It does not reset purchase history or the database volume.
 - Keep URLs and credentials out of test cases.
 - Align fixtures, naming, folder structure, and conventions with the team's Playwright project once supplied.
 
@@ -72,6 +72,7 @@ The `pokeapi` project checks `specs/pokemart-openapi.yaml` directly, without goi
 - `health/get` and `ready/get`: process liveness and readiness with initialized MySQL.
 
 State-changing tests use unique purchase UUIDs, snapshot/restore wallet, stock, and inventory, and delete test purchases in cleanup. Only a dedicated test database may be used. Database-failure and unexpected-service-error responses require isolated fault injection and are not claimed as covered.
+The shared setup project runs before `api`, `e2e`, and `pokeapi` projects, including when a single real project is selected. It does not run for WireMock-only tests. Configure `REAL_WALLET_BALANCE`, `REAL_POKEMON_PRICE`, and `REAL_POKEMON_STOCK` as the desired baseline, and point real tests at an isolated test database and user.
 
 ### C. Purchase-ID retry test group
 

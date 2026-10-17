@@ -135,6 +135,10 @@ npm run test:report
 
 ทุก suite แยก test files ตาม target และ endpoint: `tests/testCases/mocked-bff/` สำหรับ WireMock, `pokemon/` และ `purchases/` สำหรับ public BFF, `PokeAPI/<endpoint>/` สำหรับ internal PokéMart API โดยตรง และ `e2e/` สำหรับ journeys ผ่าน BFF ผลจาก WireMock ยืนยันเฉพาะ contract ของ mapping ไม่ได้ยืนยัน business logic หรือ persistence ของระบบจริง ส่วน `PokeAPI` ตรวจ internal DTO/error behavior โดยไม่ใช้ BFF.
 
+`npm test` รัน WireMock และ real-system projects แยกกัน ไม่ได้ส่ง purchase ซ้ำจาก WireMock ไปยังฐานข้อมูลจริง แต่ละ purchase test ใช้ UUID ใหม่และตรวจ duplicate ภายในเคสของตัวเอง ก่อน project `api`, `e2e` หรือ `pokeapi` เริ่ม จะมี setup ตั้ง wallet ของ `REAL_USER_ID` และ listing ของ `REAL_POKEMON_ID` กลับเป็น `REAL_WALLET_BALANCE`, `REAL_POKEMON_PRICE`, `REAL_POKEMON_STOCK` และ active พร้อมลบ inventory row ของ user/โปเกมอนคู่นั้น การตั้งค่านี้ไม่ลบ purchase history หรือ reset Docker volume; purchase tests ยัง snapshot/restore state และลบ purchase ที่สร้างเอง
+
+> **สำคัญ:** setup นี้เขียนข้อมูลใน MySQL จึงต้องใช้ database และ user สำหรับทดสอบที่แยกจากข้อมูลใช้งานจริงเท่านั้น การรัน real-system tests จะคืนยอด wallet และ listing ที่เลือกเป็นค่าตั้งต้นตาม config เสมอ; ใช้ `make test-mocked` หากต้องการทดสอบ WireMock โดยไม่เรียก setup หรือเชื่อม MySQL
+
 ดู targets ทั้งหมดได้ด้วย:
 
 ```bash
@@ -159,7 +163,7 @@ make test-api
 
 ใน PowerShell ที่ติดตั้ง GNU Make และ shell ที่ Makefile ต้องใช้แล้ว สามารถเลือก environment ด้วย `$env:TEST_ENV='sit'; make test-api` ได้เช่นกัน
 
-กำหนดค่า SIT/STG จริงใน `tests/configs/.env.sit` หรือ `.env.stg` ก่อนใช้งาน ไฟล์ตัวอย่างมี URL placeholder และห้ามใส่ credentials จริงลงใน Git การทดสอบ `test-pokeapi`, `purchase-retry` และ `e2e` เปลี่ยนข้อมูล wallet, stock, inventory และสร้าง/ลบ purchase เพื่อยืนยันพฤติกรรม ดังนั้นต้องใช้ user และ MySQL database ที่แยกไว้สำหรับ test โดยเฉพาะ ห้ามชี้ไปยัง production หรือข้อมูล shared ที่ไม่อนุญาตให้แก้ไข ใน environment ที่ไม่ใช่ `test` การเชื่อมต่อฐานข้อมูลจะ fail หากไม่ได้กำหนด `MYSQL_HOST`, `MYSQL_DATABASE`, `MYSQL_USER` และ `MYSQL_PASSWORD` ไว้ชัดเจน
+กำหนดค่า SIT/STG จริงใน `tests/configs/.env.sit` หรือ `.env.stg` ก่อนใช้งาน ไฟล์ตัวอย่างมี URL placeholder และห้ามใส่ credentials จริงลงใน Git การรัน real-system project จะ reset เฉพาะ wallet และ listing ที่ระบุ พร้อมลบ inventory row ของ user/โปเกมอนที่เลือก ดังนั้นต้องใช้ user และ MySQL database ที่แยกไว้สำหรับ test โดยเฉพาะ ห้ามชี้ไปยัง production หรือข้อมูล shared ที่ไม่อนุญาตให้แก้ไข ใน environment ที่ไม่ใช่ `test` การเชื่อมต่อฐานข้อมูลจะ fail หากไม่ได้กำหนด `MYSQL_HOST`, `MYSQL_DATABASE`, `MYSQL_USER` และ `MYSQL_PASSWORD` ไว้ชัดเจน
 
 `MYSQL_HOST_PORT` ใน `.env` คือ port ที่ Docker เปิดบน host ส่วน `MYSQL_PORT` ในไฟล์ `tests/configs/.env.*` คือ port ที่ test runner ใช้เชื่อมต่อจาก host ทั้งสองค่าต้องตรงกัน เช่น `MYSQL_HOST_PORT=3307` ต้องคู่กับ `MYSQL_PORT=3307`
 

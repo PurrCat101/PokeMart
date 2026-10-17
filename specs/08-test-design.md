@@ -6,7 +6,7 @@ This design covers the public BFF contract in [`openapi.yaml`](./openapi.yaml) a
 
 The WireMock project replaces the BFF and checks configured public response fixtures. It does not execute BFF validation, upstream error mapping, or PokéMart API business logic. The `X-WireMock-Scenario` header selects a fixture; it is test control, not a public API input.
 
-Test configuration comes from `TEST_ENV` and `tests/configs/.env.<environment>`. State-mutating cases require an isolated test database and run with one worker. Tests snapshot and restore wallet, stock, and inventory, and delete purchases they create.
+Test configuration comes from `TEST_ENV` and `tests/configs/.env.<environment>`. Before any real-system project starts, a shared setup project resets only the configured test user's wallet and selected Pokémon listing (price, stock, active) to configured baseline values and deletes that user's inventory row for that Pokémon. State-mutating cases require an isolated test database and run with one worker. Tests snapshot and restore wallet, stock, and inventory, and delete purchases they create. Purchase history and the Docker volume are not reset.
 
 Case IDs in this document provide stable traceability; existing automation titles keep their current IDs and are linked in the automation-reference column.
 
