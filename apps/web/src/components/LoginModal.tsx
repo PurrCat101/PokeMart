@@ -8,8 +8,8 @@ interface LoginModalProps {
 }
 
 export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps) {
-  const [email, setEmail] = useState("lab-user-001@example.test");
-  const [password, setPassword] = useState("PokeMartLab!2026");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,12 +28,6 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps)
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleFillDemo = () => {
-    setEmail("lab-user-001@example.test");
-    setPassword("PokeMartLab!2026");
-    setError(null);
   };
 
   return (
@@ -88,14 +82,6 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps)
               className="w-full px-3 py-1.5 text-xs font-mono rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-1"
             />
           </div>
-
-          <button
-            type="button"
-            onClick={handleFillDemo}
-            className="w-full py-1 text-[11px] font-mono text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-zinc-200 border border-dashed border-zinc-300 dark:border-zinc-700 rounded transition-colors text-center"
-          >
-            Auto-fill Lab Demo Account (lab-user-001)
-          </button>
 
           <div className="pt-2">
             <button
