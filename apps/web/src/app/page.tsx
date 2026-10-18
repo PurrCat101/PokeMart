@@ -727,11 +727,13 @@ export default function PokemartCommerceTerminal() {
       />
 
       {/* Sign In Modal */}
-      <LoginModal
-        isOpen={isLoginOpen}
-        onClose={() => setIsLoginOpen(false)}
-        onLoginSuccess={handleLogin}
-      />
+      {isLoginOpen && (
+        <LoginModal
+          isOpen={isLoginOpen}
+          onClose={() => setIsLoginOpen(false)}
+          onLoginSuccess={handleLogin}
+        />
+      )}
 
       {/* Toast Feedback */}
       <Toast toast={toast} onClose={() => setToast(null)} />
