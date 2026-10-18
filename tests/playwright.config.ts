@@ -32,6 +32,11 @@ export default defineConfig({
       use: { baseURL: testConfig.bffBaseUrl },
     },
     {
+      name: 'ui',
+      testMatch: ['ui/**/*.spec.ts'],
+      use: { baseURL: process.env.WEB_BASE_URL ?? 'http://localhost:3002' },
+    },
+    {
       name: 'pokeapi',
       testMatch: ['PokeAPI/**/*.spec.ts'],
       dependencies: ['real-state-setup'],

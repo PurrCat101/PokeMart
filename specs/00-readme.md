@@ -1,6 +1,6 @@
 # PokéMart API Automation Lab
 
-โปรเจ็กต์ตัวอย่างสำหรับฝึก API testing ด้วย Playwright และ TypeScript มี BFF, PokéMart API, MySQL, WireMock และ OpenAPI/Swagger UI โดยใช้ข้อมูล Pokémon แบบ static เพื่อให้ทดสอบซ้ำได้โดยไม่ต้องเรียก PokéAPI ทุกครั้ง
+โปรเจ็กต์ตัวอย่างสำหรับฝึก API testing ด้วย Playwright และ TypeScript พร้อมเว็บแอป Next.js มี BFF, PokéMart API, MySQL, WireMock และ OpenAPI/Swagger UI โดยใช้ข้อมูล Pokémon แบบ static เพื่อให้ทดสอบซ้ำได้โดยไม่ต้องเรียก PokéAPI ทุกครั้ง
 
 ## สถาปัตยกรรม
 
@@ -134,6 +134,7 @@ npm run test:e2e
 | [`04-testing.md`](04-testing.md) | แนวทางและ coverage tests |
 | [`05-operations.md`](05-operations.md) | Compose และ operations |
 | [`06-acceptance-and-decisions.md`](06-acceptance-and-decisions.md) | Acceptance criteria และ decisions |
+| [`09-frontend.md`](09-frontend.md) | Web frontend, API boundary และ local runtime |
 | [`PROGRESS.md`](PROGRESS.md) | สถานะงานและ validation ที่ทำแล้ว |
 
 ## คำเตือน

@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-Build a practical API automation lab around a fictional PokéMart where players can browse and purchase Pokémon. Use published static reference data from the PokéAPI project instead of inventing Pokémon data manually or calling a live API during every test run.
+Build a practical API automation lab and web application around a fictional PokéMart where players can browse and purchase Pokémon. Use published static reference data from the PokéAPI project instead of inventing Pokémon data manually or calling a live API during every test run.
 
 Learning goals:
 - Practice Playwright Test + TypeScript API automation.
@@ -14,6 +14,7 @@ Learning goals:
 - Maintain two complementary functional test layers: end-to-end business flows and endpoint-level API specification/validation tests.
 - Standardize local operations through a Makefile.
 - Prepare the application, test data, and telemetry so a later k6 performance-testing lab can be added without redesigning the system.
+- Provide a Next.js browser frontend for catalog browsing, trainer sign-in, checkout, wallet, inventory, and purchase history through the public BFF.
 
 ## 2. Scope
 
@@ -28,11 +29,11 @@ Learning goals:
 - Deterministic test-data setup, cleanup, and reset workflows suitable for repeatable functional tests and future performance runs.
 - Basic structured application logs and health/readiness endpoints from the first implementation.
 - Local demo email/password login with hashed credentials and short-lived JWTs for user-owned API resources.
+- A browser frontend under `apps/web` that communicates with the public BFF and runs independently from Docker Compose.
 - A Makefile as the common entry point for frequently used development and test commands.
 
 ### Out of scope for the first iteration
 - Production-grade authentication/authorization, registration, password recovery, refresh/revocation, and login abuse controls.
-- Frontend UI.
 - Real-money transactions or real Pokémon trading.
 - Live PokéAPI calls during ordinary test execution.
 - Kubernetes, cloud deployment, heavy load tests, or a full CI/CD pipeline.
@@ -59,6 +60,7 @@ Real API validation and E2E cases live in their own suites and run against the c
 
 ### Responsibilities
 
+- **Web frontend** is the browser client. It calls the public BFF through same-origin `/api` routes rewritten by Next.js; it must not call the internal API directly. The development server runs on port `3002` outside Docker Compose.
 - **BFF** is the only public entry point. It validates the public contract, forwards requests (including `X-Request-Id` and the purchase request body) to the PokéMart API, and maps responses and errors to the public contract.
 - **PokéMart API** owns business rules, transactions, duplicate-purchase detection, and MySQL access.
 - **MySQL** is the durable store for all shop-owned business state.
@@ -66,6 +68,7 @@ Real API validation and E2E cases live in their own suites and run against the c
 ## 5. Technology choices
 
 - TypeScript and Node.js
+- Next.js App Router, React, and Tailwind CSS for the web frontend
 - Playwright Test with `APIRequestContext`
 - Express + TypeScript for BFF and PokéMart API
 - MySQL 8.x with a pinned image tag
@@ -84,7 +87,8 @@ This is the initial application-level layout. The internal `tests/` structure mu
 pokemart-api-lab/
 ├── apps/
 │   ├── bff/
-│   └── pokemart-api/
+│   ├── pokemart-api/
+│   └── web/                    # Next.js frontend; run separately on port 3002
 ├── database/
 │   ├── schema/
 │   ├── seed/
@@ -94,7 +98,8 @@ pokemart-api-lab/
 ├── wiremock/
 │   └── mappings/
 ├── specs/
-│   └── openapi.yaml             # BFF public contract
+│   ├── openapi.yaml             # BFF public contract
+│   └── 09-frontend.md           # frontend behavior and integration boundary
 ├── scripts/
 │   ├── import-reference-data/   # local import; no live fetch in tests
 │   └── test-data/               # deterministic setup/reset helpers as needed
