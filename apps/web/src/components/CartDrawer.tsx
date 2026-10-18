@@ -59,7 +59,7 @@ function CartItemRow({
   };
 
   return (
-    <div className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/40 flex items-center space-x-3">
+    <div data-testid={`cart-item-${item.pokemon.id}`} className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/40 flex items-center space-x-3">
       {/* Sprite */}
       <div className="w-12 h-12 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center shrink-0">
         {item.pokemon.spriteUrl ? (
@@ -102,6 +102,7 @@ function CartItemRow({
         </button>
         <input
           type="text"
+          data-testid={`cart-item-quantity-${item.pokemon.id}`}
           inputMode="numeric"
           pattern="[0-9]*"
           value={inputValue}
@@ -132,6 +133,7 @@ function CartItemRow({
       <button
         type="button"
         onClick={() => onRemoveItem(item.pokemon.id)}
+        data-testid={`cart-item-remove-${item.pokemon.id}`}
         className="p-1 text-zinc-400 hover:text-red-600 transition-colors"
         aria-label={`Remove ${item.pokemon.name} from cart`}
       >
@@ -170,12 +172,12 @@ export function CartDrawer({
       />
 
       <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
-        <div className="w-screen max-w-md bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 shadow-2xl flex flex-col animate-in slide-in-from-right duration-200">
+        <div data-testid="cart-drawer" role="dialog" aria-modal="true" aria-labelledby="cart-title" className="w-screen max-w-md bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 shadow-2xl flex flex-col animate-in slide-in-from-right duration-200">
           {/* Drawer Header */}
           <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-zinc-900/60">
             <div className="flex items-center space-x-2">
               <CartIcon className="w-5 h-5 text-zinc-700 dark:text-zinc-300" />
-              <h2 className="text-sm font-bold uppercase tracking-wider text-zinc-900 dark:text-zinc-100">
+              <h2 id="cart-title" className="text-sm font-bold uppercase tracking-wider text-zinc-900 dark:text-zinc-100">
                 Trainer Shopping Bag
               </h2>
               <span className="font-mono text-xs text-zinc-500 font-semibold">
@@ -185,6 +187,7 @@ export function CartDrawer({
             <button
               type="button"
               onClick={onClose}
+              data-testid="cart-close"
               className="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded transition-colors"
             >
               <XIcon className="w-4 h-4" />
@@ -194,7 +197,7 @@ export function CartDrawer({
           {/* Drawer Content */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4">
             {cart.length === 0 ? (
-              <div className="py-20 text-center space-y-3">
+              <div data-testid="cart-empty" className="py-20 text-center space-y-3">
                 <div className="w-14 h-14 mx-auto rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-400">
                   <CartIcon className="w-6 h-6" />
                 </div>
@@ -219,6 +222,7 @@ export function CartDrawer({
                   <button
                     type="button"
                     onClick={onClearCart}
+                    data-testid="cart-clear"
                     className="text-zinc-500 hover:text-red-600 text-[11px] transition-colors"
                   >
                     Clear All
@@ -284,6 +288,7 @@ export function CartDrawer({
                 <button
                   type="button"
                   onClick={onOpenLogin}
+                  data-testid="cart-sign-in"
                   className="w-full py-2.5 px-4 rounded text-xs font-bold uppercase tracking-wider text-white bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-1"
                 >
                   Sign In as Trainer to Checkout
@@ -293,6 +298,7 @@ export function CartDrawer({
                   type="button"
                   onClick={onProceedToCheckout}
                   disabled={hasInsufficientFunds}
+                  data-testid="cart-proceed-to-checkout"
                   className="w-full py-2.5 px-4 rounded text-xs font-bold uppercase tracking-wider text-white bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-1"
                 >
                   Proceed to Checkout • ₽ {subtotal.toLocaleString()}

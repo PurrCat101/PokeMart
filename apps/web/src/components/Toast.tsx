@@ -30,6 +30,8 @@ export function Toast({ toast, onClose }: ToastProps) {
   return (
     <div className="fixed bottom-5 right-5 z-50 max-w-sm w-full animate-in slide-in-from-bottom-5 duration-200">
       <div
+        data-testid={`toast-${toast.type}`}
+        role={isError ? "alert" : "status"}
         className={`p-3.5 rounded-lg border shadow-lg flex items-start space-x-3 bg-white dark:bg-zinc-900 ${
           isSuccess
             ? "border-emerald-300 dark:border-emerald-800 text-emerald-950 dark:text-emerald-100"

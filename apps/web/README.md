@@ -51,3 +51,20 @@ npm run start:web
 4. **Transactional Idempotency:** Creates unique UUID `purchaseId` per checkout, with balance & stock validation.
 5. **Trainer Backpack (Inventory):** Live synced collection of purchased Pokémon.
 6. **Audit Ledger:** Chronological record of all past purchases with transaction UUIDs.
+
+## Playwright UI automation
+
+Frontend controls expose a stable `data-testid` contract for browser tests. Selectors use lowercase kebab-case names; repeated records append their stable domain ID, for example `pokemon-card-1` and `pokemon-add-to-cart-1`. QA can write tests from requirements/Figma using the selector-to-locator table in [specs/09-frontend.md](../../specs/09-frontend.md) even before the page is implemented. Do not derive tests from CSS classes, DOM structure, or visible copy when a test ID is defined. Keep semantic role/name assertions for accessibility behavior, and treat test IDs as selectors rather than a replacement for accessible markup.
+
+The UI suite has one end-to-end purchase case that checks wallet debit, stock reduction, inventory increase, and the purchase ledger. It lives in `tests/testCases/ui/` and runs separately from API, database-state setup, and Docker Compose:
+
+```powershell
+$env:WEB_BASE_URL = 'http://localhost:3002'
+npm run test:ui
+```
+
+```bash
+WEB_BASE_URL=http://localhost:3002 npm run test:ui
+```
+
+Set `WEB_BASE_URL` to the target site's origin to run the same suite against another deployment. The target web server and its BFF/API/database must already be reachable, with the configured demo trainer and a funded wallet. UI tests do not start these services or require the API test project's global state setup. The purchase case creates a real transaction and changes wallet, inventory, and stock; use an isolated test environment. Set `AUTH_TEST_EMAIL` and `AUTH_TEST_PASSWORD` if the target uses credentials different from the selected `tests/configs/.env.*` file. Add browser scenarios under `tests/testCases/ui/` and use `page.getByTestId('...')` with the selector names documented in [specs/09-frontend.md](../../specs/09-frontend.md).

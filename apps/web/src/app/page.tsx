@@ -392,7 +392,7 @@ export default function PokemartCommerceTerminal() {
   const hasActiveFilters = searchQuery !== "" || selectedType !== "all" || stockOnly || sortBy !== "id-asc";
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 flex flex-col font-sans">
+    <div data-testid="app-shell" className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 flex flex-col font-sans">
       {/* Header */}
       <Header
         activeTab={activeTab}
@@ -407,10 +407,10 @@ export default function PokemartCommerceTerminal() {
       />
 
       {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main data-testid="app-main" className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Offline / Error Diagnostic Banner */}
         {bffStatusError && (
-          <div className="mb-6 p-4 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 flex items-start space-x-3 text-red-900 dark:text-red-200 text-xs">
+          <div data-testid="catalog-service-error" role="alert" className="mb-6 p-4 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 flex items-start space-x-3 text-red-900 dark:text-red-200 text-xs">
             <AlertCircleIcon className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
             <div className="flex-1">
               <span className="font-bold">System Status Warning: </span>
@@ -419,6 +419,7 @@ export default function PokemartCommerceTerminal() {
             <button
               type="button"
               onClick={fetchFullCatalog}
+              data-testid="catalog-retry"
               className="px-2.5 py-1 text-xs font-semibold bg-red-600 hover:bg-red-700 text-white rounded transition-colors shrink-0"
             >
               Retry Connection
@@ -437,6 +438,7 @@ export default function PokemartCommerceTerminal() {
                   <SearchIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
                   <input
                     type="text"
+                    data-testid="catalog-search"
                     placeholder="Search by Pokémon name or #ID..."
                     value={searchQuery}
                     onChange={(e) => handleSearchChange(e.target.value)}
@@ -459,6 +461,7 @@ export default function PokemartCommerceTerminal() {
                   <button
                     type="button"
                     onClick={handleStockToggle}
+                    data-testid="catalog-in-stock-filter"
                     className={`px-3 py-1.5 rounded border text-xs font-medium transition-colors flex items-center space-x-1.5 ${
                       stockOnly
                         ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 border-zinc-900 dark:border-zinc-100"
@@ -475,6 +478,7 @@ export default function PokemartCommerceTerminal() {
                     <select
                       value={sortBy}
                       onChange={(e) => handleSortChange(e.target.value as any)}
+                      data-testid="catalog-sort"
                       aria-label="Sort catalog items"
                       className="bg-transparent text-xs text-zinc-800 dark:text-zinc-200 focus:outline-none font-medium cursor-pointer"
                     >
@@ -491,6 +495,7 @@ export default function PokemartCommerceTerminal() {
                     type="button"
                     onClick={fetchFullCatalog}
                     disabled={isCatalogLoading}
+                    data-testid="catalog-refresh"
                     className="p-1.5 rounded border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                     aria-label="Refresh Catalog"
                   >
@@ -510,6 +515,7 @@ export default function PokemartCommerceTerminal() {
                     key={type}
                     type="button"
                     onClick={() => handleTypeChange(type)}
+                    data-testid={`catalog-type-${type}`}
                     className={`px-2.5 py-1 rounded text-xs font-medium uppercase tracking-wider transition-colors shrink-0 ${
                       selectedType === type
                         ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-semibold shadow-xs"
@@ -522,7 +528,7 @@ export default function PokemartCommerceTerminal() {
               </div>
 
               {/* Results Count & Active Filter Indicator */}
-              <div className="flex items-center justify-between text-xs font-mono pt-1 text-zinc-500">
+              <div data-testid="catalog-results-summary" className="flex items-center justify-between text-xs font-mono pt-1 text-zinc-500">
                 <div>
                   Showing <span className="font-bold text-zinc-800 dark:text-zinc-200">{paginatedCatalog.length}</span> of{" "}
                   <span className="font-bold text-zinc-800 dark:text-zinc-200">{totalFilteredCount}</span> Pokémon
@@ -537,6 +543,7 @@ export default function PokemartCommerceTerminal() {
                   <button
                     type="button"
                     onClick={handleClearFilters}
+                    data-testid="catalog-clear-filters"
                     className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 underline text-[11px] transition-colors"
                   >
                     Clear All Filters
@@ -547,7 +554,7 @@ export default function PokemartCommerceTerminal() {
 
             {/* Catalog Grid */}
             {isCatalogLoading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              <div data-testid="catalog-loading" className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {Array.from({ length: ITEMS_PER_PAGE }).map((_, i) => (
                   <div
                     key={i}
@@ -556,7 +563,7 @@ export default function PokemartCommerceTerminal() {
                 ))}
               </div>
             ) : filteredCatalog.length === 0 ? (
-              <div className="p-16 text-center bg-white dark:bg-zinc-900 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg space-y-2">
+              <div data-testid="catalog-empty" className="p-16 text-center bg-white dark:bg-zinc-900 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg space-y-2">
                 <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
                   No Pokémon matched your current filters.
                 </p>
@@ -566,13 +573,14 @@ export default function PokemartCommerceTerminal() {
                 <button
                   type="button"
                   onClick={handleClearFilters}
+                  data-testid="catalog-reset-filters"
                   className="mt-3 px-3.5 py-1.5 text-xs font-semibold text-white bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 rounded hover:bg-zinc-800 transition-colors"
                 >
                   Reset Catalog Filters
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              <div data-testid="catalog-grid" className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {paginatedCatalog.map((item) => (
                   <PokemonCard
                     key={item.pokemon.id}
@@ -586,7 +594,7 @@ export default function PokemartCommerceTerminal() {
 
             {/* Pagination Controls */}
             {totalPages > 1 && (
-              <div className="flex items-center justify-between border-t border-zinc-200 dark:border-zinc-800 pt-4 text-xs font-mono">
+              <div data-testid="catalog-pagination" className="flex items-center justify-between border-t border-zinc-200 dark:border-zinc-800 pt-4 text-xs font-mono">
                 <span className="text-zinc-500">
                   Page <span className="font-bold text-zinc-900 dark:text-zinc-100">{safeCurrentPage}</span> of {totalPages}
                 </span>
@@ -596,6 +604,7 @@ export default function PokemartCommerceTerminal() {
                     type="button"
                     onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                     disabled={safeCurrentPage <= 1}
+                    data-testid="catalog-page-previous"
                     className="px-2.5 py-1 rounded border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center space-x-1"
                   >
                     <ChevronLeftIcon className="w-3.5 h-3.5" />
@@ -616,6 +625,7 @@ export default function PokemartCommerceTerminal() {
                             key={pageNum}
                             type="button"
                             onClick={() => setCurrentPage(pageNum)}
+                            data-testid={`catalog-page-${pageNum}`}
                             className={`w-7 h-7 rounded text-xs font-semibold ${
                               safeCurrentPage === pageNum
                                 ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
@@ -644,6 +654,7 @@ export default function PokemartCommerceTerminal() {
                     type="button"
                     onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                     disabled={safeCurrentPage >= totalPages}
+                    data-testid="catalog-page-next"
                     className="px-2.5 py-1 rounded border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center space-x-1"
                   >
                     <span>Next</span>

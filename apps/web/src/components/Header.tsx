@@ -26,7 +26,7 @@ export function Header({
   onLogout,
 }: HeaderProps) {
   return (
-    <header className="sticky top-0 z-30 bg-white/95 dark:bg-zinc-900/95 border-b border-zinc-200 dark:border-zinc-800 backdrop-blur-sm">
+    <header data-testid="app-header" className="sticky top-0 z-30 bg-white/95 dark:bg-zinc-900/95 border-b border-zinc-200 dark:border-zinc-800 backdrop-blur-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Brand Identity */}
@@ -50,6 +50,7 @@ export function Header({
               <button
                 type="button"
                 onClick={() => onTabChange("catalog")}
+                data-testid="nav-catalog"
                 className={`px-3 py-1.5 rounded text-sm font-medium transition-colors flex items-center space-x-2 ${
                   activeTab === "catalog"
                     ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
@@ -63,6 +64,7 @@ export function Header({
               <button
                 type="button"
                 onClick={() => onTabChange("inventory")}
+                data-testid="nav-inventory"
                 className={`px-3 py-1.5 rounded text-sm font-medium transition-colors flex items-center space-x-2 ${
                   activeTab === "inventory"
                     ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
@@ -81,6 +83,7 @@ export function Header({
               <button
                 type="button"
                 onClick={() => onTabChange("purchases")}
+                data-testid="nav-purchases"
                 className={`px-3 py-1.5 rounded text-sm font-medium transition-colors flex items-center space-x-2 ${
                   activeTab === "purchases"
                     ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
@@ -99,6 +102,7 @@ export function Header({
             <button
               type="button"
               onClick={onOpenCart}
+              data-testid="open-cart"
               className="flex items-center space-x-2 px-3 py-1.5 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 dark:focus-visible:ring-zinc-100 focus-visible:ring-offset-1"
               aria-label="Open Shopping Bag"
             >
@@ -118,7 +122,7 @@ export function Header({
               <div className="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900">
                 <WalletIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                 <span className="text-xs text-zinc-600 dark:text-zinc-400 font-medium">Balance:</span>
-                <span className="text-sm font-mono font-semibold tabular-nums text-zinc-950 dark:text-zinc-50">
+                <span data-testid="wallet-balance" className="text-sm font-mono font-semibold tabular-nums text-zinc-950 dark:text-zinc-50">
                   ₽ {wallet ? wallet.balance.toLocaleString() : "---"}
                 </span>
               </div>
@@ -136,6 +140,7 @@ export function Header({
                 <button
                   type="button"
                   onClick={onLogout}
+                  data-testid="sign-out"
                   className="px-2.5 py-1 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded border border-zinc-200 dark:border-zinc-700 transition-colors"
                 >
                   Sign Out
@@ -145,6 +150,7 @@ export function Header({
               <button
                 type="button"
                 onClick={onOpenLogin}
+                data-testid="sign-in"
                 className="px-3.5 py-1.5 text-xs font-semibold rounded bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-1"
               >
                 Sign In as Trainer
@@ -158,6 +164,7 @@ export function Header({
           <button
             type="button"
             onClick={() => onTabChange("catalog")}
+            data-testid="nav-catalog-mobile"
             className={`px-3 py-1 rounded text-xs font-medium ${
               activeTab === "catalog"
                 ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
@@ -169,6 +176,7 @@ export function Header({
           <button
             type="button"
             onClick={() => onTabChange("inventory")}
+            data-testid="nav-inventory-mobile"
             className={`px-3 py-1 rounded text-xs font-medium ${
               activeTab === "inventory"
                 ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
@@ -180,6 +188,7 @@ export function Header({
           <button
             type="button"
             onClick={() => onTabChange("purchases")}
+            data-testid="nav-purchases-mobile"
             className={`px-3 py-1 rounded text-xs font-medium ${
               activeTab === "purchases"
                 ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"

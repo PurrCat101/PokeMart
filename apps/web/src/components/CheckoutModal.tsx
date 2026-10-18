@@ -64,13 +64,13 @@ export function CheckoutModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/60 backdrop-blur-[2px]">
+    <div data-testid="checkout-dialog" role="dialog" aria-modal="true" aria-labelledby="checkout-title" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/60 backdrop-blur-[2px]">
       <div className="w-full max-w-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50">
           <div className="flex items-center space-x-2">
             <PokeballIcon className="w-5 h-5 text-red-600" />
-            <h2 className="text-sm font-bold uppercase tracking-wider text-zinc-950 dark:text-zinc-50">
+            <h2 id="checkout-title" className="text-sm font-bold uppercase tracking-wider text-zinc-950 dark:text-zinc-50">
               {isFinished ? "Order Authorization Receipt" : "Authorize Purchase Order"}
             </h2>
           </div>
@@ -89,7 +89,7 @@ export function CheckoutModal({
         <div className="p-6 overflow-y-auto space-y-4 flex-1">
           {/* Ongoing Processing State */}
           {isProcessing ? (
-            <div className="py-12 text-center space-y-4">
+            <div data-testid="checkout-progress" className="py-12 text-center space-y-4">
               <div className="w-12 h-12 mx-auto rounded-full bg-red-50 dark:bg-red-950/40 text-red-600 flex items-center justify-center animate-spin">
                 <PokeballIcon className="w-6 h-6" />
               </div>
@@ -104,7 +104,7 @@ export function CheckoutModal({
             /* Finished Receipt State */
             <div className="space-y-4">
               {completedPurchases.length > 0 && (
-                <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded text-xs space-y-1 text-emerald-900 dark:text-emerald-200">
+                <div data-testid="checkout-success" role="status" className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded text-xs space-y-1 text-emerald-900 dark:text-emerald-200">
                   <div className="flex items-center space-x-1.5 font-bold">
                     <CheckIcon className="w-4 h-4 text-emerald-600" />
                     <span>Successfully Acquired {completedPurchases.length} Order Item(s)!</span>
@@ -116,7 +116,7 @@ export function CheckoutModal({
               )}
 
               {checkoutErrors.length > 0 && (
-                <div className="p-3.5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded text-xs space-y-1 text-red-900 dark:text-red-200">
+                <div data-testid="checkout-errors" role="alert" className="p-3.5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded text-xs space-y-1 text-red-900 dark:text-red-200">
                   <div className="flex items-center space-x-1.5 font-bold">
                     <AlertCircleIcon className="w-4 h-4 text-red-600" />
                     <span>Some items could not be processed:</span>
@@ -140,6 +140,7 @@ export function CheckoutModal({
                   {completedPurchases.map((tx) => (
                     <div
                       key={tx.purchaseId}
+                      data-testid={`checkout-purchase-${tx.purchaseId}`}
                       className="p-2.5 rounded bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 text-xs font-mono"
                     >
                       <div className="flex justify-between items-center text-zinc-900 dark:text-zinc-100 font-bold">
@@ -236,6 +237,7 @@ export function CheckoutModal({
             <button
               type="button"
               onClick={handleClose}
+              data-testid="checkout-close"
               className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-white bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 rounded transition-colors"
             >
               Close & View Inventory
@@ -254,6 +256,7 @@ export function CheckoutModal({
                 type="button"
                 onClick={handleStartCheckout}
                 disabled={isProcessing || remainingBalance < 0}
+                data-testid="checkout-confirm"
                 className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-white bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed rounded shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-1"
               >
                 Confirm Payment (₽ {totalCost.toLocaleString()})

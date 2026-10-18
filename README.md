@@ -104,6 +104,8 @@ npm run dev:web
 
 เปิด `http://localhost:3002` เว็บแอปเรียก public BFF ผ่าน Next.js rewrite โดยค่าเริ่มต้นชี้ไปที่ `http://localhost:3001`; ตั้ง `NEXT_PUBLIC_BFF_URL` หรือ `BFF_INTERNAL_URL` ใน `apps/web/.env.local` เมื่อต้องการเปลี่ยนปลายทาง ดูรายละเอียด feature และขอบเขตการเชื่อมต่อที่ [specs/09-frontend.md](specs/09-frontend.md)
 
+รัน Playwright UI tests กับเว็บที่เปิดอยู่ได้ด้วย `npm run test:ui`; ตั้ง `WEB_BASE_URL` เป็น origin ของเว็บเป้าหมายหากไม่ใช่ `http://localhost:3002` โดย test selectors ใช้ `data-testid` ตาม convention ใน [specs/09-frontend.md](specs/09-frontend.md)
+
 ## ทดลอง login และเรียก API
 
 บัญชีที่ล็อกอินได้จาก seed บน MySQL volume ใหม่มีหนึ่งบัญชี:

@@ -89,7 +89,7 @@ export function PokemonCard({
   const capitalizedName = pokemon.name.charAt(0).toUpperCase() + pokemon.name.slice(1);
 
   return (
-    <div className="flex flex-col bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden transition-all hover:border-zinc-300 dark:hover:border-zinc-700 shadow-xs">
+    <div data-testid={`pokemon-card-${pokemon.id}`} className="flex flex-col bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden transition-all hover:border-zinc-300 dark:hover:border-zinc-700 shadow-xs">
       {/* Top Banner: ID & Stock Badge */}
       <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-zinc-100 dark:border-zinc-800/80 bg-zinc-50/60 dark:bg-zinc-900/60">
         <span className="font-mono text-xs font-semibold text-zinc-500 dark:text-zinc-400">
@@ -108,7 +108,7 @@ export function PokemonCard({
                 isOutOfStock ? "bg-red-500" : listing.availableStock < 5 ? "bg-amber-500" : "bg-emerald-500"
               }`}
             />
-            <span className="font-mono text-xs text-zinc-600 dark:text-zinc-400">
+            <span data-testid={`pokemon-stock-${pokemon.id}`} className="font-mono text-xs text-zinc-600 dark:text-zinc-400">
               {isOutOfStock ? "Out of Stock" : `${listing.availableStock} in stock`}
             </span>
           </div>
@@ -137,10 +137,10 @@ export function PokemonCard({
       <div className="p-4 flex-1 flex flex-col justify-between">
         <div>
           <div className="flex items-start justify-between gap-2">
-            <h3 className="font-semibold text-zinc-900 dark:text-zinc-100 text-base leading-tight">
+            <h3 data-testid={`pokemon-name-${pokemon.id}`} className="font-semibold text-zinc-900 dark:text-zinc-100 text-base leading-tight">
               {capitalizedName}
             </h3>
-            <span className="font-mono font-bold text-sm text-zinc-900 dark:text-zinc-100 tabular-nums whitespace-nowrap">
+            <span data-testid={`pokemon-price-${pokemon.id}`} className="font-mono font-bold text-sm text-zinc-900 dark:text-zinc-100 tabular-nums whitespace-nowrap">
               ₽ {listing.price.toLocaleString()}
             </span>
           </div>
@@ -165,6 +165,7 @@ export function PokemonCard({
                   type="button"
                   onClick={handleDecrement}
                   disabled={quantity <= 1 || disabled}
+                  data-testid={`pokemon-quantity-decrease-${pokemon.id}`}
                   className="p-1.5 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   aria-label="Decrease quantity"
                 >
@@ -173,6 +174,7 @@ export function PokemonCard({
                 <input
                   id={`qty-input-${pokemon.id}`}
                   type="text"
+                  data-testid={`pokemon-quantity-${pokemon.id}`}
                   inputMode="numeric"
                   pattern="[0-9]*"
                   value={quantityInput}
@@ -186,6 +188,7 @@ export function PokemonCard({
                   type="button"
                   onClick={handleIncrement}
                   disabled={quantity >= maxPurchase || disabled}
+                  data-testid={`pokemon-quantity-increase-${pokemon.id}`}
                   className="p-1.5 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   aria-label="Increase quantity"
                 >
@@ -199,6 +202,7 @@ export function PokemonCard({
             type="button"
             onClick={handleAdd}
             disabled={isOutOfStock || disabled || (availableRemaining <= 0 && inCartQuantity > 0)}
+            data-testid={`pokemon-add-to-cart-${pokemon.id}`}
             className={`w-full py-2 px-3 rounded text-xs font-semibold tracking-wide uppercase transition-colors flex items-center justify-center space-x-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 dark:focus-visible:ring-zinc-100 focus-visible:ring-offset-1 ${
               isOutOfStock
                 ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-600 cursor-not-allowed"
