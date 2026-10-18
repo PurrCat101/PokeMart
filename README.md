@@ -1,6 +1,6 @@
 # PokéMart API Automation Lab
 
-โปรเจ็กต์สำหรับฝึก API testing ด้วย Playwright และ TypeScript ประกอบด้วย public BFF, internal PokéMart API, MySQL, WireMock และ OpenAPI/Swagger UI ข้อมูล Pokémon แบบ static ช่วยให้เริ่มระบบและทดสอบซ้ำได้โดยไม่ต้องเรียก PokéAPI ทุกครั้ง
+โปรเจ็กต์ PokéMart สำหรับฝึก API testing ด้วย Playwright และ TypeScript พร้อมเว็บแอป Next.js ประกอบด้วย public BFF, internal PokéMart API, MySQL, WireMock และ OpenAPI/Swagger UI ข้อมูล Pokémon แบบ static ช่วยให้เริ่มระบบและทดสอบซ้ำได้โดยไม่ต้องเรียก PokéAPI ทุกครั้ง
 
 ## สถาปัตยกรรม
 
@@ -10,6 +10,7 @@
 
 | Service | URL เมื่อรัน local | หน้าที่ |
 |---|---|---|
+| Web frontend | `http://localhost:3002` | Next.js UI (เริ่มแยกด้วย `npm run dev:web`) สำหรับ catalog, cart/checkout, wallet, inventory และ purchase history |
 | BFF | `http://localhost:3001` | Public API สำหรับ client และแปลง response เป็น DTO ฝั่ง public |
 | PokéMart API | `http://localhost:3000` | Internal service สำหรับ business rules และการเข้าถึงข้อมูล |
 | WireMock | `http://localhost:8080` | จำลอง public API สำหรับ contract tests |
@@ -93,9 +94,29 @@ MySQL จะสร้าง schema และ seed data เมื่อเริ�
 
 > ค่าใน `.env.example` เป็น local-development values เท่านั้น ห้ามใช้กับ shared/production environment หรือ commit `.env` และ credentials จริง
 
+## เริ่มเว็บแอป
+
+เว็บแอปไม่รวมอยู่ใน Docker Compose ให้เปิด terminal อีกหน้าที่ root หลังจาก BFF พร้อม แล้วรัน:
+
+```powershell
+npm run dev:web
+```
+
+เปิด `http://localhost:3002` เว็บแอปเรียก public BFF ผ่าน Next.js rewrite โดยค่าเริ่มต้นชี้ไปที่ `http://localhost:3001`; ตั้ง `NEXT_PUBLIC_BFF_URL` หรือ `BFF_INTERNAL_URL` ใน `apps/web/.env.local` เมื่อต้องการเปลี่ยนปลายทาง ดูรายละเอียด feature และขอบเขตการเชื่อมต่อที่ [specs/09-frontend.md](specs/09-frontend.md)
+
+รัน Playwright UI tests กับเว็บที่เปิดอยู่ได้ด้วย `npm run test:ui`; ตั้ง `WEB_BASE_URL` เป็น origin ของเว็บเป้าหมายหากไม่ใช่ `http://localhost:3002` โดย test selectors ใช้ `data-testid` ตาม convention ใน [specs/09-frontend.md](specs/09-frontend.md)
+
 ## ทดลอง login และเรียก API
 
-เมื่อระบบพร้อมแล้ว สามารถทดลอง login ด้วย demo account ที่ seed มาได้ (สำหรับ local lab เท่านั้น):
+บัญชีที่ล็อกอินได้จาก seed บน MySQL volume ใหม่มีหนึ่งบัญชี:
+
+| ผู้ใช้ | Email | Password | ใช้สำหรับ |
+|---|---|---|---|
+| PokéMart Lab User (`lab-user-001`) | `lab-user-001@example.test` | `PokeMartLab!2026` | ทดลองเว็บและเรียก API ใน local lab เท่านั้น |
+
+ผู้ใช้ `empty-user-001@example.invalid` เป็น test profile ที่ไม่มี wallet และไม่มี password จึงใช้ล็อกอินไม่ได้ เว็บจะไม่กรอกข้อมูลบัญชีให้อัตโนมัติ ให้ป้อน demo credentials ข้างต้นด้วยตนเองในหน้า sign in บัญชีและ password นี้เป็นข้อมูลสาธิตสำหรับ local lab เท่านั้น ห้ามนำไปใช้กับระบบ shared หรือ production
+
+เมื่อระบบพร้อมแล้ว สามารถทดลอง login ด้วย demo account ได้:
 
 ### Windows — PowerShell
 
@@ -183,6 +204,7 @@ TEST_ENV=sit npm run test:api
 
 ```bash
 npm run build
+npm run build:web
 docker compose ps
 docker compose logs -f
 docker compose down
@@ -257,6 +279,7 @@ Client สร้าง UUID `purchaseId` ก่อนเริ่มซื้อ
 
 ## API specifications และเอกสาร
 
+- Frontend behavior และ local setup: [specs/09-frontend.md](specs/09-frontend.md)
 - Public BFF OpenAPI: [specs/openapi.yaml](specs/openapi.yaml)
 - Internal PokéMart API OpenAPI: [specs/pokemart-openapi.yaml](specs/pokemart-openapi.yaml)
 - API behavior และ error contracts: [specs/03-api-contract.md](specs/03-api-contract.md)
