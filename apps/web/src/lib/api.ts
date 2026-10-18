@@ -118,6 +118,23 @@ export const api = {
     return request<CatalogResponse>(`/api/pokemon?limit=${limit}&offset=${offset}`);
   },
 
+  async getAllPokemon(): Promise<CatalogItem[]> {
+    const firstPage = await request<CatalogResponse>("/api/pokemon?limit=100&offset=0");
+    const allItems = [...firstPage.items];
+    if (firstPage.totalCount > 100) {
+      const remainingPages = Math.ceil((firstPage.totalCount - 100) / 100);
+      const requests = [];
+      for (let i = 1; i <= remainingPages; i++) {
+        requests.push(request<CatalogResponse>(`/api/pokemon?limit=100&offset=${i * 100}`));
+      }
+      const additionalPages = await Promise.all(requests);
+      for (const page of additionalPages) {
+        allItems.push(...page.items);
+      }
+    }
+    return allItems;
+  },
+
   async getPokemonDetail(id: number): Promise<CatalogItem> {
     return request<CatalogItem>(`/api/pokemon/${id}`);
   },

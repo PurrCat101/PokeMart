@@ -2,19 +2,28 @@ import React, { useState } from "react";
 import Image from "next/image";
 import { CatalogItem } from "../types/api";
 import { TypeBadge } from "./TypeBadge";
-import { PlusIcon, MinusIcon, PokeballIcon } from "./icons";
+import { PlusIcon, MinusIcon, PokeballIcon, CheckIcon, CartIcon } from "./icons";
 
 interface PokemonCardProps {
   item: CatalogItem;
-  onInitiatePurchase: (item: CatalogItem, quantity: number) => void;
+  onAddToCart: (item: CatalogItem, quantity: number) => void;
+  inCartQuantity?: number;
   disabled?: boolean;
 }
 
-export function PokemonCard({ item, onInitiatePurchase, disabled = false }: PokemonCardProps) {
+export function PokemonCard({
+  item,
+  onAddToCart,
+  inCartQuantity = 0,
+  disabled = false,
+}: PokemonCardProps) {
   const { pokemon, listing } = item;
   const [quantity, setQuantity] = useState(1);
+  const [justAdded, setJustAdded] = useState(false);
+
   const isOutOfStock = listing.availableStock <= 0;
-  const maxPurchase = Math.min(listing.availableStock, 99);
+  const availableRemaining = Math.max(0, listing.availableStock - inCartQuantity);
+  const maxPurchase = Math.min(availableRemaining > 0 ? availableRemaining : listing.availableStock, 99);
 
   const handleIncrement = () => {
     if (quantity < maxPurchase) setQuantity((prev) => prev + 1);
@@ -22,6 +31,16 @@ export function PokemonCard({ item, onInitiatePurchase, disabled = false }: Poke
 
   const handleDecrement = () => {
     if (quantity > 1) setQuantity((prev) => prev - 1);
+  };
+
+  const handleAdd = () => {
+    if (isOutOfStock || disabled || maxPurchase <= 0) return;
+    onAddToCart(item, quantity);
+    setJustAdded(true);
+    setQuantity(1);
+    setTimeout(() => {
+      setJustAdded(false);
+    }, 1200);
   };
 
   const formattedId = `#${String(pokemon.id).padStart(3, "0")}`;
@@ -34,15 +53,23 @@ export function PokemonCard({ item, onInitiatePurchase, disabled = false }: Poke
         <span className="font-mono text-xs font-semibold text-zinc-600 dark:text-zinc-400">
           {formattedId}
         </span>
-        <div className="flex items-center space-x-1.5">
-          <span
-            className={`w-1.5 h-1.5 rounded-full ${
-              isOutOfStock ? "bg-red-500" : listing.availableStock < 5 ? "bg-amber-500" : "bg-emerald-500"
-            }`}
-          />
-          <span className="font-mono text-xs text-zinc-600 dark:text-zinc-400">
-            {isOutOfStock ? "Out of Stock" : `${listing.availableStock} in stock`}
-          </span>
+        <div className="flex items-center space-x-2">
+          {inCartQuantity > 0 && (
+            <span className="inline-flex items-center space-x-1 font-mono text-[11px] font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 px-1.5 py-0.5 rounded border border-red-200 dark:border-red-900">
+              <CartIcon className="w-3 h-3" />
+              <span>{inCartQuantity} in bag</span>
+            </span>
+          )}
+          <div className="flex items-center space-x-1">
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                isOutOfStock ? "bg-red-500" : listing.availableStock < 5 ? "bg-amber-500" : "bg-emerald-500"
+              }`}
+            />
+            <span className="font-mono text-xs text-zinc-600 dark:text-zinc-400">
+              {isOutOfStock ? "Out of Stock" : `${listing.availableStock} in stock`}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -84,9 +111,9 @@ export function PokemonCard({ item, onInitiatePurchase, disabled = false }: Poke
           </div>
         </div>
 
-        {/* Purchase Controls */}
+        {/* Purchase / Cart Controls */}
         <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-2.5">
-          {!isOutOfStock && (
+          {!isOutOfStock && availableRemaining > 0 && (
             <div className="flex items-center justify-between text-xs">
               <span className="text-zinc-500 dark:text-zinc-400 font-medium">Quantity</span>
               <div className="flex items-center border border-zinc-200 dark:border-zinc-700 rounded bg-zinc-50 dark:bg-zinc-800/50">
@@ -117,15 +144,35 @@ export function PokemonCard({ item, onInitiatePurchase, disabled = false }: Poke
 
           <button
             type="button"
-            onClick={() => onInitiatePurchase(item, quantity)}
-            disabled={isOutOfStock || disabled}
-            className={`w-full py-2 px-3 rounded text-xs font-semibold tracking-wide uppercase transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-1 ${
+            onClick={handleAdd}
+            disabled={isOutOfStock || disabled || (availableRemaining <= 0 && inCartQuantity > 0)}
+            className={`w-full py-2 px-3 rounded text-xs font-semibold tracking-wide uppercase transition-colors flex items-center justify-center space-x-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-1 ${
               isOutOfStock
                 ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-600 cursor-not-allowed"
+                : availableRemaining <= 0 && inCartQuantity > 0
+                ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 cursor-not-allowed"
+                : justAdded
+                ? "bg-emerald-600 text-white"
                 : "bg-red-600 hover:bg-red-700 active:bg-red-800 text-white shadow-sm"
             }`}
           >
-            {isOutOfStock ? "Out of Stock" : `Buy ${quantity > 1 ? `(${quantity}) • ₽ ${(listing.price * quantity).toLocaleString()}` : `• ₽ ${listing.price.toLocaleString()}`}`}
+            {isOutOfStock ? (
+              <span>Out of Stock</span>
+            ) : availableRemaining <= 0 && inCartQuantity > 0 ? (
+              <span>Max in Bag</span>
+            ) : justAdded ? (
+              <>
+                <CheckIcon className="w-4 h-4" />
+                <span>Added to Bag</span>
+              </>
+            ) : (
+              <>
+                <CartIcon className="w-3.5 h-3.5" />
+                <span>
+                  Add to Bag {quantity > 1 ? `(${quantity})` : ""} • ₽ {(listing.price * quantity).toLocaleString()}
+                </span>
+              </>
+            )}
           </button>
         </div>
       </div>

@@ -96,3 +96,8 @@ export interface ApiErrorResponse {
     details: ApiErrorDetail[];
   };
 }
+
+export interface CartItem {
+  item: CatalogItem;
+  quantity: number;
+}

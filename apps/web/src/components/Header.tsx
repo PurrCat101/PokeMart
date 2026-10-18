@@ -1,5 +1,5 @@
 import React from "react";
-import { PokeballIcon, WalletIcon, BackpackIcon, LedgerIcon, UserIcon } from "./icons";
+import { PokeballIcon, WalletIcon, BackpackIcon, LedgerIcon, UserIcon, CartIcon } from "./icons";
 import { AuthUser, WalletData } from "../types/api";
 
 interface HeaderProps {
@@ -8,6 +8,8 @@ interface HeaderProps {
   user: AuthUser | null;
   wallet: WalletData | null;
   inventoryCount: number;
+  cartCount: number;
+  onOpenCart: () => void;
   onOpenLogin: () => void;
   onLogout: () => void;
 }
@@ -18,6 +20,8 @@ export function Header({
   user,
   wallet,
   inventoryCount,
+  cartCount,
+  onOpenCart,
   onOpenLogin,
   onLogout,
 }: HeaderProps) {
@@ -89,11 +93,29 @@ export function Header({
             </nav>
           </div>
 
-          {/* Right Status & Trainer Profile */}
-          <div className="flex items-center space-x-4">
+          {/* Right Status, Cart & Trainer Profile */}
+          <div className="flex items-center space-x-3">
+            {/* Shopping Bag Button */}
+            <button
+              type="button"
+              onClick={onOpenCart}
+              className="flex items-center space-x-2 px-3 py-1.5 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-1"
+              aria-label="Open Shopping Bag"
+            >
+              <CartIcon className="w-4 h-4 text-red-600" />
+              <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">Bag</span>
+              {cartCount > 0 ? (
+                <span className="font-mono text-xs font-bold px-1.5 py-0.2 bg-red-600 text-white rounded-full tabular-nums">
+                  {cartCount}
+                </span>
+              ) : (
+                <span className="font-mono text-[11px] text-zinc-400">0</span>
+              )}
+            </button>
+
             {/* Wallet Balance Display */}
             {user && (
-              <div className="flex items-center space-x-2 px-3 py-1.5 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900">
+              <div className="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900">
                 <WalletIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                 <span className="text-xs text-zinc-600 dark:text-zinc-400 font-medium">Balance:</span>
                 <span className="text-sm font-mono font-semibold tabular-nums text-zinc-950 dark:text-zinc-50">
@@ -104,10 +126,12 @@ export function Header({
 
             {/* Auth Actions */}
             {user ? (
-              <div className="flex items-center space-x-3">
-                <div className="hidden sm:flex items-center space-x-1.5 text-xs text-zinc-600 dark:text-zinc-400">
+              <div className="flex items-center space-x-2.5">
+                <div className="hidden lg:flex items-center space-x-1.5 text-xs text-zinc-600 dark:text-zinc-400">
                   <UserIcon className="w-3.5 h-3.5 text-zinc-600" />
-                  <span className="font-medium text-zinc-800 dark:text-zinc-200">{user.displayName}</span>
+                  <span className="font-medium text-zinc-800 dark:text-zinc-200 truncate max-w-[120px]">
+                    {user.displayName}
+                  </span>
                 </div>
                 <button
                   type="button"
