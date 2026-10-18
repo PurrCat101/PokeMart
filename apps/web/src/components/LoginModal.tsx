@@ -101,7 +101,7 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps)
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-2 text-xs font-bold uppercase tracking-wider text-white bg-red-600 hover:bg-red-700 active:bg-red-800 disabled:opacity-50 rounded shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-1"
+              className="w-full py-2 text-xs font-bold uppercase tracking-wider text-white bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white disabled:opacity-50 rounded shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-1"
             >
               {isLoading ? "Authenticating..." : "Connect Session"}
             </button>

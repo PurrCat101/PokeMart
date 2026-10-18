@@ -512,8 +512,8 @@ export default function PokemartCommerceTerminal() {
                     onClick={() => handleTypeChange(type)}
                     className={`px-2.5 py-1 rounded text-xs font-medium uppercase tracking-wider transition-colors shrink-0 ${
                       selectedType === type
-                        ? "bg-red-600 text-white font-bold"
-                        : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800"
+                        ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-semibold shadow-xs"
+                        : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/60 dark:hover:bg-zinc-800/60"
                     }`}
                   >
                     {type}
@@ -537,7 +537,7 @@ export default function PokemartCommerceTerminal() {
                   <button
                     type="button"
                     onClick={handleClearFilters}
-                    className="text-red-600 dark:text-red-400 hover:underline text-[11px]"
+                    className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 underline text-[11px] transition-colors"
                   >
                     Clear All Filters
                   </button>

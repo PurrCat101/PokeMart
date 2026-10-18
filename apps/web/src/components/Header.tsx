@@ -99,13 +99,13 @@ export function Header({
             <button
               type="button"
               onClick={onOpenCart}
-              className="flex items-center space-x-2 px-3 py-1.5 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-1"
+              className="flex items-center space-x-2 px-3 py-1.5 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 dark:focus-visible:ring-zinc-100 focus-visible:ring-offset-1"
               aria-label="Open Shopping Bag"
             >
-              <CartIcon className="w-4 h-4 text-red-600" />
+              <CartIcon className="w-4 h-4 text-zinc-700 dark:text-zinc-300" />
               <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">Bag</span>
               {cartCount > 0 ? (
-                <span className="font-mono text-xs font-bold px-1.5 py-0.2 bg-red-600 text-white rounded-full tabular-nums">
+                <span className="font-mono text-xs font-bold px-1.5 py-0.2 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 rounded-full tabular-nums">
                   {cartCount}
                 </span>
               ) : (
@@ -145,7 +145,7 @@ export function Header({
               <button
                 type="button"
                 onClick={onOpenLogin}
-                className="px-3.5 py-1.5 text-xs font-semibold rounded bg-red-600 hover:bg-red-700 text-white shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-1"
+                className="px-3.5 py-1.5 text-xs font-semibold rounded bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-1"
               >
                 Sign In as Trainer
               </button>

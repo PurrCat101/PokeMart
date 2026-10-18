@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { CartItem, WalletData, AuthUser } from "../types/api";
 import { XIcon, TrashIcon, PlusIcon, MinusIcon, CartIcon, AlertCircleIcon, PokeballIcon } from "./icons";
@@ -14,6 +14,131 @@ interface CartDrawerProps {
   onClearCart: () => void;
   onProceedToCheckout: () => void;
   onOpenLogin: () => void;
+}
+
+function CartItemRow({
+  cartItem,
+  onUpdateQuantity,
+  onRemoveItem,
+}: {
+  cartItem: CartItem;
+  onUpdateQuantity: (pokemonId: number, quantity: number) => void;
+  onRemoveItem: (pokemonId: number) => void;
+}) {
+  const { item, quantity } = cartItem;
+  const [inputValue, setInputValue] = useState(String(quantity));
+  const maxStock = Math.min(item.listing.availableStock, 99);
+  const lineTotal = item.listing.price * quantity;
+
+  useEffect(() => {
+    setInputValue(String(quantity));
+  }, [quantity]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.replace(/[^0-9]/g, "");
+    setInputValue(val);
+    const parsed = parseInt(val, 10);
+    if (!isNaN(parsed) && parsed >= 1) {
+      const clamped = Math.min(parsed, maxStock);
+      onUpdateQuantity(item.pokemon.id, clamped);
+    }
+  };
+
+  const handleInputBlur = () => {
+    const parsed = parseInt(inputValue, 10);
+    if (isNaN(parsed) || parsed < 1) {
+      onUpdateQuantity(item.pokemon.id, 1);
+      setInputValue("1");
+    } else if (parsed > maxStock) {
+      onUpdateQuantity(item.pokemon.id, maxStock);
+      setInputValue(String(maxStock));
+    } else {
+      onUpdateQuantity(item.pokemon.id, parsed);
+      setInputValue(String(parsed));
+    }
+  };
+
+  return (
+    <div className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/40 flex items-center space-x-3">
+      {/* Sprite */}
+      <div className="w-12 h-12 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center shrink-0">
+        {item.pokemon.spriteUrl ? (
+          <Image
+            src={item.pokemon.spriteUrl}
+            alt={item.pokemon.name}
+            width={40}
+            height={40}
+            className="w-10 h-10 object-contain"
+            unoptimized
+          />
+        ) : (
+          <PokeballIcon className="w-5 h-5 text-zinc-400" />
+        )}
+      </div>
+
+      {/* Details */}
+      <div className="flex-1 min-w-0">
+        <div className="text-[11px] font-mono text-zinc-500">
+          #{String(item.pokemon.id).padStart(3, "0")}
+        </div>
+        <div className="text-xs font-bold text-zinc-900 dark:text-zinc-100 capitalize truncate">
+          {item.pokemon.name}
+        </div>
+        <div className="text-[11px] font-mono text-zinc-500 dark:text-zinc-400">
+          ₽ {item.listing.price.toLocaleString()} each
+        </div>
+      </div>
+
+      {/* Editable Quantity Stepper */}
+      <div className="flex items-center border border-zinc-200 dark:border-zinc-700 rounded bg-white dark:bg-zinc-800">
+        <button
+          type="button"
+          onClick={() => onUpdateQuantity(item.pokemon.id, Math.max(1, quantity - 1))}
+          disabled={quantity <= 1}
+          className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          aria-label="Decrease quantity"
+        >
+          <MinusIcon className="w-3 h-3" />
+        </button>
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          value={inputValue}
+          onChange={handleInputChange}
+          onBlur={handleInputBlur}
+          aria-label={`Quantity of ${item.pokemon.name}`}
+          className="w-10 text-center font-mono text-xs font-semibold tabular-nums text-zinc-900 dark:text-zinc-100 bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-zinc-400 py-0.5 rounded"
+        />
+        <button
+          type="button"
+          onClick={() => onUpdateQuantity(item.pokemon.id, Math.min(maxStock, quantity + 1))}
+          disabled={quantity >= maxStock}
+          className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          aria-label="Increase quantity"
+        >
+          <PlusIcon className="w-3 h-3" />
+        </button>
+      </div>
+
+      {/* Line Total */}
+      <div className="text-right min-w-[70px]">
+        <div className="text-xs font-mono font-bold text-zinc-900 dark:text-zinc-100 tabular-nums">
+          ₽ {lineTotal.toLocaleString()}
+        </div>
+      </div>
+
+      {/* Remove */}
+      <button
+        type="button"
+        onClick={() => onRemoveItem(item.pokemon.id)}
+        className="p-1 text-zinc-400 hover:text-red-600 transition-colors"
+        aria-label={`Remove ${item.pokemon.name} from cart`}
+      >
+        <TrashIcon className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
 }
 
 export function CartDrawer({
@@ -49,8 +174,8 @@ export function CartDrawer({
           {/* Drawer Header */}
           <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-zinc-900/60">
             <div className="flex items-center space-x-2">
-              <CartIcon className="w-5 h-5 text-red-600" />
-              <h2 className="text-sm font-bold uppercase tracking-wider text-zinc-950 dark:text-zinc-50">
+              <CartIcon className="w-5 h-5 text-zinc-700 dark:text-zinc-300" />
+              <h2 className="text-sm font-bold uppercase tracking-wider text-zinc-900 dark:text-zinc-100">
                 Trainer Shopping Bag
               </h2>
               <span className="font-mono text-xs text-zinc-500 font-semibold">
@@ -101,87 +226,14 @@ export function CartDrawer({
                 </div>
 
                 <div className="space-y-3">
-                  {cart.map(({ item, quantity }) => {
-                    const lineTotal = item.listing.price * quantity;
-                    const maxStock = Math.min(item.listing.availableStock, 99);
-
-                    return (
-                      <div
-                        key={item.pokemon.id}
-                        className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/40 flex items-center space-x-3"
-                      >
-                        {/* Sprite */}
-                        <div className="w-12 h-12 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center shrink-0">
-                          {item.pokemon.spriteUrl ? (
-                            <Image
-                              src={item.pokemon.spriteUrl}
-                              alt={item.pokemon.name}
-                              width={40}
-                              height={40}
-                              className="w-10 h-10 object-contain"
-                              unoptimized
-                            />
-                          ) : (
-                            <PokeballIcon className="w-5 h-5 text-zinc-400" />
-                          )}
-                        </div>
-
-                        {/* Details */}
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[11px] font-mono text-zinc-500">
-                            #{String(item.pokemon.id).padStart(3, "0")}
-                          </div>
-                          <div className="text-xs font-bold text-zinc-900 dark:text-zinc-100 capitalize truncate">
-                            {item.pokemon.name}
-                          </div>
-                          <div className="text-[11px] font-mono text-zinc-600 dark:text-zinc-400">
-                            ₽ {item.listing.price.toLocaleString()} each
-                          </div>
-                        </div>
-
-                        {/* Quantity Stepper */}
-                        <div className="flex items-center border border-zinc-200 dark:border-zinc-700 rounded bg-white dark:bg-zinc-800">
-                          <button
-                            type="button"
-                            onClick={() => onUpdateQuantity(item.pokemon.id, quantity - 1)}
-                            className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 transition-colors"
-                            aria-label="Decrease quantity"
-                          >
-                            <MinusIcon className="w-3 h-3" />
-                          </button>
-                          <span className="w-6 text-center font-mono text-xs font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
-                            {quantity}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => onUpdateQuantity(item.pokemon.id, quantity + 1)}
-                            disabled={quantity >= maxStock}
-                            className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                            aria-label="Increase quantity"
-                          >
-                            <PlusIcon className="w-3 h-3" />
-                          </button>
-                        </div>
-
-                        {/* Line Total */}
-                        <div className="text-right min-w-[70px]">
-                          <div className="text-xs font-mono font-bold text-zinc-900 dark:text-zinc-100 tabular-nums">
-                            ₽ {lineTotal.toLocaleString()}
-                          </div>
-                        </div>
-
-                        {/* Remove */}
-                        <button
-                          type="button"
-                          onClick={() => onRemoveItem(item.pokemon.id)}
-                          className="p-1 text-zinc-400 hover:text-red-600 transition-colors"
-                          aria-label={`Remove ${item.pokemon.name} from cart`}
-                        >
-                          <TrashIcon className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    );
-                  })}
+                  {cart.map((cartItem) => (
+                    <CartItemRow
+                      key={cartItem.item.pokemon.id}
+                      cartItem={cartItem}
+                      onUpdateQuantity={onUpdateQuantity}
+                      onRemoveItem={onRemoveItem}
+                    />
+                  ))}
                 </div>
               </>
             )}
@@ -232,7 +284,7 @@ export function CartDrawer({
                 <button
                   type="button"
                   onClick={onOpenLogin}
-                  className="w-full py-2.5 px-4 rounded text-xs font-bold uppercase tracking-wider text-white bg-red-600 hover:bg-red-700 active:bg-red-800 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-1"
+                  className="w-full py-2.5 px-4 rounded text-xs font-bold uppercase tracking-wider text-white bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-1"
                 >
                   Sign In as Trainer to Checkout
                 </button>
@@ -241,7 +293,7 @@ export function CartDrawer({
                   type="button"
                   onClick={onProceedToCheckout}
                   disabled={hasInsufficientFunds}
-                  className="w-full py-2.5 px-4 rounded text-xs font-bold uppercase tracking-wider text-white bg-red-600 hover:bg-red-700 active:bg-red-800 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-1"
+                  className="w-full py-2.5 px-4 rounded text-xs font-bold uppercase tracking-wider text-white bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-1"
                 >
                   Proceed to Checkout • ₽ {subtotal.toLocaleString()}
                 </button>

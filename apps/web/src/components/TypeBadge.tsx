@@ -25,7 +25,7 @@ export function TypeBadge({ type }: { type: string }) {
 
   return (
     <span
-      className={`inline-flex items-center px-1.5 py-0.5 text-xs font-medium uppercase tracking-wider rounded border ${style}`}
+      className={`inline-flex items-center px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded border ${style}`}
     >
       {type}
     </span>
