@@ -3,7 +3,7 @@ info:
   title: PokéMart Shipping Mock API
   version: 1.0.0
   description: |
-    Local/test-only third-party shipping provider simulator. Never expose test-control endpoints
+    Local/test-only third-party shipping provider simulator. Never expose admin-control endpoints
     through the public PokéMart BFF or enable them in production.
 servers:
   - url: http://localhost:3002
@@ -14,15 +14,26 @@ paths:
       responses:
         '200':
           description: Mock process is running
-  /shipments:
+  /v1/shipments:
     post:
-      summary: Create a shipment idempotently
-      parameters:
-        - in: header
-          name: Idempotency-Key
-          required: true
-          schema:
-            type: string
+      summary: Create a shipment idempotently (deduplicated by purchaseId)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [purchaseId, recipient, items]
+              properties:
+                purchaseId:
+                  type: string
+                  format: uuid
+                recipient:
+                  type: object
+                items:
+                  type: array
+                  items:
+                    type: object
       requestBody:
         required: true
         content:
@@ -64,7 +75,7 @@ paths:
           description: Simulated provider error
         '503':
           description: Provider temporarily unavailable
-  /shipments/{providerShipmentId}:
+  /v1/shipments/{providerShipmentId}:
     get:
       summary: Read provider-side shipment and delivery status
       parameters:
@@ -78,7 +89,7 @@ paths:
                 $ref: '#/components/schemas/ProviderShipment'
         '404':
           description: Shipment not found
-  /__test/mode:
+  /v1/admin/mode:
     put:
       summary: Set simulated provider behavior (local/test only)
       requestBody:
@@ -97,9 +108,9 @@ paths:
           description: Mode updated
         '400':
           description: Unknown mode
-  /__test/shipments/{providerShipmentId}/status:
+  /v1/admin/shipments/{providerShipmentId}/status:
     patch:
-      summary: Advance simulated delivery status (local/test only)
+      summary: Advance simulated delivery status by providerShipmentId (local/test only)
       parameters:
         - $ref: '#/components/parameters/ProviderShipmentId'
       requestBody:
@@ -124,13 +135,45 @@ paths:
           description: Invalid status or invalid transition
         '404':
           description: Provider shipment not found
-  /__test/requests:
+  /v1/admin/shipments/by-purchase-id/{purchaseId}/status:
+    post:
+      summary: Advance simulated delivery status by purchaseId (local/test only - convenience endpoint)
+      parameters:
+        - in: path
+          name: purchaseId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [LABEL_CREATED, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED, DELIVERY_FAILED]
+      responses:
+        '200':
+          description: Provider delivery status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderShipment'
+        '400':
+          description: Invalid status or invalid transition
+        '404':
+          description: Shipment not found for this purchase ID
+  /v1/admin/requests:
     get:
       summary: Inspect received provider requests (local/test only)
       responses:
         '200':
           description: Request journal
-  /__test/reset:
+  /v1/admin/reset:
     post:
       summary: Reset mock state and request journal (local/test only)
       responses:
