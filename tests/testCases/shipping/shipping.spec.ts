@@ -194,8 +194,8 @@ test.describe('Shipping Integration and Resilience Suite', () => {
     }
   });
 
-  // Scenario 6: Ambiguous timeout; retry uses same idempotency key and no duplicate provider shipment.
-  test('6. Ambiguous timeout; retry uses same Idempotency-Key and prevents duplicate provider shipments', async ({
+  // Scenario 6: Ambiguous timeout; retry uses same purchaseId and no duplicate provider shipment.
+  test('6. Ambiguous timeout; retry uses same purchaseId and prevents duplicate provider shipments', async ({
     bffRequest,
     testEnvironment,
     shippingMock,
@@ -228,12 +228,12 @@ test.describe('Shipping Integration and Resilience Suite', () => {
       const shipment2 = await shipmentRes2.json();
       expect(shipment2.processingStatus).toBe('LABEL_CREATED');
 
-      // Check request journal from mock: all requests for this purchase used the same Idempotency-Key
+      // Check request journal from mock: all requests for this purchase have the same purchaseId in body
       const requests = await shippingMock.getRequests();
-      const shipmentRequests = requests.filter((r: any) => r.path === '/shipments');
+      const shipmentRequests = requests.filter((r: any) => r.path === '/v1/shipments');
       expect(shipmentRequests.length).toBeGreaterThanOrEqual(2);
       for (const r of shipmentRequests) {
-        expect(r.idempotencyKey).toBe(purchaseId);
+        expect(r.body.purchaseId).toBe(purchaseId);
       }
     } finally {
       if (snapshot) await restorePurchaseState(database, testEnvironment.userId, testEnvironment.pokemonId, snapshot);
