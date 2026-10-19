@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "start": "tsx src/index.ts",
+    "start:worker": "tsx src/worker-runner.ts",
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {

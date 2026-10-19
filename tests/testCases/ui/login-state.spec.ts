@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '../../support/fixtures/apiFixtures';
 
 test('sign-in form clears entered credentials after closing and reopening', async ({ page }) => {
   await page.goto('/');

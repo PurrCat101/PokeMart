@@ -10,7 +10,8 @@
     "test:pokeapi": "playwright test --project=pokeapi",
     "test:purchase-retry": "playwright test --project=e2e --grep @purchase-flow",
     "test:e2e": "playwright test --project=e2e",
-    "test:ui": "playwright test --project=ui"
+    "test:ui": "playwright test --project=ui",
+    "test:shipping": "playwright test --project=shipping"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",

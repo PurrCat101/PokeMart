@@ -18,6 +18,7 @@ export const testConfig = {
   bffBaseUrl: process.env.BFF_BASE_URL ?? 'http://localhost:3001',
   pokemartApiBaseUrl: process.env.POKEMART_API_BASE_URL ?? 'http://localhost:3000',
   wiremockBaseUrl: process.env.WIREMOCK_BASE_URL ?? 'http://localhost:8080',
+  shippingMockBaseUrl: process.env.SHIPPING_MOCK_BASE_URL ?? 'http://localhost:3002',
   auth: {
     email: process.env.AUTH_TEST_EMAIL ?? 'lab-user-001@example.test',
     password: process.env.AUTH_TEST_PASSWORD ?? 'PokeMartLab!2026',

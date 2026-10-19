@@ -91,6 +91,26 @@ function mapPurchase(value: unknown) {
     createdAt: purchase.createdAt,
   };
 }
+function mapShipment(value: unknown) {
+  const shipment = asRecord(value);
+  if (typeof shipment.purchaseId !== 'string' || typeof shipment.orderStatus !== 'string'
+    || typeof shipment.processingStatus !== 'string' || typeof shipment.deliveryStatus !== 'string'
+    || typeof shipment.attemptCount !== 'number'
+    || typeof shipment.createdAt !== 'string' || typeof shipment.updatedAt !== 'string') {
+    throw new AppError(503, 'DEPENDENCY_UNAVAILABLE', 'PokéMart API returned an invalid shipment status');
+  }
+  return {
+    purchaseId: shipment.purchaseId,
+    orderStatus: shipment.orderStatus,
+    processingStatus: shipment.processingStatus,
+    deliveryStatus: shipment.deliveryStatus,
+    trackingNumber: (shipment.trackingNumber as string | null) ?? null,
+    attemptCount: shipment.attemptCount,
+    lastError: (shipment.lastError as string | null) ?? null,
+    createdAt: shipment.createdAt,
+    updatedAt: shipment.updatedAt,
+  };
+}
 function mapPurchasePage(value: unknown) {
   const page = asRecord(value);
   if (typeof page.count !== 'number' || typeof page.limit !== 'number' || typeof page.offset !== 'number' || !Array.isArray(page.results)) {
@@ -192,6 +212,7 @@ app.get('/api/wallet', async (req, res, next) => { try { await relay(req, res, '
 app.get('/api/inventory', async (req, res, next) => { try { await relay(req, res, '/pokemart/v1/inventory', 'GET', undefined, mapInventory); } catch (error) { next(error); } });
 app.get('/api/purchases', async (req, res, next) => { try { const { limit, offset } = pageParams(req); await relay(req, res, `/pokemart/v1/purchases?limit=${limit}&offset=${offset}`, 'GET', undefined, mapPurchasePage); } catch (error) { next(error); } });
 app.get('/api/purchases/:id', async (req, res, next) => { try { if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(req.params.id)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'id', message: 'must be a UUID' }]); await relay(req, res, `/pokemart/v1/purchases/${req.params.id}`, 'GET', undefined, mapPurchase); } catch (error) { next(error); } });
+app.get('/api/purchases/:id/shipment', async (req, res, next) => { try { if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(req.params.id)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'id', message: 'must be a UUID' }]); await relay(req, res, `/pokemart/v1/purchases/${req.params.id}/shipment`, 'GET', undefined, mapShipment); } catch (error) { next(error); } });
 app.post('/api/purchases', async (req, res, next) => { try { validatePurchase(req.body); await relay(req, res, '/pokemart/v1/purchases', 'POST', req.body, mapPurchase); } catch (error) { next(error); } });
 app.use((error: any, req: Request, res: ExpressResponse, _next: NextFunction) => {
   const appError = error instanceof AppError ? error : error?.type === 'entity.parse.failed' ? new AppError(400, 'INVALID_JSON', 'Malformed JSON request body') : new AppError(500, 'INTERNAL_ERROR', 'An unexpected error occurred');
