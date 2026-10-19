@@ -39,6 +39,7 @@ Upstream paths use the service contract prefix `/pokemart/v1`. The PokéMart API
 | `POST` | `/api/purchases` | `POST /pokemart/v1/purchases` with bearer token and `purchaseId` body | `201` | `400 VALIDATION_ERROR` / `INVALID_JSON`; `401 UNAUTHORIZED`; `404 POKEMON_NOT_FOUND`; `409 PURCHASE_DUPLICATE` / `POKEMON_NOT_FOR_SALE` / `INSUFFICIENT_STOCK`; `415 UNSUPPORTED_MEDIA_TYPE`; `422 INSUFFICIENT_FUNDS`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
 | `GET` | `/api/purchases` | `GET /pokemart/v1/purchases` with bearer token, `limit`, `offset` | `200` | `400 VALIDATION_ERROR` / `UNKNOWN_QUERY_PARAMETER`; `401 UNAUTHORIZED`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
 | `GET` | `/api/purchases/:id` | `GET /pokemart/v1/purchases/{id}` with bearer token | `200` | `400 VALIDATION_ERROR`; `401 UNAUTHORIZED`; `404 PURCHASE_NOT_FOUND`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
+| `GET` | `/api/purchases/:id/shipment` | `GET /pokemart/v1/purchases/{id}/shipment` with bearer token | `200` | `400 VALIDATION_ERROR`; `401 UNAUTHORIZED`; `404 PURCHASE_NOT_FOUND`; `500 INTERNAL_ERROR` |
 | `GET` | `/health` | none | `200` | none |
 | `GET` | `/ready` | `GET /ready` on PokéMart API | `200` or `503` | none |
 
@@ -122,3 +123,8 @@ Do not log: headers other than the ones listed in section 4, or request bodies t
 - ~~Exact upstream paths~~ Decided: upstream paths use the `/pokemart/v1` prefix (section 2 and section 3).
 - Whether `GET /api/inventory` and `GET /api/wallet` should be combined into one dashboard endpoint later. Not in this iteration.
 - Whether the BFF should expose metrics separately from the PokéMart API, once the observability phase starts (`05-operations.md`).
+
+
+## 7. Shipping status route
+
+The BFF forwards `GET /api/purchases/:id/shipment` to the owner-scoped internal shipment status endpoint, forwards the bearer token and `X-Request-Id`, and maps the response to the public contract. This route reads PokéMart's local database state; it must not call the external Shipping provider itself. Provider failure therefore does not become a 503 from this status lookup when the local API and database are healthy. See [`10-shipping-integration.md`](10-shipping-integration.md).

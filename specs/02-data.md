@@ -60,3 +60,15 @@ Normal startup and tests must not fetch the latest data from the internet. The l
 ### Reset safety
 
 `docker compose down -v` removes Compose-managed volumes and deletes local database data. Document it as a destructive local reset only; never use it against shared or production environments.
+
+
+## 11. Shipping persistence (new)
+
+The shipping integration adds a PokéMart-owned `shipments` table linked one-to-one to `purchases.id`. This row is both the durable work item and the local shipment status record; v1 does not require Redis or a separate broker.
+
+Required fields: `purchase_id` (unique FK), `processing_status`, `delivery_status`, `provider_shipment_id`, `tracking_number`, `attempt_count`, `next_attempt_at`, `claimed_until` (worker lease), `last_error_code`, `last_error_message`, `created_at`, and `updated_at`. Index due work by `(processing_status, next_attempt_at)` and expired leases by `(processing_status, claimed_until)`. Operational states are `PENDING`, `PROCESSING`, `RETRY_WAIT`, `LABEL_CREATED`, `FAILED`, and `UNKNOWN`. Customer-facing delivery states are `WAITING_FOR_SHIPMENT`, `LABEL_CREATED`, `IN_TRANSIT`, `OUT_FOR_DELIVERY`, `DELIVERED`, and `DELIVERY_FAILED`. `ORDER_PLACED` is an order milestone, not a delivery state.
+
+The purchase transaction inserts the shipment row as `PENDING` atomically with purchase/wallet/stock/inventory changes. Provider HTTP calls happen asynchronously in a worker and outside the database transaction. Provider outages therefore do not undo a committed purchase. Existing volumes require a numbered migration because MySQL init scripts only run for an empty data directory. See [`10-shipping-integration.md`](10-shipping-integration.md) for the schema contract and migration requirements.
+
+
+For the local/test provider's API contract, including status simulation controls, see [`shipping-mock-openapi.yaml`](shipping-mock-openapi.yaml). Customer-facing UI requirements are in [`09-frontend.md`](09-frontend.md).

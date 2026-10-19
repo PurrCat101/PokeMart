@@ -10,6 +10,7 @@ Learning goals:
 - Practice API contract, negative, boundary, integration, and persistence testing.
 - Use WireMock to simulate a BFF before it is ready and to mock external dependencies.
 - Practice MySQL schema, deterministic seed data, transactions, and repeatable environments.
+- Practice third-party HTTP integration, a durable database-backed work queue, bounded retries, batch workers, idempotency, and outage recovery with a real Express mock service.
 - Test pagination, query validation, business rules, purchase-ID retries, and later race conditions.
 - Maintain two complementary functional test layers: end-to-end business flows and endpoint-level API specification/validation tests.
 - Standardize local operations through a Makefile.
@@ -21,7 +22,8 @@ Learning goals:
 ### In scope
 - PokéMart catalog, wallet, inventory/ownership, and purchase workflow, including retrying with a client-generated purchase ID and duplicate detection.
 - BFF and PokéMart API services.
-- MySQL for shop-owned business data.
+- MySQL for shop-owned business data and durable shipment work/status.
+- A Node.js + Express Shipping Mock and a separate worker process for asynchronous third-party shipping integration.
 - Versioned Pokémon reference data based on https://github.com/PokeAPI/api-data.
 - WireMock for mocked-BFF contract tests and selected external dependencies.
 - Docker Compose, schema/seed scripts, OpenAPI specification, and Swagger UI for browsing it.
@@ -58,12 +60,20 @@ The real integration path must not mock the BFF or PokéMart API. Mock only depe
 
 Real API validation and E2E cases live in their own suites and run against the configured BFF. `TEST_ENV=test|sit` selects URLs and test data from the matching environment file; Playwright projects select the test suite, not the environment.
 
+### Shipping integration track
+
+`Playwright -> BFF -> PokéMart API + MySQL -> Shipping Worker -> Shipping Mock (HTTP)`
+
+The purchase transaction records a pending shipment in MySQL. The worker sends it asynchronously and retries transient failures. Shipping outages must not crash the purchase API or undo a committed purchase. See [`10-shipping-integration.md`](10-shipping-integration.md).
+
 ### Responsibilities
 
 - **Web frontend** is the browser client. It calls the public BFF through same-origin `/api` routes rewritten by Next.js; it must not call the internal API directly. The development server runs on port `3002` outside Docker Compose.
 - **BFF** is the only public entry point. It validates the public contract, forwards requests (including `X-Request-Id` and the purchase request body) to the PokéMart API, and maps responses and errors to the public contract.
 - **PokéMart API** owns business rules, transactions, duplicate-purchase detection, and MySQL access.
-- **MySQL** is the durable store for all shop-owned business state.
+- **MySQL** is the durable store for all shop-owned business state, including pending shipment work and retry metadata.
+- **Shipping Worker** claims due shipment rows in bounded batches and performs HTTP calls outside database transactions.
+- **Shipping Mock** simulates an external provider over HTTP; it is not trusted as durable PokéMart state and does not share the PokéMart database.
 
 ## 5. Technology choices
 
@@ -72,7 +82,8 @@ Real API validation and E2E cases live in their own suites and run against the c
 - Playwright Test with `APIRequestContext`
 - Express + TypeScript for BFF and PokéMart API
 - MySQL 8.x with a pinned image tag
-- WireMock with a pinned image tag
+- WireMock with a pinned image tag for existing mocked-BFF tests
+- Node.js + Express Shipping Mock in its own Docker Compose service
 - Swagger UI with a pinned image tag, serving `specs/openapi.yaml`
 - Docker Compose
 - npm
@@ -99,6 +110,8 @@ pokemart-api-lab/
 │   └── mappings/
 ├── specs/
 │   ├── openapi.yaml             # BFF public contract
+│   ├── shipping-openapi.yaml     # provider mock contract (if split into a formal OpenAPI file)
+│   ├── 10-shipping-integration.md
 │   └── 09-frontend.md           # frontend behavior and integration boundary
 ├── scripts/
 │   ├── import-reference-data/   # local import; no live fetch in tests

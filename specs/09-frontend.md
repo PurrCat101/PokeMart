@@ -33,9 +33,10 @@ The BFF and its downstream services must be running for API-backed features to w
 - **Trainer sign-in:** use the demo login endpoint to establish a session. The access token is stored in browser `localStorage` and attached as a bearer token to authenticated API requests.
 - **Wallet:** display the signed-in trainer's balance and refresh it after purchase activity.
 - **Inventory:** display the signed-in trainer's owned Pokémon and refresh the view after checkout.
-- **Purchase history:** show the signed-in trainer's purchase ledger with paginated results.
+- **Purchase history:** show the signed-in trainer's purchase ledger with paginated results. Each order row/card displays a compact customer-facing delivery status and tracking number when available, without requiring navigation into the order.
+- **Order detail:** selecting an order opens a dedicated detail view with purchased Pokémon, totals, purchase timestamp, tracking number, current delivery status, and a chronological shipment timeline.
 
-Catalog browsing is public. Wallet, inventory, and purchase operations require authentication. The API remains the source of truth for balances, stock, authorization, and purchase results; frontend validation is for user experience only.
+Catalog browsing is public. Wallet, inventory, and purchase operations require authentication. The API remains the source of truth for balances, stock, authorization, purchase results, and delivery status; frontend validation is for user experience only.
 
 Login fields start blank; the UI does not prefill or auto-fill demo credentials. The local seeded login account is documented in the repository root `README.md`.
 
@@ -52,6 +53,10 @@ The shared API client in `apps/web/src/lib/api.ts` sends an `X-Request-Id`, adds
 - Provide empty states for a signed-out trainer, an empty inventory, and an empty cart where applicable.
 - Keep cart contents across page reloads using `pokemart_cart` in browser `localStorage`.
 - Keep the access token in `pokemart_token` in browser `localStorage`; signing out clears the token.
+- Order history status is read from the public purchase/shipment APIs. The browser must never call Shipping Mock test-control endpoints.
+- Refresh or re-fetch shipment status when opening order detail and when the user activates refresh; do not assume status changes only while the page is open. Optional short polling may be used while the detail view is visible, with a bounded interval and cleanup on navigation.
+- If shipping is waiting for a label, show `รอจัดส่ง` and an explanatory message; do not show `จัดส่งแล้ว` merely because the provider accepted the shipment or generated a tracking number.
+- When the provider is unavailable, retain the last known status and show a non-blocking notice if the latest status cannot be refreshed. Purchase history and order detail should still render from local PokéMart API state.
 - Do not treat browser-held cart data, token state, prices, or stock as trusted server-side state.
 
 ## 6. Limitations
@@ -128,7 +133,8 @@ Known IDs should always use `page.getByTestId('pokemon-card-25')` directly. Do n
 | Cart | `cart-drawer`, `cart-empty`, `cart-close`, `cart-clear`, `cart-item-{pokemonId}`, `cart-item-quantity-{pokemonId}`, `cart-item-remove-{pokemonId}`, `cart-sign-in`, `cart-proceed-to-checkout` |
 | Checkout | `checkout-dialog`, `checkout-progress`, `checkout-confirm`, `checkout-close`, `checkout-success`, `checkout-errors`, `checkout-purchase-{purchaseId}` |
 | Inventory | `inventory-view`, `inventory-loading`, `inventory-auth-required`, `inventory-empty`, `inventory-refresh`, `inventory-sign-in`, `inventory-item-{pokemonId}` |
-| Purchase history | `purchases-view`, `purchases-auth-required`, `purchases-table`, `purchases-empty`, `purchase-row-{purchaseId}`, `purchase-item-{purchaseId}`, `purchase-quantity-{purchaseId}`, `purchases-refresh`, `purchases-sign-in`, `purchases-page-previous`, `purchases-page-next` |
+| Purchase history | `purchases-view`, `purchases-auth-required`, `purchases-table`, `purchases-empty`, `purchase-row-{purchaseId}`, `purchase-item-{purchaseId}`, `purchase-quantity-{purchaseId}`, `purchase-delivery-status-{purchaseId}`, `purchase-tracking-number-{purchaseId}`, `purchase-open-detail-{purchaseId}`, `purchases-refresh`, `purchases-sign-in`, `purchases-page-previous`, `purchases-page-next` |
+| Order detail and shipping | `order-detail-{purchaseId}`, `order-detail-delivery-status`, `order-detail-tracking-number`, `order-detail-shipment-timeline`, `order-detail-refresh`, `order-detail-shipping-notice`, `shipment-timeline-step-{status}`, `shipment-timeline-current`, `shipment-timeline-loading`, `shipment-timeline-error` |
 | Trainer wallet | `wallet-balance` |
 | Feedback | `toast-{success|error|info}` |
 
@@ -144,3 +150,35 @@ WEB_BASE_URL=https://web-under-test.example npm run test:ui
 ```
 
 The target must have the demo trainer and a funded wallet configured with the credentials in the selected test environment (`AUTH_TEST_EMAIL` and `AUTH_TEST_PASSWORD`). The test does not launch the application or reset data, and it creates a real purchase; use only an isolated test environment. It does not depend on the API test project's global state setup.
+
+
+## 8. Purchase history and order detail — shipping UX
+
+### Purchase history quick status
+
+Each purchase row/card must show a compact delivery-status label without requiring a click into the order. Use the API's `deliveryStatus` as the source of truth:
+
+| API status | Display label |
+|---|---|
+| `WAITING_FOR_SHIPMENT` | รอจัดส่ง |
+| `LABEL_CREATED` | ออกเลขพัสดุแล้ว |
+| `IN_TRANSIT` | อยู่ระหว่างจัดส่ง |
+| `OUT_FOR_DELIVERY` | กำลังนำจ่าย |
+| `DELIVERED` | จัดส่งสำเร็จ |
+| `DELIVERY_FAILED` | จัดส่งไม่สำเร็จ |
+
+The order itself may also display the order milestone `ORDER_PLACED` (สั่งซื้อแล้ว), but this must not replace the shipment status. When there is no shipment record because of a legacy order, show a safe neutral fallback rather than treating the order as delivered. Show the tracking number only after one has been issued.
+
+### Order detail
+
+Selecting a purchase opens a dedicated order-detail route or view scoped to that purchase. It must show the order summary and a shipment section containing current status, tracking number (if issued), last status update time, and a chronological timeline. The timeline distinguishes label creation from actual movement and delivery; `LABEL_CREATED` is not `IN_TRANSIT` and neither means `DELIVERED`.
+
+Use accessible text in addition to any color/icon status treatment. Loading and refresh errors must not erase the last known status. A provider outage should produce a non-blocking notice, not a blank order detail page. The user-facing application must call only public BFF endpoints; test-only provider controls are for local API/Playwright exercises and must never be exposed in the UI.
+
+### UI acceptance scenarios
+
+1. After checkout, the purchase appears in history with `รอจัดส่ง` while shipment label creation is pending.
+2. After the worker recovers from a simulated provider outage and creates a tracking number, the history row updates to `ออกเลขพัสดุแล้ว` without opening the order; the detail view shows the tracking number.
+3. After a test operator advances provider status to `IN_TRANSIT`, `OUT_FOR_DELIVERY`, and `DELIVERED`, the reconciliation worker updates PokéMart state; history quick status and the order detail timeline show the latest status.
+4. If Shipping is down, history and detail remain available and display the last known state plus a non-blocking notice when appropriate.
+5. Verify loading, no-tracking-number, failed shipment creation, delivery failure, and refresh-error states.
