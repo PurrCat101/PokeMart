@@ -65,7 +65,7 @@ Base URL inside Compose: `http://shipping-mock:3002`. The host-published port is
 
 Required header: `Idempotency-Key: <purchaseId>`. The key must be stable across retries. The mock must return the same provider shipment for repeated calls with the same key and must not create duplicates.
 
-Successful response: `202 Accepted` with `providerShipmentId`, `status: "ACCEPTED"`, and `trackingNumber`. A provider acceptance is **not proof of delivery**; PokéMart's status is `SHIPPED` only when the provider contract's shipment-creation/dispatch response explicitly confirms that state. v1 should name the local success state `ACCEPTED` to avoid claiming delivery.
+Successful response: `202 Accepted` with `providerShipmentId`, `status: "LABEL_CREATED"`, and `trackingNumber`. This confirms that a tracking label exists; it does not mean the parcel has been picked up, is in transit, or has been delivered.
 
 ### Deterministic mock modes
 
@@ -86,7 +86,7 @@ Add a `shipments` table with at least:
 |---|---|
 | `purchase_id` | UUID, PK or unique FK to `purchases.id`; one shipment per purchase in v1 |
 | `processing_status` | `PENDING`, `PROCESSING`, `RETRY_WAIT`, `LABEL_CREATED`, `FAILED`, or `UNKNOWN`; controls queue/retry lifecycle |
-| `delivery_status` | `ORDER_PLACED`, `WAITING_FOR_SHIPMENT`, `LABEL_CREATED`, `IN_TRANSIT`, `OUT_FOR_DELIVERY`, `DELIVERED`, or `DELIVERY_FAILED`; customer-facing shipment progress |
+| `delivery_status` | `WAITING_FOR_SHIPMENT`, `LABEL_CREATED`, `IN_TRANSIT`, `OUT_FOR_DELIVERY`, `DELIVERED`, or `DELIVERY_FAILED`; customer-facing shipment progress |
 | `provider_shipment_id` | Nullable provider identifier |
 | `tracking_number` | Nullable tracking number |
 | `attempt_count` | Non-negative integer |
@@ -106,7 +106,7 @@ For new volumes, update the canonical schema. For existing MySQL volumes, add a 
 2. In that same transaction, insert `shipments.processing_status = PENDING`, `delivery_status = WAITING_FOR_SHIPMENT`, `attempt_count = 0`, and `next_attempt_at = NOW()`. The order itself already exists; `ORDER_PLACED` is the order lifecycle, while `WAITING_FOR_SHIPMENT` is the customer-facing delivery lifecycle.
 3. Return the existing purchase response contract. Do not synchronously call the provider from `POST /api/purchases`; shipment processing is asynchronous.
 4. Worker claims up to `SHIPPING_BATCH_SIZE` eligible rows using a short transaction and a lease. Multiple workers must not process the same row concurrently.
-5. Worker calls `POST /shipments` outside the DB transaction with `Idempotency-Key: purchaseId`.
+5. Worker calls `POST /shipments` outside the DB transaction with `Idempotency-Key: purchaseId`. Once the label exists, a separate reconciliation loop calls `GET /shipments/:providerShipmentId` to synchronize delivery progress.
 6. On provider acceptance, persist `processing_status = LABEL_CREATED`, provider ID and tracking number, clear error/lease, and stop label-creation retries. Set customer-facing `delivery_status = LABEL_CREATED` (shipping label / tracking number created). This does not mean the parcel has been picked up or delivered.
 7. On transient failure, persist `processing_status = RETRY_WAIT`, increment attempt count, set `next_attempt_at` using bounded exponential backoff with jitter, clear or expire the lease, and log the attempt. Keep `delivery_status = WAITING_FOR_SHIPMENT` until a tracking number is actually issued.
 8. After the configured maximum attempts, persist `processing_status = FAILED` and stop automatic retries. The row remains available for diagnosis and a future manual retry mechanism; customer-facing status remains `WAITING_FOR_SHIPMENT` and the UI must also show a non-blocking issue/retry message so it does not imply delivery has started.
@@ -209,7 +209,7 @@ Minimum scenarios:
 2. Provider returns 500; purchase and wallet/stock/inventory changes remain committed, shipment is scheduled for retry, and the API remains healthy.
 3. Provider returns 429; worker honors valid `Retry-After` or applies bounded retry policy.
 4. Provider is unavailable or times out; purchase remains queryable and queued work persists across worker restart.
-5. Provider recovers; pending shipment is accepted without a new purchase.
+5. Provider recovers; pending shipment obtains a tracking number without a new purchase.
 6. Ambiguous timeout; retry uses the same idempotency key and no duplicate provider shipment is created.
 7. Max attempts exhausted; shipment becomes `FAILED`, attempt count is correct, and no infinite retry occurs.
 8. Multiple due shipments are processed in bounded batches; no row is lost or processed concurrently twice.
@@ -223,7 +223,7 @@ Assertions must distinguish purchase outcome from shipping outcome. A shipping f
 
 ## 9. Delivery phases
 
-- **Phase 1 — Contract + synchronous worker loop:** add provider mock, DB state, a single worker, success/500/timeout, status endpoint, and Playwright assertions.
+- **Phase 1 — Contract + asynchronous worker loop:** add provider mock, DB state, a single worker, success/500/timeout, status endpoint, and Playwright assertions.
 - **Phase 2 — Resilience:** bounded retries/backoff, 429, ambiguous timeout, idempotency, leases, restart recovery, and batch-size tests.
 - **Phase 3 — Observability and operations:** metrics/logs, queue-age monitoring, worker heartbeat, manual recovery procedure, and optional dashboard.
 
