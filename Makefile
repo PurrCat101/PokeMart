@@ -11,7 +11,7 @@ build: ## Compile the BFF and PokéMart API TypeScript projects
 
 up: ## Start the core stack and wait for it to become ready
 	docker compose up -d --build
-	docker compose exec -T bff wget -qO- http://localhost:3001/ready
+	docker compose exec -T bff curl -s http://localhost:3001/ready
 
 down: ## Stop the core stack without deleting volumes
 	docker compose down
