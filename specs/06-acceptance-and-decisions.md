@@ -85,10 +85,14 @@
 - Worker batch/lease handling prevents simultaneous workers from processing the same shipment and recovers expired claims.
 - `GET /api/purchases/{id}/shipment` is authenticated, owner-scoped, reads local state, and remains usable while the provider is down.
 - A database migration exists for already initialized volumes; changing the initial schema alone is not considered a migration.
-- Playwright validates public responses, database state, provider request journal, recovery, and isolation independently.
+- Playwright validates public responses, database state, provider request journal, recovery, delivery-status transitions, and isolation independently.
+- The frontend can show current shipment state from the local PokéMart API even while the Shipping provider is down.
 
 ### Shipping integration decisions
 - MySQL `shipments` rows are the durable queue for v1; no Redis/message broker is required.
 - A separate worker handles retries and batches outside the purchase request path.
-- Provider acceptance is represented as `ACCEPTED`, not `DELIVERED`.
+- Separate operational shipment-creation state (`processingStatus`) from customer-facing delivery state (`deliveryStatus`). A tracking number being created is not the same as a parcel being in transit or delivered.
+- The test-only `PATCH /__test/shipments/{providerShipmentId}/status` endpoint can advance simulated delivery status and is never exposed through the public BFF.
+- Purchase history shows a quick delivery status; opening a purchase shows order detail with tracking number and a delivery timeline.
+- The default worker sweep for retryable shipment-creation jobs is one minute; tests override timing for deterministic, fast execution.
 - The shipping provider mock is a Node.js + Express HTTP service in Docker Compose, with test-only fault-control routes unavailable through the public BFF.
