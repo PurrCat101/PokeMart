@@ -63,5 +63,36 @@ services:
       - ./specs/openapi.yaml:/usr/share/nginx/html/openapi.yaml:ro
       - ./specs/pokemart-openapi.yaml:/usr/share/nginx/html/pokemart-openapi.yaml:ro
 
+  shipping-mock:
+    build:
+      context: .
+      dockerfile: apps/shipping-mock/Dockerfile
+    environment:
+      PORT: 3002
+    ports: ["3002:3002"]
+
+  shipping-worker:
+    build:
+      context: .
+      dockerfile: apps/pokemart-api/Dockerfile
+    command: ["npm", "run", "start:worker"]
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-pokemart_lab}
+      MYSQL_USER: ${MYSQL_USER:-pokemart_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change_me_for_local_development}
+      SHIPPING_BASE_URL: http://shipping-mock:3002
+      SHIPPING_REQUEST_TIMEOUT_MS: 2000
+      SHIPPING_MAX_ATTEMPTS: 5
+      SHIPPING_BATCH_SIZE: 10
+      SHIPPING_POLL_INTERVAL_MS: 60000
+      SHIPPING_STATUS_SYNC_INTERVAL_MS: 15000
+    depends_on:
+      mysql:
+        condition: service_healthy
+      shipping-mock:
+        condition: service_started
+
 volumes:
   mysql-data:

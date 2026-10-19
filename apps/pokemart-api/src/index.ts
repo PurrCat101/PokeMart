@@ -252,6 +252,46 @@ app.get('/pokemart/v1/purchases/:id', authenticate, async (req, res, next) => {
     if (!(rows as Row[]).length) throw new AppError(404, 'PURCHASE_NOT_FOUND', 'Purchase not found'); res.json(asPurchase((rows as Row[])[0]));
   } catch (error) { next(error); }
 });
+app.get('/pokemart/v1/purchases/:id/shipment', authenticate, async (req, res, next) => {
+  try {
+    const id = userId(res);
+    const purchaseId = req.params.id;
+    if (typeof purchaseId !== 'string' || !validUuid.test(purchaseId)) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'id', message: 'must be a UUID' }]);
+    }
+    const [purchaseRows] = await pool.query('SELECT id FROM purchases WHERE user_id=? AND id=?', [id, purchaseId]);
+    if (!(purchaseRows as Row[]).length) {
+      throw new AppError(404, 'PURCHASE_NOT_FOUND', 'Purchase not found');
+    }
+    const [shipmentRows] = await pool.query('SELECT * FROM shipments WHERE purchase_id=?', [purchaseId]);
+    if (!(shipmentRows as Row[]).length) {
+      // Legacy or missing shipment row fallback
+      return res.json({
+        purchaseId,
+        orderStatus: 'ORDER_PLACED',
+        processingStatus: 'PENDING',
+        deliveryStatus: 'WAITING_FOR_SHIPMENT',
+        trackingNumber: null,
+        attemptCount: 0,
+        lastError: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    const s = (shipmentRows as Row[])[0];
+    res.json({
+      purchaseId: s.purchase_id,
+      orderStatus: 'ORDER_PLACED',
+      processingStatus: s.processing_status,
+      deliveryStatus: s.delivery_status,
+      trackingNumber: s.tracking_number ?? null,
+      attemptCount: Number(s.attempt_count),
+      lastError: s.last_error_message ?? null,
+      createdAt: new Date(s.created_at).toISOString(),
+      updatedAt: new Date(s.updated_at).toISOString(),
+    });
+  } catch (error) { next(error); }
+});
 
 async function createPurchase(userId: string, body: unknown): Promise<{ status: number; body: Row }> {
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'body', message: 'must be an object' }]);
@@ -276,6 +316,7 @@ async function createPurchase(userId: string, body: unknown): Promise<{ status: 
     if (!wallet || Number(wallet.balance) < total) throw new AppError(422, 'INSUFFICIENT_FUNDS', 'Insufficient funds');
     const createdAt = new Date();
     await connection.query('INSERT INTO purchases (id,user_id,pokemon_source_id,quantity,unit_price,total_price,created_at) VALUES (?, ?, ?, ?, ?, ?, ?)', [purchaseId, userId, pokemon, quantity, listing.price, total, createdAt]);
+    await connection.query('INSERT INTO shipments (purchase_id, processing_status, delivery_status, attempt_count, next_attempt_at, created_at, updated_at) VALUES (?, "PENDING", "WAITING_FOR_SHIPMENT", 0, ?, ?, ?)', [purchaseId, createdAt, createdAt, createdAt]);
     await connection.query('UPDATE shop_listing SET stock=stock-? WHERE pokemon_source_id=?', [quantity, pokemon]);
     await connection.query('UPDATE user_wallet SET balance=balance-? WHERE user_id=?', [total, userId]);
     await connection.query('INSERT INTO user_inventory (user_id,pokemon_source_id,quantity) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE quantity=quantity+VALUES(quantity)', [userId, pokemon, quantity]);

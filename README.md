@@ -10,12 +10,14 @@
 
 | Service | URL เมื่อรัน local | หน้าที่ |
 |---|---|---|
-| Web frontend | `http://localhost:3002` | Next.js UI (เริ่มแยกด้วย `npm run dev:web`) สำหรับ catalog, cart/checkout, wallet, inventory และ purchase history |
+| Web frontend | `http://localhost:3003` | Next.js UI (เริ่มแยกด้วย `npm run dev:web`) สำหรับ catalog, cart/checkout, wallet, inventory และ purchase history |
 | BFF | `http://localhost:3001` | Public API สำหรับ client และแปลง response เป็น DTO ฝั่ง public |
 | PokéMart API | `http://localhost:3000` | Internal service สำหรับ business rules และการเข้าถึงข้อมูล |
+| Shipping Mock | `http://localhost:3002` (Docker) | Express Mock จำลองระบบจัดส่งบุคคลที่สาม (3rd-party shipping provider) |
+| Shipping Worker | Background process / Docker | Worker อ่านคิวงาน `shipments` จาก MySQL ยิง provider HTTP และ sync delivery status |
 | WireMock | `http://localhost:8080` | จำลอง public API สำหรับ contract tests |
 | Swagger UI | `http://localhost:8081` | เลือกดู BFF OpenAPI หรือ internal API OpenAPI |
-| MySQL | `localhost:3307` (host; port ใน container คือ `3306`) | เก็บ catalog, wallet, inventory และ purchase history |
+| MySQL | `localhost:3306` หรือ `3307` | เก็บ catalog, wallet, inventory, purchases และ shipments |
 
 ## 1. Prerequisites
 
@@ -102,9 +104,9 @@ MySQL จะสร้าง schema และ seed data เมื่อเริ�
 npm run dev:web
 ```
 
-เปิด `http://localhost:3002` เว็บแอปเรียก public BFF ผ่าน Next.js rewrite โดยค่าเริ่มต้นชี้ไปที่ `http://localhost:3001`; ตั้ง `NEXT_PUBLIC_BFF_URL` หรือ `BFF_INTERNAL_URL` ใน `apps/web/.env.local` เมื่อต้องการเปลี่ยนปลายทาง ดูรายละเอียด feature และขอบเขตการเชื่อมต่อที่ [specs/09-frontend.md](specs/09-frontend.md)
+เปิด `http://localhost:3003` เว็บแอปเรียก public BFF ผ่าน Next.js rewrite โดยค่าเริ่มต้นชี้ไปที่ `http://localhost:3001`; ตั้ง `NEXT_PUBLIC_BFF_URL` หรือ `BFF_INTERNAL_URL` ใน `apps/web/.env.local` เมื่อต้องการเปลี่ยนปลายทาง ดูรายละเอียด feature และขอบเขตการเชื่อมต่อที่ [specs/09-frontend.md](specs/09-frontend.md)
 
-รัน Playwright UI tests กับเว็บที่เปิดอยู่ได้ด้วย `npm run test:ui`; ตั้ง `WEB_BASE_URL` เป็น origin ของเว็บเป้าหมายหากไม่ใช่ `http://localhost:3002` โดย test selectors ใช้ `data-testid` ตาม convention ใน [specs/09-frontend.md](specs/09-frontend.md)
+Playwright จะเปิดเว็บบน `http://localhost:3003` ให้อัตโนมัติระหว่าง `npm test` และ `npm run test:ui`; หากต้องการทดสอบเว็บที่เปิดอยู่แล้ว ให้ตั้ง `WEB_BASE_URL` เป็น origin ของเว็บนั้น โดย test selectors ใช้ `data-testid` ตาม convention ใน [specs/09-frontend.md](specs/09-frontend.md)
 
 ## ทดลอง login และเรียก API
 
@@ -150,6 +152,7 @@ Login returns a one-hour JWT. A frontend should send it as `Authorization: Beare
 | 3 | `npm run test:pokeapi` | Contract ของ internal API แยกตาม endpoint | PokéMart API + MySQL |
 | 4 | `npm run test:purchase-retry` | Retry ด้วย `purchaseId` เดิมและ duplicate หลัง commit | ระบบจริง + MySQL |
 | 5 | `npm run test:e2e` | User journeys และผลกระทบต่อข้อมูล | BFF + PokéMart API + MySQL |
+| 6 | `npm run test:shipping` | Shipping integration, resilience, batch workers, idempotency และ delivery lifecycle | BFF + PokéMart API + Shipping Mock + MySQL |
 | ทั้งหมด | `npm test` | ทุก Playwright project | ต้อง start Compose |
 
 รันตามลำดับตัวอย่าง:
@@ -174,9 +177,9 @@ npm run test:report
 
 ทุก suite แยก test files ตาม target และ endpoint: `tests/testCases/mocked-bff/` สำหรับ WireMock, `pokemon/` และ `purchases/` สำหรับ public BFF, `PokeAPI/<endpoint>/` สำหรับ internal PokéMart API โดยตรง และ `e2e/` สำหรับ journeys ผ่าน BFF ผลจาก WireMock ยืนยันเฉพาะ contract ของ mapping ไม่ได้ยืนยัน business logic หรือ persistence ของระบบจริง ส่วน `PokeAPI` ตรวจ internal DTO/error behavior โดยไม่ใช้ BFF.
 
-`npm test` รัน WireMock และ real-system projects แยกกัน ไม่ได้ส่ง purchase ซ้ำจาก WireMock ไปยังฐานข้อมูลจริง แต่ละ purchase test ใช้ UUID ใหม่และตรวจ duplicate ภายในเคสของตัวเอง ก่อน project `api`, `e2e` หรือ `pokeapi` เริ่ม จะมี setup ตั้ง wallet ของ `REAL_USER_ID` และ listing ของ `REAL_POKEMON_ID` กลับเป็น `REAL_WALLET_BALANCE`, `REAL_POKEMON_PRICE`, `REAL_POKEMON_STOCK` และ active พร้อมลบ inventory row ของ user/โปเกมอนคู่นั้น การตั้งค่านี้ไม่ลบ purchase history หรือ reset Docker volume; purchase tests ยัง snapshot/restore state และลบ purchase ที่สร้างเอง
+`npm test` รัน WireMock และ real-system projects แยกกัน ไม่ได้ส่ง purchase ซ้ำจาก WireMock ไปยังฐานข้อมูลจริง แต่ละ purchase test ใช้ UUID ใหม่และตรวจ duplicate ภายในเคสของตัวเอง ก่อน real-system test แต่ละกรณี fixture จะตั้ง wallet ของ `REAL_USER_ID` และ listing ของ `REAL_POKEMON_ID` กลับเป็น `REAL_WALLET_BALANCE`, `REAL_POKEMON_PRICE`, `REAL_POKEMON_STOCK` และ active พร้อมลบ inventory row ของ user/โปเกมอนคู่นั้น การตั้งค่านี้ไม่ลบ purchase history หรือ reset Docker volume; purchase tests ยัง snapshot/restore state และลบ purchase ที่สร้างเอง
 
-> **สำคัญ:** setup นี้เขียนข้อมูลใน MySQL จึงต้องใช้ database และ user สำหรับทดสอบที่แยกจากข้อมูลใช้งานจริงเท่านั้น การรัน real-system tests จะคืนยอด wallet และ listing ที่เลือกเป็นค่าตั้งต้นตาม config เสมอ; ใช้ `npm run test:mocked` หากต้องการทดสอบ WireMock โดยไม่เรียก setup หรือเชื่อม MySQL
+> **สำคัญ:** setup นี้เขียนข้อมูลใน MySQL จึงต้องใช้ database และ user สำหรับทดสอบที่แยกจากข้อมูลใช้งานจริงเท่านั้น การรัน real-system tests จะคืนยอด wallet และ listing ที่เลือกเป็นค่าตั้งต้นก่อนทุกกรณีทดสอบ; ใช้ `npm run test:mocked` หากต้องการทดสอบ WireMock โดยไม่เชื่อม MySQL
 
 ## เลือก environment ของ test
 

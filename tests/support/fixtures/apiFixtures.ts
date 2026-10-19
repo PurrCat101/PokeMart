@@ -1,9 +1,15 @@
 import { APIRequestContext, expect, test as base } from '@playwright/test';
 import { testConfig } from '../../index';
 import { newPurchaseId } from '../utils/purchaseId';
+import { MySQLConnection } from '../models/MySQL/MySQLConnection';
+import { resetRealTestState } from '../utils/resetRealTestState';
+
+import { ShippingMockService } from '../services/shippingMockService';
 
 type ApiFixtures = {
+  realTestState: void;
   bffRequest: APIRequestContext;
+  shippingMock: ShippingMockService;
   testEnvironment: {
     userId: string;
     pokemonId: number;
@@ -15,6 +21,31 @@ type ApiFixtures = {
 };
 
 export const test = base.extend<ApiFixtures>({
+  realTestState: [async ({}, use, testInfo) => {
+    if (testInfo.project.name === 'wiremock' || testInfo.project.name === 'real-state-setup') {
+      await use();
+      return;
+    }
+
+    const database = new MySQLConnection();
+    try {
+      await resetRealTestState(database);
+      await use();
+    } finally {
+      await database.close();
+    }
+  }, { auto: true }],
+  shippingMock: async ({ playwright }, use) => {
+    const context = await playwright.request.newContext({
+      baseURL: testConfig.shippingMockBaseUrl,
+    });
+    const service = new ShippingMockService(context, testConfig.shippingMockBaseUrl);
+    try {
+      await use(service);
+    } finally {
+      await context.dispose();
+    }
+  },
   bffRequest: async ({ playwright, request }, use, testInfo) => {
     const isWireMock = testInfo.project.name === 'wiremock';
     const isInternalApi = testInfo.project.name === 'pokeapi';

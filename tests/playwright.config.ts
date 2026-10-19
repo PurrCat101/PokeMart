@@ -7,6 +7,12 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   reporter: [['list'], ['html', { open: 'never' }]],
+  webServer: process.env.WEB_BASE_URL ? undefined : {
+    command: 'npm --prefix .. run dev:web',
+    url: 'http://localhost:3003',
+    reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
+  },
   projects: [
     {
       name: 'real-state-setup',
@@ -34,13 +40,19 @@ export default defineConfig({
     {
       name: 'ui',
       testMatch: ['ui/**/*.spec.ts'],
-      use: { baseURL: process.env.WEB_BASE_URL ?? 'http://localhost:3002' },
+      use: { baseURL: process.env.WEB_BASE_URL ?? 'http://localhost:3003' },
     },
     {
       name: 'pokeapi',
       testMatch: ['PokeAPI/**/*.spec.ts'],
       dependencies: ['real-state-setup'],
       use: { baseURL: testConfig.pokemartApiBaseUrl },
+    },
+    {
+      name: 'shipping',
+      testMatch: ['shipping/**/*.spec.ts'],
+      dependencies: ['real-state-setup'],
+      use: { baseURL: testConfig.bffBaseUrl },
     },
   ],
 });

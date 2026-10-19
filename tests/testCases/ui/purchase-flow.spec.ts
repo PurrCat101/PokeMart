@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '../../support/fixtures/apiFixtures';
 import { testConfig } from '../../index';
 
 test('trainer purchases one Pokémon and sees wallet, stock, inventory, and history updated', async ({ page }) => {

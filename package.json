@@ -10,6 +10,8 @@
     "start:web": "npm run start --workspace=@pokemart/web",
     "start:bff": "npm run start --workspace=@pokemart/bff",
     "start:api": "npm run start --workspace=@pokemart/api",
+    "start:worker": "npm run start:worker --workspace=@pokemart/api",
+    "start:shipping-mock": "npm run start --workspace=@pokemart/shipping-mock",
     "test": "npm run test --workspace=@pokemart/tests",
     "test:report": "npm run test:report --workspace=@pokemart/tests",
     "test:mocked": "npm run test:mocked --workspace=@pokemart/tests",
@@ -17,7 +19,8 @@
     "test:api": "npm run test:api --workspace=@pokemart/tests",
     "test:pokeapi": "npm run test:pokeapi --workspace=@pokemart/tests",
     "test:purchase-retry": "npm run test:purchase-retry --workspace=@pokemart/tests",
-    "test:e2e": "npm run test:e2e --workspace=@pokemart/tests"
+    "test:e2e": "npm run test:e2e --workspace=@pokemart/tests",
+    "test:shipping": "npm run test:shipping --workspace=@pokemart/tests"
   },
   "devDependencies": {
     "@types/node": "22.18.6",
