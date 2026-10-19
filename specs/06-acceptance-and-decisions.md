@@ -76,7 +76,7 @@
 
 
 ### Shipping integration acceptance criteria
-- A successful purchase and its initial `PENDING` shipment row commit atomically.
+- A successful purchase and its initial shipment row (`processingStatus = PENDING`, `deliveryStatus = WAITING_FOR_SHIPMENT`) commit atomically.
 - The public purchase endpoint does not synchronously wait for the external Shipping provider.
 - A real Express mock service is used for provider success and fault scenarios; the Shipping integration does not depend on WireMock.
 - Provider HTTP 500, 429, timeout, and connection failure do not roll back a valid purchase or crash the core API.
