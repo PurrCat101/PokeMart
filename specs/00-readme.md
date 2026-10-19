@@ -4,11 +4,14 @@
 
 ## สถาปัตยกรรม
 
+> เพิ่ม Shipping integration lab ตาม [`10-shipping-integration.md`](10-shipping-integration.md): PokéMart บันทึก shipment job ลง MySQL แล้ว worker เรียก Express Shipping Mock ผ่าน HTTP; การทดสอบส่วนนี้ไม่ใช้ WireMock.
+
 ![PokéMart API test architecture flow](images/pokemart-api-test-architecture-flow.png)
 
 - **BFF** เป็นทางเข้าสำหรับ client ที่ `/api` ตรวจ request, ส่งต่อไปยัง service และดูแล contract ฝั่ง public
 - **PokéMart API** อยู่ใต้ `/pokemart/v1` และเป็นเจ้าของ business rules, purchase, duplicate detection และการเข้าถึงฐานข้อมูล
-- **MySQL** เก็บข้อมูลร้าน, wallet, inventory และประวัติการซื้อ
+- **MySQL** เก็บข้อมูลร้าน, wallet, inventory, purchase และสถานะ/งาน shipment ที่ต้อง retry
+- **Shipping Mock** เป็น HTTP service จำลองผู้ให้บริการขนส่งภายนอก; **Shipping Worker** ทำ batch/retry แยกจาก request ของผู้ซื้อ
 - **WireMock** ใช้จำลอง BFF สำหรับ contract tests เท่านั้น การทดสอบ integration จริงต้องเรียก BFF และ service จริง
 - การทดสอบและการเริ่มระบบไม่ควรต้องเรียก PokéAPI แบบ live
 
@@ -46,7 +49,8 @@ Invoke-RestMethod http://localhost:3000/ready
 | Public BFF | `http://localhost:3001` | [`specs/openapi.yaml`](specs/openapi.yaml) |
 | Internal PokéMart API | `http://localhost:3000` | [`specs/pokemart-openapi.yaml`](specs/pokemart-openapi.yaml) |
 | Swagger UI | `http://localhost:8081` | เลือกดู BFF public API หรือ PokéMart internal API ได้ |
-| WireMock | `http://localhost:8080` | Mappings ใน `wiremock/mappings/` |
+| WireMock | `http://localhost:8080` | Mappings ใน `wiremock/mappings/` สำหรับ mocked-BFF suite |
+| Shipping Mock | host port ที่กำหนดใน Compose | Contract และ fault modes ใน [`10-shipping-integration.md`](10-shipping-integration.md) |
 
 **สถานะ Swagger:** มี OpenAPI แยกสำหรับ BFF และ internal API แล้ว Swagger UI แสดงทั้งสองสเปกผ่าน dropdown; contract ของ service ระบุ schemas และ error responses แยกจาก public contract
 
@@ -135,6 +139,7 @@ npm run test:e2e
 | [`05-operations.md`](05-operations.md) | Compose และ operations |
 | [`06-acceptance-and-decisions.md`](06-acceptance-and-decisions.md) | Acceptance criteria และ decisions |
 | [`09-frontend.md`](09-frontend.md) | Web frontend, API boundary และ local runtime |
+| [`10-shipping-integration.md`](10-shipping-integration.md) | Shipping provider mock, schema, status API, retry/batch, recovery และ test scenarios |
 | [`PROGRESS.md`](PROGRESS.md) | สถานะงานและ validation ที่ทำแล้ว |
 
 ## คำเตือน
