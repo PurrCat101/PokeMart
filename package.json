@@ -20,10 +20,13 @@
     "test:pokeapi": "npm run test:pokeapi --workspace=@pokemart/tests",
     "test:purchase-retry": "npm run test:purchase-retry --workspace=@pokemart/tests",
     "test:e2e": "npm run test:e2e --workspace=@pokemart/tests",
-    "test:shipping": "npm run test:shipping --workspace=@pokemart/tests"
+    "test:shipping": "npm run test:shipping --workspace=@pokemart/tests",
+    "sync-shipment": "tsx scripts/sync-shipment-to-db.ts"
   },
   "devDependencies": {
     "@types/node": "22.18.6",
+    "mysql2": "^3.11.5",
+    "tsx": "^4.19.2",
     "typescript": "5.9.3"
   }
 }

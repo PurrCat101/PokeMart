@@ -280,6 +280,35 @@ Client สร้าง UUID `purchaseId` ก่อนเริ่มซื้อ
 
 ที่มาข้อมูล: [PokeAPI REST API](https://pokeapi.co/) โปรดตรวจสอบ license/attribution ก่อนนำ snapshot ไปเผยแพร่ต่อ
 
+## เครื่องช่วยจัดการ Shipment Status
+
+สำหรับการทดสอบ E2E หรือ development มีเครื่อง CLI สำหรับอัปเดต shipping status โดยตรง:
+
+```bash
+npm run sync-shipment <purchaseId> <status>
+```
+
+**การใช้งาน:**
+- `<purchaseId>`: Order ID (UUID) ของ order ที่ต้องการอัปเดต
+- `<status>`: ตัวเลขก 1-5
+  - 1 = LABEL_CREATED
+  - 2 = IN_TRANSIT
+  - 3 = OUT_FOR_DELIVERY
+  - 4 = DELIVERED
+  - 5 = DELIVERY_FAILED
+
+**ตัวอย่าง:**
+```bash
+npm run sync-shipment ba3d80c1-8e01-44a0-9c64-42c8d210f26c 3
+```
+
+**สิ่งที่ command นี้ทำ:**
+1. อัปเดต status ใน shipping-mock (`http://localhost:3002`)
+2. อัปเดต delivery_status ใน database โดยตรง
+3. ไม่ต้องรอ shipping-worker sync (ทุก 15 วินาที)
+
+> **หมายเหตุ:** เครื่องนี้สำหรับ local development และ testing เท่านั้น อย่าใช้ใน production หรือ environment อื่น ๆ
+
 ## API specifications และเอกสาร
 
 - Frontend behavior และ local setup: [specs/09-frontend.md](specs/09-frontend.md)
