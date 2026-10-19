@@ -29,7 +29,7 @@ Shipping Mock :3002 (container port; host port configurable)
 - The BFF remains the only public entry point for client business journeys.
 - The PokéMart API commits the purchase and a `PENDING` shipment record in the **same MySQL transaction** as wallet, stock, inventory, and purchase changes. A shipping outage must not roll back a valid purchase.
 - A separate worker claims due shipment rows in bounded batches and calls the provider. It must not keep a database transaction open while waiting for the HTTP provider.
-- `shipments` is the durable work queue for this lab; do not add Redis or a message broker in v1. This deliberately teaches the database-backed queue pattern.
+- `shipments` is the durable work queue and local delivery-status projection for this lab; do not add Redis or a message broker in v1. This deliberately teaches the database-backed queue pattern.
 - The worker is a separate Compose service/process using the existing PokéMart application code and database configuration; do not put long-running retry loops inside the public purchase request handler.
 - The mock is not part of the PokéMart business boundary and must not share the PokéMart database.
 
@@ -85,7 +85,8 @@ Add a `shipments` table with at least:
 | Column | Rule |
 |---|---|
 | `purchase_id` | UUID, PK or unique FK to `purchases.id`; one shipment per purchase in v1 |
-| `status` | `PENDING`, `PROCESSING`, `RETRY_WAIT`, `ACCEPTED`, `FAILED`, or `UNKNOWN` |
+| `processing_status` | `PENDING`, `PROCESSING`, `RETRY_WAIT`, `LABEL_CREATED`, `FAILED`, or `UNKNOWN`; controls queue/retry lifecycle |
+| `delivery_status` | `ORDER_PLACED`, `WAITING_FOR_SHIPMENT`, `LABEL_CREATED`, `IN_TRANSIT`, `OUT_FOR_DELIVERY`, `DELIVERED`, or `DELIVERY_FAILED`; customer-facing shipment progress |
 | `provider_shipment_id` | Nullable provider identifier |
 | `tracking_number` | Nullable tracking number |
 | `attempt_count` | Non-negative integer |
@@ -102,19 +103,58 @@ For new volumes, update the canonical schema. For existing MySQL volumes, add a 
 ## 5. Purchase and shipment lifecycle
 
 1. Validate and commit a purchase using the existing purchase rules.
-2. In that same transaction, insert `shipments.status = PENDING` with `attempt_count = 0` and `next_attempt_at = NOW()`.
+2. In that same transaction, insert `shipments.processing_status = PENDING`, `delivery_status = WAITING_FOR_SHIPMENT`, `attempt_count = 0`, and `next_attempt_at = NOW()`. The order itself already exists; `ORDER_PLACED` is the order lifecycle, while `WAITING_FOR_SHIPMENT` is the customer-facing delivery lifecycle.
 3. Return the existing purchase response contract. Do not synchronously call the provider from `POST /api/purchases`; shipment processing is asynchronous.
 4. Worker claims up to `SHIPPING_BATCH_SIZE` eligible rows using a short transaction and a lease. Multiple workers must not process the same row concurrently.
 5. Worker calls `POST /shipments` outside the DB transaction with `Idempotency-Key: purchaseId`.
-6. On provider acceptance, persist `ACCEPTED`, provider ID, tracking number, clear error/lease, and stop retrying.
-7. On transient failure, persist `RETRY_WAIT`, increment attempt count, set `next_attempt_at` using bounded exponential backoff with jitter, clear or expire the lease, and log the attempt.
-8. After the configured maximum attempts, persist `FAILED` and stop automatic retries. The row remains available for diagnosis and a future manual retry mechanism.
+6. On provider acceptance, persist `processing_status = LABEL_CREATED`, provider ID and tracking number, clear error/lease, and stop label-creation retries. Set customer-facing `delivery_status = LABEL_CREATED` (shipping label / tracking number created). This does not mean the parcel has been picked up or delivered.
+7. On transient failure, persist `processing_status = RETRY_WAIT`, increment attempt count, set `next_attempt_at` using bounded exponential backoff with jitter, clear or expire the lease, and log the attempt. Keep `delivery_status = WAITING_FOR_SHIPMENT` until a tracking number is actually issued.
+8. After the configured maximum attempts, persist `processing_status = FAILED` and stop automatic retries. The row remains available for diagnosis and a future manual retry mechanism; customer-facing status remains `WAITING_FOR_SHIPMENT` and the UI must also show a non-blocking issue/retry message so it does not imply delivery has started.
 9. On ambiguous timeout, use the same idempotency key and reconcile with provider status where possible. Do not create a new key or blindly create a second shipment. Persist `UNKNOWN` only when the result cannot yet be determined; schedule reconciliation rather than treating it as a confirmed failure.
 10. When a worker crashes while a row is `PROCESSING`, an expired `claimed_until` makes the work eligible for recovery. A restart must not lose pending work.
 
 Initial retry policy is configurable, with documented defaults (suggested: max 5 attempts; exponential backoff capped at 60 seconds). Tests should use short deterministic delays. Do not retry non-transient provider validation errors (4xx other than explicitly retryable 429); retry 429 according to `Retry-After` when valid, and retry 5xx/network errors/timeouts within the configured limit.
 
-## 6. Status query API
+## 6. Shipment creation vs delivery progress
+
+Keep the internal retry/processing state separate from the customer-visible delivery state. The worker's job is to create a shipment and obtain a tracking number; the provider/mock owns the simulated delivery progression. The local DB stores the latest provider delivery state so the UI can read it without calling the provider.
+
+Customer-facing delivery statuses and display labels:
+
+| API status | Thai UI label | Meaning |
+|---|---|---|
+| `ORDER_PLACED` | สั่งซื้อแล้ว | Purchase exists; used as the order-level milestone |
+| `WAITING_FOR_SHIPMENT` | รอจัดส่ง | Purchase committed, but no tracking number has been issued yet |
+| `LABEL_CREATED` | ออกเลขพัสดุแล้ว | Provider accepted the request and returned a tracking number |
+| `IN_TRANSIT` | อยู่ระหว่างจัดส่ง | Parcel has entered transit |
+| `OUT_FOR_DELIVERY` | กำลังนำจ่าย | Parcel is out for final delivery |
+| `DELIVERED` | จัดส่งสำเร็จ | Provider confirms delivery |
+| `DELIVERY_FAILED` | จัดส่งไม่สำเร็จ | Delivery attempt failed; distinct from failure to create a shipment |
+
+`processing_status` is operational state (`PENDING`, `PROCESSING`, `RETRY_WAIT`, `LABEL_CREATED`, `FAILED`, `UNKNOWN`) and must not be shown as if it were the delivery timeline. `ORDER_PLACED` comes from the purchase; the shipment status response may expose it as `orderStatus` alongside `deliveryStatus`.
+
+### Simulating provider status changes
+
+The Express Shipping Mock must support a test-only endpoint:
+
+- `PATCH /__test/shipments/{providerShipmentId}/status`
+- Request: `{ "status": "IN_TRANSIT" }` (allowed values are `LABEL_CREATED`, `IN_TRANSIT`, `OUT_FOR_DELIVERY`, `DELIVERED`, `DELIVERY_FAILED`)
+- Response returns the provider shipment ID and updated status.
+- Invalid statuses return `400`; unknown provider shipment IDs return `404`.
+- Status changes must follow valid forward transitions, except the test reset endpoint may clear state. Reject impossible transitions such as `DELIVERED -> IN_TRANSIT`.
+- This endpoint is only for local/test use and must never be exposed through the public BFF or enabled in a production profile.
+- A separate worker reconciliation loop periodically reads provider status and persists it in PokéMart MySQL. The UI never reads mock state directly. Provider outages leave the last known delivery status intact while label creation/retry and reconciliation resume when the provider recovers.
+
+### One-minute recovery/batch exercise
+
+1. Set the Shipping Mock mode to `unavailable` and create a purchase.
+2. Assert purchase succeeds, wallet/stock/inventory updates are committed, shipment `processingStatus` is `RETRY_WAIT` after the first attempt (or `PENDING` before the worker runs), and `deliveryStatus` remains `WAITING_FOR_SHIPMENT`.
+3. Wait for one or more scheduled sweeps, then set Mock mode to `success`.
+4. The next due batch retries the existing shipment work; it must not require a second purchase. Assert the same purchase eventually gets a tracking number and `deliveryStatus = LABEL_CREATED`.
+5. Use the test-only status endpoint to move the provider shipment through `IN_TRANSIT`, `OUT_FOR_DELIVERY`, and `DELIVERED`. The reconciliation worker syncs each state to PokéMart, and the order history/detail UI shows the new state.
+6. For deterministic CI, override poll/sync intervals with short test values and use bounded polling rather than waiting a real minute. Keep a separate smoke/manual test with the default 60-second sweep.
+
+## 7. Status query API
 
 Add an authenticated, owner-scoped read endpoint to both public and internal contracts:
 
@@ -126,7 +166,9 @@ Return the current local shipment state, not a live proxy to the provider. Sugge
 ```json
 {
   "purchaseId": "00000000-0000-4000-8000-000000000001",
-  "status": "PENDING",
+  "orderStatus": "ORDER_PLACED",
+  "processingStatus": "PENDING",
+  "deliveryStatus": "WAITING_FOR_SHIPMENT",
   "trackingNumber": null,
   "attemptCount": 0,
   "lastError": null,
@@ -153,7 +195,8 @@ Configuration (example names; all values validated on startup):
 - `SHIPPING_REQUEST_TIMEOUT_MS=1000`
 - `SHIPPING_MAX_ATTEMPTS=5`
 - `SHIPPING_BATCH_SIZE=10`
-- `SHIPPING_POLL_INTERVAL_MS=1000`
+- `SHIPPING_POLL_INTERVAL_MS=60000` (default one-minute sweep for due/retry work; tests may override to a few hundred milliseconds)
+- `SHIPPING_STATUS_SYNC_INTERVAL_MS=15000` (provider delivery-status reconciliation; tests may override this separately)
 - `SHIPPING_BACKOFF_BASE_MS=500`
 - `SHIPPING_BACKOFF_MAX_MS=60000`
 
@@ -162,7 +205,7 @@ Configuration (example names; all values validated on startup):
 Create a dedicated real-system shipping suite; do not place these cases under WireMock-only tests. Test through the public BFF, and verify MySQL and the mock's test journal where appropriate.
 
 Minimum scenarios:
-1. Purchase succeeds; shipment is initially `PENDING`, then becomes `ACCEPTED` with tracking number.
+1. Purchase succeeds; delivery is initially `WAITING_FOR_SHIPMENT`, then becomes `LABEL_CREATED` with a tracking number after the worker succeeds.
 2. Provider returns 500; purchase and wallet/stock/inventory changes remain committed, shipment is scheduled for retry, and the API remains healthy.
 3. Provider returns 429; worker honors valid `Retry-After` or applies bounded retry policy.
 4. Provider is unavailable or times out; purchase remains queryable and queued work persists across worker restart.
@@ -189,5 +232,5 @@ Assertions must distinguish purchase outcome from shipping outcome. A shipping f
 - Shipping is a third-party dependency represented by a real Express HTTP mock, not WireMock.
 - No separate queue broker in v1; MySQL `shipments` rows provide durable queue semantics.
 - No shipping database is shared with PokéMart. Mock state may be in memory because it is only a test provider; PokéMart's own shipment state must be durable.
-- No delivery simulation/webhook in v1. `ACCEPTED` means provider accepted the request, not delivered. A later exercise can add status polling/webhooks and states such as `IN_TRANSIT` and `DELIVERED`.
+- Delivery progress is simulated through test-only Express Mock controls and synchronized into local MySQL by a worker. `LABEL_CREATED` means a tracking number exists, not that the parcel is in transit or delivered.
 - No automatic retry inside the public purchase request and no unbounded retries.
