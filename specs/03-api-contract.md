@@ -25,6 +25,7 @@ The formal contract is `specs/openapi.yaml`. This file describes behavior and ru
 | `POST` | `/api/purchases` | Purchase a Pokémon using a client-generated purchase ID |
 | `GET` | `/api/purchases` | List purchase history |
 | `GET` | `/api/purchases/:id` | Get purchase details |
+| `GET` | `/api/purchases/:id/shipment` | Get the authenticated user's local shipping status |
 | `GET` | `/health` | Liveness |
 | `GET` | `/ready` | Readiness (includes PokéMart API check) |
 
@@ -120,3 +121,8 @@ The client generates a UUID `purchaseId` before sending `POST /api/purchases`. I
 ## Note on test coverage of 7.4
 
 Purchase-ID retry and duplicate behavior has a dedicated test group in `04-testing.md`.
+
+
+## 7.7 Shipment status
+
+`GET /api/purchases/{purchaseId}/shipment` requires bearer authentication and returns the locally persisted shipment state. It does not proxy to the shipping provider, so it remains available during provider outages. A valid purchase may be committed while shipment status is `PENDING`, `RETRY_WAIT`, or `UNKNOWN`; shipping failure does not mean the purchase failed. The lookup is scoped to the authenticated user's purchase and must not disclose another user's records. Malformed UUID returns `400 VALIDATION_ERROR`; missing or non-owned purchase returns `404 PURCHASE_NOT_FOUND`. Response schema and state transitions are defined in [`10-shipping-integration.md`](10-shipping-integration.md).
