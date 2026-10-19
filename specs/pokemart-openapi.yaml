@@ -670,15 +670,21 @@ components:
 
     Shipment:
       type: object
-      required: [purchaseId, status, trackingNumber, attemptCount, lastError, createdAt, updatedAt]
+      required: [purchaseId, orderStatus, processingStatus, deliveryStatus, trackingNumber, attemptCount, lastError, createdAt, updatedAt]
       additionalProperties: false
       properties:
         purchaseId:
           type: string
           format: uuid
-        status:
+        orderStatus:
           type: string
-          enum: [PENDING, PROCESSING, RETRY_WAIT, ACCEPTED, FAILED, UNKNOWN]
+          enum: [ORDER_PLACED]
+        processingStatus:
+          type: string
+          enum: [PENDING, PROCESSING, RETRY_WAIT, LABEL_CREATED, FAILED, UNKNOWN]
+        deliveryStatus:
+          type: string
+          enum: [WAITING_FOR_SHIPMENT, LABEL_CREATED, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED, DELIVERY_FAILED]
         trackingNumber:
           type: string
           nullable: true
