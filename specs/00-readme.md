@@ -50,7 +50,7 @@ Invoke-RestMethod http://localhost:3000/ready
 | Internal PokéMart API | `http://localhost:3000` | [`specs/pokemart-openapi.yaml`](specs/pokemart-openapi.yaml) |
 | Swagger UI | `http://localhost:8081` | เลือกดู BFF public API หรือ PokéMart internal API ได้ |
 | WireMock | `http://localhost:8080` | Mappings ใน `wiremock/mappings/` สำหรับ mocked-BFF suite |
-| Shipping Mock | host port ที่กำหนดใน Compose | Contract และ fault modes ใน [`10-shipping-integration.md`](10-shipping-integration.md) |
+| Shipping Mock | host port ที่กำหนดใน Compose | [`shipping-mock-openapi.yaml`](shipping-mock-openapi.yaml) และ [`10-shipping-integration.md`](10-shipping-integration.md) |
 
 **สถานะ Swagger:** มี OpenAPI แยกสำหรับ BFF และ internal API แล้ว Swagger UI แสดงทั้งสองสเปกผ่าน dropdown; contract ของ service ระบุ schemas และ error responses แยกจาก public contract
 
@@ -62,6 +62,7 @@ Public API:
 - `GET /api/wallet`
 - `GET /api/inventory`
 - `GET /api/purchases` และ `GET /api/purchases/{id}`
+- `GET /api/purchases/{id}/shipment`
 - `POST /api/purchases` (ส่ง `purchaseId`, `pokemonId`, `quantity` ใน JSON body)
 - `GET /health` และ `GET /ready`
 
@@ -139,7 +140,8 @@ npm run test:e2e
 | [`05-operations.md`](05-operations.md) | Compose และ operations |
 | [`06-acceptance-and-decisions.md`](06-acceptance-and-decisions.md) | Acceptance criteria และ decisions |
 | [`09-frontend.md`](09-frontend.md) | Web frontend, API boundary และ local runtime |
-| [`10-shipping-integration.md`](10-shipping-integration.md) | Shipping provider mock, schema, status API, retry/batch, recovery และ test scenarios |
+| [`10-shipping-integration.md`](10-shipping-integration.md) | Shipping provider, shipment lifecycle, retry/batch, recovery และ UI/API test scenarios |
+| [`shipping-mock-openapi.yaml`](shipping-mock-openapi.yaml) | Express Shipping Mock API รวม endpoint จำลอง fault และปรับสถานะการจัดส่ง |
 | [`PROGRESS.md`](PROGRESS.md) | สถานะงานและ validation ที่ทำแล้ว |
 
 ## คำเตือน
