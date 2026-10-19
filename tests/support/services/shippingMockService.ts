@@ -26,7 +26,7 @@ export class ShippingMockService extends Api3rdPartyServices {
   }
 
   async setMode(mode: ShippingMockMode) {
-    const res = await this.request.put(`${this.baseUrl}/__test/mode`, {
+    const res = await this.request.put(`${this.baseUrl}/v1/admin/mode`, {
       data: { mode },
     });
     if (!res.ok()) {
@@ -36,23 +36,23 @@ export class ShippingMockService extends Api3rdPartyServices {
   }
 
   async updateDeliveryStatus(providerShipmentId: string, status: ProviderDeliveryStatus) {
-    const res = await this.request.patch(`${this.baseUrl}/__test/shipments/${providerShipmentId}/status`, {
+    const res = await this.request.patch(`${this.baseUrl}/v1/admin/shipments/${providerShipmentId}/status`, {
       data: { status },
     });
     return res;
   }
 
   async getRequests() {
-    const res = await this.request.get(`${this.baseUrl}/__test/requests`);
+    const res = await this.request.get(`${this.baseUrl}/v1/admin/requests`);
     return res.json();
   }
 
   async reset() {
-    const res = await this.request.post(`${this.baseUrl}/__test/reset`);
+    const res = await this.request.post(`${this.baseUrl}/v1/admin/reset`);
     return res.json();
   }
 
   async getShipment(providerShipmentId: string) {
-    return this.request.get(`${this.baseUrl}/shipments/${providerShipmentId}`);
+    return this.request.get(`${this.baseUrl}/v1/shipments/${providerShipmentId}`);
   }
 }
