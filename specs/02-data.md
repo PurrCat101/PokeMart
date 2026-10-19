@@ -60,3 +60,12 @@ Normal startup and tests must not fetch the latest data from the internet. The l
 ### Reset safety
 
 `docker compose down -v` removes Compose-managed volumes and deletes local database data. Document it as a destructive local reset only; never use it against shared or production environments.
+
+
+## 11. Shipping persistence (new)
+
+The shipping integration adds a PokéMart-owned `shipments` table linked one-to-one to `purchases.id`. This row is both the durable work item and the local shipment status record; v1 does not require Redis or a separate broker.
+
+Required fields: `purchase_id` (unique FK), `status`, `provider_shipment_id`, `tracking_number`, `attempt_count`, `next_attempt_at`, `claimed_until` (worker lease), `last_error_code`, `last_error_message`, `created_at`, and `updated_at`. Index due work by `(status, next_attempt_at)` and expired leases by `(status, claimed_until)`. Statuses are `PENDING`, `PROCESSING`, `RETRY_WAIT`, `ACCEPTED`, `FAILED`, and `UNKNOWN`.
+
+The purchase transaction inserts the shipment row as `PENDING` atomically with purchase/wallet/stock/inventory changes. Provider HTTP calls happen asynchronously in a worker and outside the database transaction. Provider outages therefore do not undo a committed purchase. Existing volumes require a numbered migration because MySQL init scripts only run for an empty data directory. See [`10-shipping-integration.md`](10-shipping-integration.md) for the schema contract and migration requirements.
