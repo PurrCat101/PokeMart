@@ -316,6 +316,38 @@ paths:
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
 
+  /pokemart/v1/purchases/{id}/shipment:
+    get:
+      tags: [Purchases]
+      operationId: getPurchaseShipment
+      summary: Read persisted shipment state for the caller's purchase
+      security:
+        - bearerAuth: []
+      description: |
+        Reads MySQL only and does not proxy to the shipping provider.
+        The result is scoped to the authenticated user's purchase.
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdRequest'
+        - $ref: '#/components/parameters/PurchaseId'
+      responses:
+        '200':
+          description: Local shipment status
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Shipment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /health:
     get:
       tags: [Health]
@@ -635,6 +667,39 @@ components:
             mysql:
               type: string
               enum: [ok, unavailable, uninitialized]
+
+    Shipment:
+      type: object
+      required: [purchaseId, orderStatus, processingStatus, deliveryStatus, trackingNumber, attemptCount, lastError, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        purchaseId:
+          type: string
+          format: uuid
+        orderStatus:
+          type: string
+          enum: [ORDER_PLACED]
+        processingStatus:
+          type: string
+          enum: [PENDING, PROCESSING, RETRY_WAIT, LABEL_CREATED, FAILED, UNKNOWN]
+        deliveryStatus:
+          type: string
+          enum: [WAITING_FOR_SHIPMENT, LABEL_CREATED, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED, DELIVERY_FAILED]
+        trackingNumber:
+          type: string
+          nullable: true
+        attemptCount:
+          type: integer
+          minimum: 0
+        lastError:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
 
     Error:
       type: object

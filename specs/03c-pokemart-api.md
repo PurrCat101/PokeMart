@@ -31,6 +31,7 @@ The BFF forwards tokens unchanged. The internal API is still intended to remain 
 | `POST` | `/pokemart/v1/purchases` | Create a purchase using the supplied purchase ID |
 | `GET` | `/pokemart/v1/purchases` | Paged purchase history of the caller |
 | `GET` | `/pokemart/v1/purchases/{id}` | One purchase of the caller |
+| `GET` | `/pokemart/v1/purchases/{id}/shipment` | Local shipment state for the caller's purchase |
 | `GET` | `/health` | Liveness, no dependency checks |
 | `GET` | `/ready` | Readiness: MySQL reachable and schema initialized |
 
@@ -91,3 +92,8 @@ Same rules as `05-operations.md` section 12. In addition, the PokéMart API logs
 
 - Whether `/ready` should also check the migration version once migrations exist.
 - Whether purchase rows should store the listing's price at purchase time as a separate snapshot (the current design stores `unitPrice` on the purchase, which covers this).
+
+
+## 11. Shipping integration
+
+The PokéMart API creates a shipment record with `processing_status = PENDING` and `delivery_status = WAITING_FOR_SHIPMENT` in the same transaction as a successful purchase. It does not call the provider in the purchase request path. A separate worker reads due shipment rows and calls the configured HTTP provider. Provider outages must not roll back a purchase or make the API liveness endpoint fail. The owner-scoped `GET /pokemart/v1/purchases/{id}/shipment` reads only MySQL and remains usable while Shipping is down. See [`10-shipping-integration.md`](10-shipping-integration.md) for retry, batch, idempotency, and recovery behavior.

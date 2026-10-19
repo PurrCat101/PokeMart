@@ -1,0 +1,161 @@
+openapi: 3.0.3
+info:
+  title: PokéMart Shipping Mock API
+  version: 1.0.0
+  description: |
+    Local/test-only third-party shipping provider simulator. Never expose test-control endpoints
+    through the public PokéMart BFF or enable them in production.
+servers:
+  - url: http://localhost:3002
+paths:
+  /health:
+    get:
+      summary: Check mock process liveness
+      responses:
+        '200':
+          description: Mock process is running
+  /shipments:
+    post:
+      summary: Create a shipment idempotently
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [purchaseId, recipient, items]
+              properties:
+                purchaseId:
+                  type: string
+                  format: uuid
+                recipient:
+                  type: object
+                items:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        '202':
+          description: Shipment accepted and tracking number issued
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [providerShipmentId, status, trackingNumber]
+                properties:
+                  providerShipmentId:
+                    type: string
+                  status:
+                    type: string
+                    enum: [LABEL_CREATED]
+                  trackingNumber:
+                    type: string
+        '400':
+          description: Invalid request
+        '429':
+          description: Rate limited
+        '500':
+          description: Simulated provider error
+        '503':
+          description: Provider temporarily unavailable
+  /shipments/{providerShipmentId}:
+    get:
+      summary: Read provider-side shipment and delivery status
+      parameters:
+        - $ref: '#/components/parameters/ProviderShipmentId'
+      responses:
+        '200':
+          description: Provider shipment state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderShipment'
+        '404':
+          description: Shipment not found
+  /__test/mode:
+    put:
+      summary: Set simulated provider behavior (local/test only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode]
+              properties:
+                mode:
+                  type: string
+                  enum: [success, http-500, rate-limit, timeout-before-accept, ambiguous-timeout, unavailable]
+      responses:
+        '200':
+          description: Mode updated
+        '400':
+          description: Unknown mode
+  /__test/shipments/{providerShipmentId}/status:
+    patch:
+      summary: Advance simulated delivery status (local/test only)
+      parameters:
+        - $ref: '#/components/parameters/ProviderShipmentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [LABEL_CREATED, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED, DELIVERY_FAILED]
+      responses:
+        '200':
+          description: Provider delivery status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderShipment'
+        '400':
+          description: Invalid status or invalid transition
+        '404':
+          description: Provider shipment not found
+  /__test/requests:
+    get:
+      summary: Inspect received provider requests (local/test only)
+      responses:
+        '200':
+          description: Request journal
+  /__test/reset:
+    post:
+      summary: Reset mock state and request journal (local/test only)
+      responses:
+        '200':
+          description: Mock state reset
+components:
+  parameters:
+    ProviderShipmentId:
+      in: path
+      name: providerShipmentId
+      required: true
+      schema:
+        type: string
+  schemas:
+    ProviderShipment:
+      type: object
+      required: [providerShipmentId, purchaseId, status, trackingNumber]
+      properties:
+        providerShipmentId:
+          type: string
+        purchaseId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [LABEL_CREATED, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED, DELIVERY_FAILED]
+        trackingNumber:
+          type: string

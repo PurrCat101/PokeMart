@@ -2,14 +2,16 @@
 
 ## 11. Docker Compose requirements
 
-Compose defines `mysql`, `wiremock`, `pokemart-api`, `bff`, and `swagger-ui`.
+Compose defines `mysql`, `wiremock`, `pokemart-api`, `shipping-worker`, `shipping-mock`, `bff`, and `swagger-ui`.
 
 Requirements:
 - Persistent MySQL volume for normal runs.
 - SQL initialization scripts mounted into the supported initialization directory.
 - MySQL health check and clear startup behavior when the database is unavailable.
 - Internal Docker network and published ports needed by host-run tests.
-- Separate WireMock mappings for the mocked BFF and for external dependency mocks.
+- WireMock mappings remain dedicated to mocked-BFF contract tests; Shipping uses a separate Express HTTP mock service.
+- `shipping-worker` depends on MySQL readiness and can start even if the provider is unavailable; queued work is durable and retried.
+- The Shipping Mock has its own health check and test-only fault-control endpoints that are not exposed by the public BFF.
 - Pinned image versions and no production secrets or data.
 
 Swagger UI example (pin the image to a specific v5 patch release):
@@ -136,3 +138,14 @@ make obs-down
 ```
 
 `make db-reset` is destructive and must be used only when local lab data can be discarded. A performance run must not overlap with a reset or unrelated test run against the same dataset.
+
+
+## 16. Shipping worker operations
+
+See [`10-shipping-integration.md`](10-shipping-integration.md) for environment variables and lifecycle details. Operational requirements:
+
+- The worker polls a bounded batch of due `shipments` rows, claims them with a lease, and releases the database transaction before calling HTTP.
+- Pending work survives container restart because it is stored in MySQL. Expired leases are reclaimed after worker crashes.
+- A provider outage must not make the BFF/PokéMart API fail readiness when local purchase processing and durable queuing still work. Report provider health separately.
+- Retry count is bounded; exhausted work becomes `FAILED` and remains inspectable. Avoid infinite tight loops and avoid logging recipient addresses or secrets.
+- Provide a Makefile target to inspect worker/mock logs and a safe command to stop/start the mock for outage exercises. Stopping the mock must not delete MySQL data.
