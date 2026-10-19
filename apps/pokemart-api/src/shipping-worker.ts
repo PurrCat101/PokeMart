@@ -227,11 +227,10 @@ export class ShippingWorker {
     const startMs = Date.now();
 
     try {
-      const response = await fetch(`${this.baseUrl}/shipments`, {
+      const response = await fetch(`${this.baseUrl}/v1/shipments`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Idempotency-Key': purchaseId,
         },
         body: JSON.stringify(requestBody),
         signal: controller.signal,
@@ -387,7 +386,7 @@ export class ShippingWorker {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
         try {
-          const res = await fetch(`${this.baseUrl}/shipments/${item.provider_shipment_id}`, {
+          const res = await fetch(`${this.baseUrl}/v1/shipments/${item.provider_shipment_id}`, {
             signal: controller.signal,
           });
           clearTimeout(timeout);
