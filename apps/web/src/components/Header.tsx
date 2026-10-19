@@ -1,6 +1,9 @@
+"use client";
+
 import React from "react";
-import { PokeballIcon, WalletIcon, BackpackIcon, LedgerIcon, UserIcon, CartIcon } from "./icons";
+import { PokeballIcon, WalletIcon, BackpackIcon, LedgerIcon, UserIcon, CartIcon, SunIcon, MoonIcon } from "./icons";
 import { AuthUser, WalletData } from "../types/api";
+import { useTheme } from "../contexts/ThemeContext";
 
 interface HeaderProps {
   activeTab: "catalog" | "inventory" | "purchases";
@@ -25,6 +28,8 @@ export function Header({
   onOpenLogin,
   onLogout,
 }: HeaderProps) {
+  const { theme, toggleTheme } = useTheme();
+
   return (
     <header data-testid="app-header" className="sticky top-0 z-30 bg-white/95 dark:bg-zinc-900/95 border-b border-zinc-200 dark:border-zinc-800 backdrop-blur-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -91,13 +96,28 @@ export function Header({
                 }`}
               >
                 <LedgerIcon className="w-4 h-4" />
-                <span>Audit Ledger</span>
+                <span>Order History</span>
               </button>
             </nav>
           </div>
 
           {/* Right Status, Cart & Trainer Profile */}
           <div className="flex items-center space-x-3">
+            {/* Theme Toggle Button */}
+            <button
+              type="button"
+              onClick={toggleTheme}
+              data-testid="theme-toggle"
+              className="p-2 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 dark:focus-visible:ring-zinc-100 focus-visible:ring-offset-1"
+              aria-label="Toggle theme"
+            >
+              {theme === "light" ? (
+                <MoonIcon className="w-4 h-4 text-zinc-700 dark:text-zinc-300" />
+              ) : (
+                <SunIcon className="w-4 h-4 text-zinc-700 dark:text-zinc-300" />
+              )}
+            </button>
+
             {/* Shopping Bag Button */}
             <button
               type="button"
@@ -195,7 +215,7 @@ export function Header({
                 : "text-zinc-600 hover:bg-zinc-100"
             }`}
           >
-            Audit Ledger
+            Order History
           </button>
         </div>
       </div>
