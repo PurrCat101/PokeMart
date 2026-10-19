@@ -123,3 +123,10 @@ The initial application must not depend on live PokéAPI calls during each reque
 ## 8.3 Reporting rule
 
 WireMock fixture, public BFF, direct internal PokéMart API, and end-to-end results are reported separately. A passing mocked contract test does not prove that the real BFF, internal service, database, or persistence effects behave the same way. A direct internal API pass does not prove the BFF's upstream error mapping.
+
+
+## 9. Shipping integration and resilience suite
+
+Shipping scenarios run against the real BFF and PokéMart API with the Express Shipping Mock as the external provider. They are not WireMock mocked-BFF tests. Assert public API behavior, MySQL shipment state, and provider request journal where appropriate. The required cases, including HTTP 500, 429, timeout, ambiguous timeout/idempotency, batch processing, max attempts, worker restart, lease recovery, and owner scoping, are listed in [`10-shipping-integration.md`](10-shipping-integration.md).
+
+Do not assert that purchase creation fails when Shipping is unavailable: in the asynchronous design, the purchase should commit and shipment work should remain durable. Poll shipment status with a bounded timeout instead of fixed sleeps. Use a dedicated test database and reset mock state between tests.
