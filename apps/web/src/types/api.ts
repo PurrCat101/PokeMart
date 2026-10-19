@@ -68,6 +68,18 @@ export interface PurchaseItem {
   createdAt: string;
 }
 
+export interface ShipmentItem {
+  purchaseId: string;
+  orderStatus: string;
+  processingStatus: string;
+  deliveryStatus: string;
+  trackingNumber: string | null;
+  attemptCount: number;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PurchasesPageResponse {
   totalCount: number;
   page: {

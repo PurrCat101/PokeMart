@@ -9,6 +9,7 @@ import {
   PurchaseItem,
   CreatePurchaseRequest,
   ApiErrorResponse,
+  ShipmentItem,
 } from "../types/api";
 
 export class ApiError extends Error {
@@ -159,5 +160,9 @@ export const api = {
       method: "POST",
       body: JSON.stringify(purchase),
     });
+  },
+
+  async getShipment(purchaseId: string): Promise<ShipmentItem> {
+    return request<ShipmentItem>(`/api/purchases/${purchaseId}/shipment`);
   },
 };

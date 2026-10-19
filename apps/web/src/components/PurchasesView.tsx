@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import { PurchaseItem, AuthUser } from "../types/api";
 import { LedgerIcon, RefreshIcon, ChevronLeftIcon, ChevronRightIcon } from "./icons";
+import { OrderDetailModal } from "./OrderDetailModal";
 
 interface PurchasesViewProps {
   items: PurchaseItem[];
@@ -25,6 +26,19 @@ export function PurchasesView({
   onPageChange,
   onOpenLogin,
 }: PurchasesViewProps) {
+  const [selectedOrder, setSelectedOrder] = useState<PurchaseItem | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const handleOrderClick = (order: PurchaseItem) => {
+    setSelectedOrder(order);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedOrder(null);
+  };
+
   if (!user) {
     return (
       <div data-testid="purchases-auth-required" className="p-8 text-center bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg max-w-lg mx-auto my-8">
@@ -33,7 +47,7 @@ export function PurchasesView({
           Authentication Required
         </h3>
         <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 mb-4">
-          Sign in to view your verified purchase transactions and transaction audit receipts.
+          Sign in to view your order history and purchase records.
         </p>
         <button
           type="button"
@@ -53,18 +67,18 @@ export function PurchasesView({
   const totalPages = Math.max(1, Math.ceil(totalCount / limit));
 
   return (
-    <div data-testid="purchases-view" className="space-y-4">
+    <div data-testid="order-history-view" className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-3">
         <div>
           <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center space-x-2">
-            <span>Transaction Audit Ledger</span>
+            <span>Order History</span>
             <span className="text-xs font-mono font-normal text-zinc-500">
-              ({totalCount} records logged)
+              ({totalCount} orders)
             </span>
           </h2>
           <p className="text-xs text-zinc-500">
-            Immutable transaction records recorded in the central PokéMart database.
+            Your complete purchase history and order records.
           </p>
         </div>
         <button
@@ -75,7 +89,7 @@ export function PurchasesView({
           className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded transition-colors"
         >
           <RefreshIcon className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
-          <span>Refresh Ledger</span>
+          <span>Refresh</span>
         </button>
       </div>
 
@@ -85,27 +99,26 @@ export function PurchasesView({
           <table data-testid="purchases-table" className="w-full text-left text-xs font-mono">
             <thead className="bg-zinc-50 dark:bg-zinc-800/60 border-b border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 uppercase tracking-wider text-[11px]">
               <tr>
-                <th className="py-2.5 px-4 font-semibold">Transaction ID (UUID)</th>
                 <th className="py-2.5 px-4 font-semibold">Timestamp</th>
                 <th className="py-2.5 px-4 font-semibold">Item Procured</th>
                 <th className="py-2.5 px-4 font-semibold text-center">Qty</th>
                 <th className="py-2.5 px-4 font-semibold text-right">Unit Price</th>
-                <th className="py-2.5 px-4 font-semibold text-right">Total Debit</th>
+                <th className="py-2.5 px-4 font-semibold text-right">Total</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="animate-pulse">
-                    <td colSpan={6} className="py-3 px-4">
+                    <td colSpan={5} className="py-3 px-4">
                       <div className="h-4 bg-zinc-100 dark:bg-zinc-800 rounded w-full" />
                     </td>
                   </tr>
                 ))
               ) : items.length === 0 ? (
                 <tr data-testid="purchases-empty">
-                  <td colSpan={6} className="py-12 text-center text-zinc-500">
-                    No transactions recorded in ledger.
+                  <td colSpan={5} className="py-12 text-center text-zinc-500">
+                    No orders found.
                   </td>
                 </tr>
               ) : (
@@ -113,11 +126,9 @@ export function PurchasesView({
                   <tr
                     key={tx.purchaseId}
                     data-testid={`purchase-row-${tx.purchaseId}`}
-                    className="hover:bg-zinc-50/80 dark:hover:bg-zinc-800/40 transition-colors"
+                    className="hover:bg-zinc-50/80 dark:hover:bg-zinc-800/40 transition-colors cursor-pointer"
+                    onClick={() => handleOrderClick(tx)}
                   >
-                    <td className="py-3 px-4 font-mono text-zinc-700 dark:text-zinc-300 break-all select-all">
-                      {tx.purchaseId}
-                    </td>
                     <td className="py-3 px-4 text-zinc-500 whitespace-nowrap">
                       {new Date(tx.createdAt).toLocaleString()}
                     </td>
@@ -171,6 +182,13 @@ export function PurchasesView({
           </div>
         )}
       </div>
+
+      {/* Order Detail Modal */}
+      <OrderDetailModal
+        order={selectedOrder}
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+      />
     </div>
   );
 }
