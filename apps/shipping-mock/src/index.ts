@@ -38,7 +38,7 @@ export interface JournalRequest {
 let currentMode: MockMode = 'success';
 const requestJournal: JournalRequest[] = [];
 const shipmentsByProviderId = new Map<string, ProviderShipment>();
-const shipmentsByIdempotencyKey = new Map<string, ProviderShipment>();
+const shipmentsByPurchaseId = new Map<string, ProviderShipment>();
 
 const validTransitions: Record<DeliveryStatus, DeliveryStatus[]> = {
   LABEL_CREATED: ['IN_TRANSIT'],
@@ -52,16 +52,29 @@ const validUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[
 
 app.use(express.json());
 
+// CORS support for Swagger UI
+app.use((req, res, next) => {
+  const origin = req.header('origin');
+  if (origin && (origin.includes('localhost') || origin.includes('127.0.0.1'))) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Idempotency-Key');
+  }
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
+});
+
 // Log into test journal
 app.use((req, _res, next) => {
-  if (!req.path.startsWith('/__test')) {
+  if (!req.path.startsWith('/v1/admin')) {
     requestJournal.push({
       timestamp: new Date().toISOString(),
       method: req.method,
       path: req.path,
       headers: req.headers,
       body: req.body,
-      idempotencyKey: (req.header('idempotency-key') ?? req.header('Idempotency-Key')) as string | undefined,
     });
   }
   next();
@@ -72,14 +85,8 @@ app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok' });
 });
 
-// POST /shipments
-app.post('/shipments', async (req: Request, res: Response) => {
-  const idempotencyKey = (req.header('idempotency-key') ?? req.header('Idempotency-Key')) as string | undefined;
-  if (!idempotencyKey) {
-    res.status(400).json({ error: 'Missing Idempotency-Key header' });
-    return;
-  }
-
+// POST /v1/shipments
+app.post('/v1/shipments', async (req: Request, res: Response) => {
   const body = req.body;
   if (!body || typeof body !== 'object' || !body.purchaseId || !body.recipient || !body.items) {
     res.status(400).json({ error: 'Invalid request body. Required fields: purchaseId, recipient, items' });
@@ -110,7 +117,7 @@ app.post('/shipments', async (req: Request, res: Response) => {
       return;
     case 'ambiguous-timeout': {
       // Create shipment first, then delay
-      let existing = shipmentsByIdempotencyKey.get(idempotencyKey);
+      let existing = shipmentsByPurchaseId.get(body.purchaseId);
       if (!existing) {
         const providerShipmentId = `prov-${crypto.randomUUID()}`;
         const trackingNumber = `TRK-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
@@ -121,7 +128,7 @@ app.post('/shipments', async (req: Request, res: Response) => {
           trackingNumber,
         };
         shipmentsByProviderId.set(providerShipmentId, existing);
-        shipmentsByIdempotencyKey.set(idempotencyKey, existing);
+        shipmentsByPurchaseId.set(body.purchaseId, existing);
       }
       // Delay response past caller's timeout
       await new Promise((resolve) => setTimeout(resolve, 6000));
@@ -134,7 +141,7 @@ app.post('/shipments', async (req: Request, res: Response) => {
     }
     case 'success':
     default: {
-      let existing = shipmentsByIdempotencyKey.get(idempotencyKey);
+      let existing = shipmentsByPurchaseId.get(body.purchaseId);
       if (!existing) {
         const providerShipmentId = `prov-${crypto.randomUUID()}`;
         const trackingNumber = `TRK-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
@@ -145,7 +152,7 @@ app.post('/shipments', async (req: Request, res: Response) => {
           trackingNumber,
         };
         shipmentsByProviderId.set(providerShipmentId, existing);
-        shipmentsByIdempotencyKey.set(idempotencyKey, existing);
+        shipmentsByPurchaseId.set(body.purchaseId, existing);
       }
       res.status(202).json({
         providerShipmentId: existing.providerShipmentId,
@@ -157,8 +164,8 @@ app.post('/shipments', async (req: Request, res: Response) => {
   }
 });
 
-// GET /shipments/:providerShipmentId
-app.get('/shipments/:providerShipmentId', (req: Request, res: Response) => {
+// GET /v1/shipments/:providerShipmentId
+app.get('/v1/shipments/:providerShipmentId', (req: Request, res: Response) => {
   const { providerShipmentId } = req.params;
   const shipment = shipmentsByProviderId.get(providerShipmentId);
   if (!shipment) {
@@ -168,8 +175,8 @@ app.get('/shipments/:providerShipmentId', (req: Request, res: Response) => {
   res.json(shipment);
 });
 
-// PUT /__test/mode
-app.put('/__test/mode', (req: Request, res: Response) => {
+// PUT /v1/admin/mode (local/test only)
+app.put('/v1/admin/mode', (req: Request, res: Response) => {
   const mode = req.body?.mode as MockMode;
   const allowedModes: MockMode[] = [
     'success',
@@ -187,8 +194,8 @@ app.put('/__test/mode', (req: Request, res: Response) => {
   res.json({ mode: currentMode });
 });
 
-// PATCH /__test/shipments/:providerShipmentId/status
-app.patch('/__test/shipments/:providerShipmentId/status', (req: Request, res: Response) => {
+// PATCH /v1/admin/shipments/:providerShipmentId/status (local/test only)
+app.patch('/v1/admin/shipments/:providerShipmentId/status', (req: Request, res: Response) => {
   const { providerShipmentId } = req.params;
   const newStatus = req.body?.status as DeliveryStatus;
   const allowedStatuses: DeliveryStatus[] = [
@@ -224,17 +231,54 @@ app.patch('/__test/shipments/:providerShipmentId/status', (req: Request, res: Re
   res.json(shipment);
 });
 
-// GET /__test/requests
-app.get('/__test/requests', (_req: Request, res: Response) => {
+// POST /v1/admin/shipments/by-purchase-id/:purchaseId/status (local/test only - convenience endpoint)
+app.post('/v1/admin/shipments/by-purchase-id/:purchaseId/status', (req: Request, res: Response) => {
+  const { purchaseId } = req.params;
+  const newStatus = req.body?.status as DeliveryStatus;
+  const allowedStatuses: DeliveryStatus[] = [
+    'LABEL_CREATED',
+    'IN_TRANSIT',
+    'OUT_FOR_DELIVERY',
+    'DELIVERED',
+    'DELIVERY_FAILED',
+  ];
+  if (!allowedStatuses.includes(newStatus)) {
+    res.status(400).json({ error: `Invalid status: ${newStatus}` });
+    return;
+  }
+
+  const shipment = shipmentsByPurchaseId.get(purchaseId);
+  if (!shipment) {
+    res.status(404).json({ error: 'Shipment not found for this purchase ID' });
+    return;
+  }
+
+  // Validate forward transition
+  if (shipment.status !== newStatus) {
+    const allowedNext = validTransitions[shipment.status] || [];
+    if (!allowedNext.includes(newStatus)) {
+      res.status(400).json({
+        error: `Invalid status transition from ${shipment.status} to ${newStatus}`,
+      });
+      return;
+    }
+  }
+
+  shipment.status = newStatus;
+  res.json(shipment);
+});
+
+// GET /v1/admin/requests (local/test only)
+app.get('/v1/admin/requests', (_req: Request, res: Response) => {
   res.json(requestJournal);
 });
 
-// POST /__test/reset
-app.post('/__test/reset', (_req: Request, res: Response) => {
+// POST /v1/admin/reset (local/test only)
+app.post('/v1/admin/reset', (_req: Request, res: Response) => {
   currentMode = 'success';
   requestJournal.length = 0;
   shipmentsByProviderId.clear();
-  shipmentsByIdempotencyKey.clear();
+  shipmentsByPurchaseId.clear();
   res.json({ status: 'reset' });
 });
 
