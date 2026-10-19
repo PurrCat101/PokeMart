@@ -127,6 +127,6 @@ WireMock fixture, public BFF, direct internal PokéMart API, and end-to-end resu
 
 ## 9. Shipping integration and resilience suite
 
-Shipping scenarios run against the real BFF and PokéMart API with the Express Shipping Mock as the external provider. They are not WireMock mocked-BFF tests. Assert public API behavior, MySQL shipment state, and provider request journal where appropriate. The required cases, including HTTP 500, 429, timeout, ambiguous timeout/idempotency, batch processing, max attempts, worker restart, lease recovery, and owner scoping, are listed in [`10-shipping-integration.md`](10-shipping-integration.md).
+Shipping scenarios run against the real BFF and PokéMart API with the Express Shipping Mock as the external provider. They are not WireMock mocked-BFF tests. Assert public API behavior, MySQL shipment state, and provider request journal where appropriate. The required cases, including HTTP 500, 429, timeout, ambiguous timeout/idempotency, batch processing, max attempts, worker restart, lease recovery, owner scoping, simulated delivery-status transitions, and order-history/detail UI status, are listed in [`10-shipping-integration.md`](10-shipping-integration.md) and [`09-frontend.md`](09-frontend.md).
 
 Do not assert that purchase creation fails when Shipping is unavailable: in the asynchronous design, the purchase should commit and shipment work should remain durable. Poll shipment status with a bounded timeout instead of fixed sleeps. Use a dedicated test database and reset mock state between tests.
