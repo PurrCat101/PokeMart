@@ -6,11 +6,14 @@ services:
       MYSQL_USER: ${MYSQL_USER:-pokemart_user}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change_me_for_local_development}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change_me_root_local}
-    ports: ["${MYSQL_HOST_PORT:-3306}:3306"]
+    ports: ["${MYSQL_HOST_PORT:-4306}:3306"]
     volumes:
       - mysql-data:/var/lib/mysql
       - ./database/schema/001_create_shop_tables.sql:/docker-entrypoint-initdb.d/001_create_shop_tables.sql:ro
-      - ./database/seed/001_seed_shop_data.sql:/docker-entrypoint-initdb.d/101_seed_shop_data.sql:ro
+      - ./database/seed/001_seed_shop_data.sql:/docker-entrypoint-initdb.d/001_seed_shop_data.sql:ro
+      - ./database/seed/010_reference_pokemon.sql:/docker-entrypoint-initdb.d/010_reference_pokemon.sql:ro
+      - ./database/seed/011_reference_items.sql:/docker-entrypoint-initdb.d/011_reference_items.sql:ro
+      - ./database/seed/012_seed_catalog.sql:/docker-entrypoint-initdb.d/012_seed_catalog.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-pchange_me_root_local"]
       interval: 5s
@@ -23,16 +26,20 @@ services:
       context: .
       dockerfile: apps/pokemart-api/Dockerfile
     environment:
-      PORT: 3000
+      PORT: 4000
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       MYSQL_DATABASE: ${MYSQL_DATABASE:-pokemart_lab}
       MYSQL_USER: ${MYSQL_USER:-pokemart_user}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change_me_for_local_development}
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-local-only-insecure-pokemart-jwt-secret-change-before-deploy}
-    ports: ["3000:3000"]
+      PAYMENT_BASE_URL: http://payment-mock:4004
+      KYC_BASE_URL: http://kyc-api:4005
+      KYC_API_KEY: ${KYC_API_KEY:-local-only-kyc-key}
+      KYC_REQUEST_TIMEOUT_MS: 2000
+    ports: ["${POKEMART_API_HOST_PORT:-4000}:4000"]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/ready"]
+      test: ["CMD", "curl", "-f", "http://localhost:4000/ready"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -40,17 +47,38 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+      payment-mock:
+        condition: service_started
+      kyc-api:
+        condition: service_started
+
+  payment-mock:
+    build:
+      context: .
+      dockerfile: apps/payment-mock/Dockerfile
+    environment:
+      PORT: 4004
+    ports: ["${PAYMENT_MOCK_HOST_PORT:-4004}:4004"]
+
+  kyc-api:
+    build:
+      context: .
+      dockerfile: apps/kyc-api/Dockerfile
+    environment:
+      PORT: 4005
+      KYC_API_KEY: ${KYC_API_KEY:-local-only-kyc-key}
+    ports: ["${KYC_API_HOST_PORT:-4005}:4005"]
 
   bff:
     build:
       context: .
       dockerfile: apps/bff/Dockerfile
     environment:
-      PORT: 3001
-      POKEMART_API_BASE_URL: http://pokemart-api:3000
-    ports: ["3001:3001"]
+      PORT: 4001
+      POKEMART_API_BASE_URL: http://pokemart-api:4000
+    ports: ["${BFF_HOST_PORT:-4001}:4001"]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/ready"]
+      test: ["CMD", "curl", "-f", "http://localhost:4001/ready"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -61,28 +89,29 @@ services:
 
   wiremock:
     image: wiremock/wiremock:3.10.0
-    ports: ["8080:8080"]
+    ports: ["${WIREMOCK_HOST_PORT:-8080}:8080"]
     volumes:
       - ./wiremock/mappings:/home/wiremock/mappings:ro
 
-  swagger-ui:
-    image: swaggerapi/swagger-ui:v5.18.3
-    ports: ["8081:8080"]
-    environment:
-      URLS: '[{"url":"/openapi.yaml","name":"BFF Public API"},{"url":"/pokemart-openapi.yaml","name":"PokéMart Internal API"},{"url":"/shipping-mock-openapi.yaml","name":"PokéMart Shipping Mock API"}]'
-      URLS_PRIMARY_NAME: BFF Public API
+  api-reference:
+    # Scalar renders every mounted OpenAPI file (BFF first, then internal services). It replaces Swagger UI.
+    # The image scans /docs at start-up and builds one source per file, so no extra config is needed.
+    image: scalarapi/api-reference:0.6.16
+    ports: ["${API_REFERENCE_HOST_PORT:-8081}:8080"]
     volumes:
-      - ./specs/openapi.yaml:/usr/share/nginx/html/openapi.yaml:ro
-      - ./specs/pokemart-openapi.yaml:/usr/share/nginx/html/pokemart-openapi.yaml:ro
-      - ./specs/shipping-mock-openapi.yaml:/usr/share/nginx/html/shipping-mock-openapi.yaml:ro
+      - ./specs/openapi.yaml:/docs/1-bff-public-api.yaml:ro
+      - ./specs/pokemart-openapi.yaml:/docs/2-pokemart-internal-api.yaml:ro
+      - ./specs/kyc-openapi.yaml:/docs/3-kyc-api.yaml:ro
+      - ./specs/payment-mock-openapi.yaml:/docs/4-payment-mock.yaml:ro
+      - ./specs/shipping-mock-openapi.yaml:/docs/5-shipping-mock.yaml:ro
 
   shipping-mock:
     build:
       context: .
       dockerfile: apps/shipping-mock/Dockerfile
     environment:
-      PORT: 3002
-    ports: ["3002:3002"]
+      PORT: 4002
+    ports: ["${SHIPPING_MOCK_HOST_PORT:-4002}:4002"]
 
   shipping-worker:
     build:
@@ -95,16 +124,20 @@ services:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-pokemart_lab}
       MYSQL_USER: ${MYSQL_USER:-pokemart_user}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change_me_for_local_development}
-      SHIPPING_BASE_URL: http://shipping-mock:3002
+      SHIPPING_BASE_URL: http://shipping-mock:4002
       SHIPPING_REQUEST_TIMEOUT_MS: 2000
       SHIPPING_MAX_ATTEMPTS: 5
       SHIPPING_BATCH_SIZE: 10
       SHIPPING_POLL_INTERVAL_MS: 60000
       SHIPPING_STATUS_SYNC_INTERVAL_MS: 15000
+      PAYMENT_BASE_URL: http://payment-mock:4004
+      PAYMENT_POLL_INTERVAL_MS: 60000
     depends_on:
       mysql:
         condition: service_healthy
       shipping-mock:
+        condition: service_started
+      payment-mock:
         condition: service_started
 
 volumes:

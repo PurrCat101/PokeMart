@@ -8,3 +8,8 @@ data/mysql/
 .env.local
 **/skills/impeccable/scripts/bin/
 
+.claude/*
+.codex/*
+.cursor/*
+.gemini/*
+.vscode/*
