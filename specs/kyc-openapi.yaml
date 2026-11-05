@@ -1,0 +1,72 @@
+openapi: 3.0.3
+info:
+  title: PokéMart KYC API (internal service)
+  version: 1.0.0
+  description: Internal identity-verification service. Called only by the PokéMart API; never published through the BFF. Test-only routes (`/__test/*`) are not part of the product contract.
+servers:
+  - url: http://localhost:4005
+tags:
+  - { name: KYC, description: Look up the KYC level of a user. Requires the lab API key. }
+  - { name: Test Controls, description: Test-only routes for seeding users and injecting faults. }
+  - { name: Health, description: Liveness probe. }
+paths:
+  /kyc/v1/users/{userId}:
+    get:
+      tags: [KYC]
+      summary: Get a user's KYC level
+      security: [{ labKey: [] }]
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: KYC record
+          content: { application/json: { schema: { $ref: '#/components/schemas/KycRecord' } } }
+        '401': { description: Missing or wrong bearer key }
+        '404': { description: Unknown user; PokéMart treats this as NONE/ACTIVE }
+        '500': { description: Provider error (also produced by the `http_500` test fault) }
+  /health:
+    get:
+      tags: [Health]
+      summary: Liveness
+      responses:
+        '200': { description: ok }
+  /__test/users/{userId}:
+    put:
+      tags: [Test Controls]
+      summary: Test-only. Set a user's level and status
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [level], properties: { level: { type: string, enum: [NONE, BASIC, FULL] }, status: { type: string, enum: [ACTIVE, PENDING_REVIEW, REJECTED] } } } } }
+      responses:
+        '200': { description: Updated record, content: { application/json: { schema: { $ref: '#/components/schemas/KycRecord' } } } }
+        '400': { description: Invalid level or status }
+  /__test/faults:
+    put:
+      tags: [Test Controls]
+      summary: Test-only. Make lookups fail (`http_500`) or hang past the caller's timeout (`timeout`)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [mode], properties: { mode: { type: string, enum: [http_500, timeout] }, count: { type: integer, minimum: 1, description: Number of lookups affected; omit for "until cleared" } } } } }
+      responses:
+        '204': { description: Fault set }
+        '400': { description: Invalid fault }
+    delete:
+      tags: [Test Controls]
+      summary: Test-only. Clear faults and reset seeded data
+      responses:
+        '204': { description: Reset }
+components:
+  securitySchemes:
+    labKey: { type: http, scheme: bearer }
+  schemas:
+    KycRecord:
+      type: object
+      required: [userId, level, levelValue, status, updatedAt]
+      properties:
+        userId: { type: string }
+        level: { type: string, enum: [NONE, BASIC, FULL] }
+        levelValue: { type: integer, enum: [0, 1, 2] }
+        status: { type: string, enum: [ACTIVE, PENDING_REVIEW, REJECTED] }
+        updatedAt: { type: string, format: date-time }

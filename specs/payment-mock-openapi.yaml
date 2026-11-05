@@ -1,0 +1,73 @@
+openapi: 3.0.3
+info:
+  title: PokéMart Payment Mock API
+  version: 1.0.0
+  description: Local-only PaymentIntent-style provider. It does not process real payments.
+servers:
+  - url: http://localhost:4004
+tags:
+  - { name: Payment Intents, description: Create and read mock payment intents. }
+  - { name: Test Controls, description: Test-only routes for injecting faults. }
+  - { name: Health, description: Liveness probe. }
+paths:
+  /health:
+    get:
+      tags: [Health]
+      responses: { '200': { description: Healthy } }
+  /v1/payment_intents:
+    post:
+      tags: [Payment Intents]
+      summary: Create and confirm a payment intent idempotently
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount, currency, confirm, metadata]
+              properties:
+                amount: { type: integer, minimum: 100, description: THB satang }
+                currency: { type: string, enum: [thb] }
+                confirm: { type: boolean, enum: [true] }
+                metadata: { type: object }
+      responses:
+        '200': { description: Payment intent succeeded or replayed }
+        '400': { description: Invalid request or idempotency conflict }
+        '402': { description: Simulated card decline }
+        '500': { description: Simulated provider failure }
+  /v1/payment_intents/{paymentIntentId}:
+    get:
+      tags: [Payment Intents]
+      summary: Read a payment intent for recovery
+      parameters:
+        - name: paymentIntentId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Payment intent }
+        '404': { description: Payment intent not found }
+  /__test/faults:
+    put:
+      tags: [Test Controls]
+      summary: Set one test-only fault for a top-up UUID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [topUpId, fault]
+              properties:
+                topUpId: { type: string, format: uuid }
+                fault: { type: string, enum: [http_500, timeout_before_charge, charged_response_lost, decline] }
+      responses: { '204': { description: Fault configured } }
+    delete:
+      tags: [Test Controls]
+      summary: Clear all in-memory test state
+      responses: { '204': { description: Cleared } }

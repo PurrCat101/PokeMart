@@ -6,34 +6,23 @@ info:
     Local/test-only third-party shipping provider simulator. Never expose admin-control endpoints
     through the public PokéMart BFF or enable them in production.
 servers:
-  - url: http://localhost:3002
+  - url: http://localhost:4002
+tags:
+  - { name: Shipments, description: Provider-facing shipment creation and lookup. }
+  - { name: Admin Controls, description: Mock-only routes to change mode, advance shipment status, inspect requests and reset. }
+  - { name: Health, description: Liveness probe. }
 paths:
   /health:
     get:
+      tags: [Health]
       summary: Check mock process liveness
       responses:
         '200':
           description: Mock process is running
   /v1/shipments:
     post:
+      tags: [Shipments]
       summary: Create a shipment idempotently (deduplicated by purchaseId)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [purchaseId, recipient, items]
-              properties:
-                purchaseId:
-                  type: string
-                  format: uuid
-                recipient:
-                  type: object
-                items:
-                  type: array
-                  items:
-                    type: object
       requestBody:
         required: true
         content:
@@ -77,6 +66,7 @@ paths:
           description: Provider temporarily unavailable
   /v1/shipments/{providerShipmentId}:
     get:
+      tags: [Shipments]
       summary: Read provider-side shipment and delivery status
       parameters:
         - $ref: '#/components/parameters/ProviderShipmentId'
@@ -91,6 +81,7 @@ paths:
           description: Shipment not found
   /v1/admin/mode:
     put:
+      tags: [Admin Controls]
       summary: Set simulated provider behavior (local/test only)
       requestBody:
         required: true
@@ -110,6 +101,7 @@ paths:
           description: Unknown mode
   /v1/admin/shipments/{providerShipmentId}/status:
     patch:
+      tags: [Admin Controls]
       summary: Advance simulated delivery status by providerShipmentId (local/test only)
       parameters:
         - $ref: '#/components/parameters/ProviderShipmentId'
@@ -137,6 +129,7 @@ paths:
           description: Provider shipment not found
   /v1/admin/shipments/by-purchase-id/{purchaseId}/status:
     post:
+      tags: [Admin Controls]
       summary: Advance simulated delivery status by purchaseId (local/test only - convenience endpoint)
       parameters:
         - in: path
@@ -169,12 +162,14 @@ paths:
           description: Shipment not found for this purchase ID
   /v1/admin/requests:
     get:
+      tags: [Admin Controls]
       summary: Inspect received provider requests (local/test only)
       responses:
         '200':
           description: Request journal
   /v1/admin/reset:
     post:
+      tags: [Admin Controls]
       summary: Reset mock state and request journal (local/test only)
       responses:
         '200':
