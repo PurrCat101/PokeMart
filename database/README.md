@@ -1,6 +1,6 @@
 # Database
 
-MySQL initializes `schema/` and `seed/` only on a fresh Docker volume. The deterministic baseline contains Generation I Pokémon IDs 1-151 sourced from the PokeAPI REST API v2. Reference fields include source ID, name, base experience, types, and default front sprite URL; normal startup and tests do not call PokéAPI.
+MySQL initializes `schema/` and `seed/` only on a fresh Docker volume. The deterministic baseline contains 1,025 main National Pokédex Pokémon and 2,222 canonical PokeAPI item names. The checked-in SQL seed is the runtime source of truth; normal startup and tests do not require an `api-data` checkout or call PokéAPI. A duplicate Roseli Berry resource in the source is intentionally canonicalized to its lowest source ID.
 
 ## Schema and relationships
 
@@ -31,6 +31,15 @@ The copyable DBML source is [`schema/pokemart.dbml`](schema/pokemart.dbml). In d
 | | `price` | `INT` | No | CHECK `price >= 0` |
 | | `stock` | `INT` | No | CHECK `stock >= 0` |
 | | `active` | `BOOLEAN` | No | DEFAULT `TRUE` |
+| `item_reference` | `source_id` | `INT` | No | PK |
+| | `name` | `VARCHAR(128)` | No | UNIQUE |
+| | `pokeapi_cost` | `INT UNSIGNED` | No | DEFAULT `0` |
+| | `category` | `VARCHAR(128)` | Yes | |
+| | `sprite_url` | `VARCHAR(512)` | Yes | |
+| `item_listing` | `item_source_id` | `INT` | No | PK, FK → `item_reference.source_id` |
+| | `price`, `stock` | `INT` | No | CHECK `>= 0` |
+| | `active` | `BOOLEAN` | No | DEFAULT `TRUE` |
+| | `required_kyc_level` | `TINYINT UNSIGNED` | No | CHECK 0–2 |
 | `user_wallet` | `user_id` | `VARCHAR(64)` | No | PK, FK → `users.user_id` (one-to-one) |
 | | `balance` | `INT` | No | CHECK `balance >= 0` |
 | `user_inventory` | `user_id` | `VARCHAR(64)` | No | Composite PK, FK → `users.user_id` |
@@ -43,16 +52,22 @@ The copyable DBML source is [`schema/pokemart.dbml`](schema/pokemart.dbml). In d
 | | `unit_price` | `INT` | No | Price snapshot |
 | | `total_price` | `INT` | No | Price snapshot |
 | | `created_at` | `TIMESTAMP(3)` | No | DEFAULT `CURRENT_TIMESTAMP(3)` |
+| `user_item_inventory` | `user_id`, `item_source_id` | `VARCHAR(64)`, `INT` | No | Composite PK; FK → users/item_reference |
+| | `quantity` | `INT` | No | CHECK `> 0` |
+| `item_purchases` | `id` | `CHAR(36)` | No | PK; client-generated UUID |
+| | `user_id`, `item_source_id` | `VARCHAR(64)`, `INT` | No | FK → users/item_reference |
+| | `quantity` | `INT` | No | CHECK 1–99 |
+| | `unit_price`, `total_price` | `INT` | No | Price snapshots |
 
 The remaining index columns are `created_at DESC, id DESC` in `idx_purchase_user_created`. The composite inventory primary key is `(user_id, pokemon_source_id)`.
 
-The fresh-volume seed provisions the demo account `lab-user-001@example.test` and its wallet. Sign in with password `PokeMartLab!2026` for local practice only. It also creates `lab-empty-user-001`, a test-only active profile with no wallet or password. Passwords are stored as scrypt hashes, never plaintext. The schema does not include a public registration or password-reset endpoint; legacy profiles have a NULL password hash and cannot sign in until credentials are provisioned.
+The fresh-volume seed provisions the demo account `lab-user-001@example.test`, its wallet, and `NONE` KYC level. Sign in with password `PokeMartLab!2026` for local practice only. It also creates `lab-empty-user-001`, a test-only active profile with no wallet or password. Passwords are stored as scrypt hashes, never plaintext. The schema does not include a public registration or password-reset endpoint; legacy profiles have a NULL password hash and cannot sign in until credentials are provisioned.
 
 Authentication uses one-hour HS256 access tokens. The API checks the JWT signature, issuer, audience, expiry, and active user record on protected wallet, inventory, and purchase operations. Catalog reads stay public. Configure `AUTH_JWT_SECRET` with at least 32 random bytes outside the local lab; the default Compose secret and seeded credentials are development-only. Use HTTPS, rate limiting, secret management, and a refresh/revocation strategy before production use. A stateless token cannot be explicitly logged out; the client should discard it.
 
-User IDs are foreign-key constrained: one user has at most one wallet, and may have many inventory and purchase rows. Purchase prices are snapshots; a purchase does not reference a shop listing. The schema has no `idempotency_keys` table: a committed purchase ID is protected by the `purchases` primary key.
+User IDs are foreign-key constrained: one user has at most one wallet, and may have many Pokémon/item inventory and purchase rows. Purchase prices are snapshots; a purchase does not reference a shop listing. The schema has no `idempotency_keys` table: a committed purchase ID is protected by the relevant purchase table's primary key.
 
-The SQL seed is the pinned local snapshot retrieved on 2026-10-17. Price is derived from API `base_experience` as `150 + 2 × base_experience`, rounded to the nearest 50 and clamped to 200-1500. Stock decreases as base experience rises (20-40 for <=50, 12-24 for <=100, 6-14 for <=150, 2-8 above 150); a stable source-ID formula selects the value within each tier. This makes the sample catalog varied while keeping fresh database runs reproducible. Base experience is retained in the reference table but is not part of catalog responses. Price and stock are fictional PokéMart-owned values, not PokéAPI data.
+The generated reference seed is pinned at PokeAPI/api-data commit `447bd5c378bf87da964bfe4dd7487a7bf1d97cbd`. Pokémon price derives from base experience, item price derives from the recorded PokeAPI cost, and stock is deterministic. Every Pokémon listing has KYC level 0. KYC 1 and 2 are reserved for named high-value item groups, including Master Ball and high-grade healing/revival items. All price, stock, activation, and KYC rules are fictional PokéMart-owned data.
 
 PokeAPI data: [PokeAPI REST API](https://pokeapi.co/) and [PokeAPI project](https://github.com/PokeAPI/pokeapi). Review the applicable license and attribution terms before redistributing or publishing the snapshot.
 
@@ -61,5 +76,7 @@ Existing volumes created before the user-identity rename must have `database/mig
 Existing volumes that contain the retired `idempotency_keys` table must also apply `database/migrations/002_drop_idempotency_keys.sql` once. New volumes do not create that table.
 
 Existing volumes must apply `database/migrations/003_add_users_and_foreign_keys.sql` once. It creates user profiles for existing wallet, inventory, and purchase IDs, then adds the user foreign keys. Existing IDs receive placeholder `.invalid` email addresses except for the lab demo user; password hashes remain NULL until credentials are provisioned.
+
+Existing volumes created before item catalog, KYC, or payment support must apply `database/migrations/005_add_catalog_items_payment_and_kyc.sql`. Existing volumes that need item checkout must then apply `database/migrations/006_add_item_purchases.sql`. Fresh volumes already receive all tables from `schema/001_create_shop_tables.sql`.
 
 `make db-reset` deletes the local Compose volume and is destructive. It must never be used for shared or production data.
