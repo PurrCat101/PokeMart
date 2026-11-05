@@ -5,5 +5,5 @@ COPY apps/shipping-mock/package.json apps/shipping-mock/package.json
 RUN npm ci --omit=dev
 COPY apps/shipping-mock apps/shipping-mock
 WORKDIR /app/apps/shipping-mock
-EXPOSE 3002
+EXPOSE 4002
 CMD ["npm", "run", "start"]

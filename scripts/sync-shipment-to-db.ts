@@ -2,7 +2,7 @@
 
 import mysql from 'mysql2/promise';
 
-const SHIPPING_MOCK_URL = process.env.SHIPPING_MOCK_URL || 'http://localhost:3002';
+const SHIPPING_MOCK_URL = process.env.SHIPPING_MOCK_URL || 'http://localhost:4002';
 
 const DELIVERY_STATUSES = [
   'LABEL_CREATED',

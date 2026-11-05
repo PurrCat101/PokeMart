@@ -10,7 +10,7 @@ class AppError extends Error {
   }
 }
 
-const port = Number(process.env.PORT ?? 3000);
+const port = Number(process.env.PORT ?? 4000);
 const serviceName = 'pokemart-api';
 const jwtSecret = process.env.AUTH_JWT_SECRET ?? '';
 if (!jwtSecret || Buffer.byteLength(jwtSecret) < 32) {
@@ -19,6 +19,10 @@ if (!jwtSecret || Buffer.byteLength(jwtSecret) < 32) {
 const jwtIssuer = 'pokemart-api';
 const jwtAudience = 'pokemart-bff';
 const accessTokenLifetimeSeconds = 60 * 60;
+const paymentBaseUrl = (process.env.PAYMENT_BASE_URL ?? 'http://localhost:4004').replace(/\/$/, '');
+const kycBaseUrl = (process.env.KYC_BASE_URL ?? 'http://localhost:4005').replace(/\/$/, '');
+const kycApiKey = process.env.KYC_API_KEY ?? 'local-only-kyc-key';
+const kycTimeoutMs = Number(process.env.KYC_REQUEST_TIMEOUT_MS ?? 2000);
 const demoPasswordHash = 'scrypt$16384$8$1$B4ogYl9H5OdXpeDMU2nqIw$78Yct8q9I6o2YRWXLjT98fVCqz_sojm0bF-4fXq_sh5_xkXcvQx-7ErS3FFsKgdC7zGF7IuItadWHOM09h1HTA';
 const pool = mysql.createPool({
   host: process.env.MYSQL_HOST ?? 'localhost',
@@ -46,8 +50,8 @@ function positiveInt(value: unknown, field: string, maximum?: number): number {
   }
   return value;
 }
-function pageParams(req: Request): { limit: number; offset: number } {
-  const allowed = new Set(['limit', 'offset']);
+function pageParams(req: Request, extraAllowed: string[] = []): { limit: number; offset: number } {
+  const allowed = new Set(['limit', 'offset', ...extraAllowed]);
   const unknown = Object.keys(req.query).find((key) => !allowed.has(key));
   if (unknown) throw new AppError(400, 'UNKNOWN_QUERY_PARAMETER', 'Unknown query parameter', [{ field: unknown, message: 'is not supported' }]);
   const parse = (value: unknown, field: string, fallback: number, min: number, max?: number) => {
@@ -149,6 +153,36 @@ function isDuplicateEntry(error: unknown): boolean {
 }
 function asPokemon(row: Row) { return { id: row.id, name: row.name, types: typeof row.types === 'string' ? JSON.parse(row.types) : row.types, spriteUrl: row.spriteUrl, price: row.price, stock: row.stock }; }
 function asPurchase(row: Row) { return { id: row.id, pokemonId: row.pokemonId, pokemonName: row.pokemonName, quantity: row.quantity, unitPrice: row.unitPrice, totalPrice: row.totalPrice, createdAt: new Date(row.createdAt).toISOString() }; }
+function levelValue(level: string): number { return level === 'FULL' ? 2 : level === 'BASIC' ? 1 : 0; }
+type Kyc = { level: string; levelValue: number; status: string; updatedAt: string };
+// KYC is an internal HTTP service with its own data. Never call it inside a database transaction.
+async function fetchKyc(userId: string): Promise<Kyc> {
+  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), kycTimeoutMs);
+  try {
+    const response = await fetch(`${kycBaseUrl}/kyc/v1/users/${encodeURIComponent(userId)}`, { signal: controller.signal, headers: { Authorization: `Bearer ${kycApiKey}` } });
+    if (response.status === 404) return { level: 'NONE', levelValue: 0, status: 'ACTIVE', updatedAt: new Date().toISOString() };
+    if (!response.ok) throw new Error(`kyc status ${response.status}`);
+    const body = await response.json() as Row;
+    if (typeof body.level !== 'string' || typeof body.status !== 'string') throw new Error('kyc invalid body');
+    return { level: body.level, levelValue: levelValue(body.level), status: body.status, updatedAt: String(body.updatedAt ?? new Date().toISOString()) };
+  } catch (error) {
+    log({ severity: 'warn', message: 'KYC service call failed', reason: (error as Error).message });
+    throw new AppError(503, 'DEPENDENCY_UNAVAILABLE', 'KYC service is temporarily unavailable');
+  } finally { clearTimeout(timer); }
+}
+// Pre-fetches the caller's KYC level only when the listing needs one, so NONE-level products keep working while
+// KYC is down (fail closed only above NONE). The failure is deferred so earlier checks (duplicate, 404, not-for-sale)
+// keep their documented order; call the returned function at the KYC step inside the transaction.
+async function prefetchKyc(listingSql: string, listingId: number, userId: string): Promise<() => Kyc | null> {
+  const [rows] = await pool.query(listingSql, [listingId]);
+  if (Number((rows as Row[])[0]?.required ?? 0) === 0) return () => null;
+  try { const kyc = await fetchKyc(userId); return () => kyc; } catch (error) { return () => { throw error; }; }
+}
+function assertKyc(kyc: Kyc | null, required: number, label: string) {
+  if (required === 0) return;
+  if (!kyc || kyc.status !== 'ACTIVE' || kyc.levelValue < required) throw new AppError(403, 'KYC_LEVEL_REQUIRED', `This ${label} requires a higher verification level`, [{ required, current: kyc?.levelValue ?? 0 }]);
+}
+function asTopUp(row: Row) { return { topUpId: row.top_up_id, amount: Number(row.amount_baht), status: row.status, providerPaymentId: row.provider_payment_id ?? null, createdAt: new Date(row.created_at).toISOString(), updatedAt: new Date(row.updated_at).toISOString() }; }
 
 app.use((req, res, next) => {
   const id = requestId(req); res.locals.requestId = id; res.setHeader('X-Request-Id', id);
@@ -169,7 +203,7 @@ app.use((req, res, next) => {
   next();
 });
 app.use((req, _res, next) => {
-  if (req.method === 'POST' && ['/pokemart/v1/auth/login', '/pokemart/v1/purchases'].includes(req.path) && !req.is('application/json')) return next(new AppError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Content-Type must be application/json'));
+  if (req.method === 'POST' && ['/pokemart/v1/auth/login', '/pokemart/v1/purchases', '/pokemart/v1/items/purchases', '/pokemart/v1/wallet/top-ups'].includes(req.path) && !req.is('application/json')) return next(new AppError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Content-Type must be application/json'));
   next();
 });
 app.use(express.json({ strict: false }));
@@ -214,11 +248,31 @@ app.post('/pokemart/v1/auth/login', async (req, res, next) => {
 app.get('/pokemart/v1/auth/me', authenticate, (req, res) => {
   res.json({ user: res.locals.user });
 });
+app.get('/pokemart/v1/account-info', authenticate, async (_req, res, next) => {
+  try {
+    const id = userId(res);
+    const [walletRows] = await pool.query('SELECT user_id AS userId, balance FROM user_wallet WHERE user_id=?', [id]);
+    const wallet = (walletRows as Row[])[0];
+    if (!wallet) throw new AppError(404, 'USER_NOT_FOUND', 'User not found');
+    // Bootstrap must survive a KYC outage: report kyc as null instead of failing sign-in.
+    const kyc = await fetchKyc(id).catch(() => null);
+    res.json({ user: res.locals.user, wallet: { userId: wallet.userId, balance: Number(wallet.balance) }, kyc });
+  } catch (error) { next(error); }
+});
 app.get('/pokemart/v1/catalog/pokemon', async (req, res, next) => {
   try {
-    const { limit, offset } = pageParams(req);
-    const [countRows] = await pool.query('SELECT COUNT(*) AS count FROM shop_listing WHERE active = TRUE');
-    const [rows] = await pool.query(`SELECT r.source_id AS id, r.name, r.types, r.sprite_url AS spriteUrl, l.price, l.stock FROM shop_listing l JOIN pokemon_reference r ON r.source_id=l.pokemon_source_id WHERE l.active=TRUE ORDER BY r.source_id ASC LIMIT ? OFFSET ?`, [limit, offset]);
+    const { limit, offset } = pageParams(req, ['q', 'type', 'inStock']);
+    const q = typeof req.query.q === 'string' ? req.query.q.trim().toLowerCase() : '';
+    const type = typeof req.query.type === 'string' ? req.query.type.trim().toLowerCase() : '';
+    const inStock = req.query.inStock === 'true';
+    if (q.length > 80 || type.length > 32 || (req.query.inStock !== undefined && req.query.inStock !== 'true' && req.query.inStock !== 'false')) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'catalog filters', message: 'are invalid' }]);
+    const conditions = ['l.active=TRUE']; const values: unknown[] = [];
+    if (q) { conditions.push('(LOWER(r.name) LIKE ? OR CAST(r.source_id AS CHAR) LIKE ?)'); values.push(`%${q}%`, `%${q}%`); }
+    if (type) { conditions.push('JSON_CONTAINS(r.types, JSON_QUOTE(?))'); values.push(type); }
+    if (inStock) conditions.push('l.stock > 0');
+    const where = conditions.join(' AND ');
+    const [countRows] = await pool.query(`SELECT COUNT(*) AS count FROM shop_listing l JOIN pokemon_reference r ON r.source_id=l.pokemon_source_id WHERE ${where}`, values);
+    const [rows] = await pool.query(`SELECT r.source_id AS id, r.name, r.types, r.sprite_url AS spriteUrl, l.price, l.stock FROM shop_listing l JOIN pokemon_reference r ON r.source_id=l.pokemon_source_id WHERE ${where} ORDER BY r.source_id ASC LIMIT ? OFFSET ?`, [...values, limit, offset]);
     res.json({ count: Number((countRows as Row[])[0].count), limit, offset, results: (rows as Row[]).map(asPokemon) });
   } catch (error) { next(error); }
 });
@@ -230,8 +284,36 @@ app.get('/pokemart/v1/catalog/pokemon/:id', async (req, res, next) => {
     res.json(asPokemon((rows as Row[])[0]));
   } catch (error) { next(error); }
 });
+app.get('/pokemart/v1/catalog/items', async (req, res, next) => {
+  try {
+    const { limit, offset } = pageParams(req, ['q', 'category', 'inStock']);
+    const q = typeof req.query.q === 'string' ? req.query.q.trim().toLowerCase() : '';
+    const category = typeof req.query.category === 'string' ? req.query.category.trim().toLowerCase() : '';
+    const inStock = req.query.inStock === 'true';
+    if (q.length > 80 || category.length > 128 || (req.query.inStock !== undefined && req.query.inStock !== 'true' && req.query.inStock !== 'false')) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'catalog filters', message: 'are invalid' }]);
+    const conditions = ['l.active=TRUE']; const values: unknown[] = [];
+    if (q) { conditions.push('(LOWER(r.name) LIKE ? OR CAST(r.source_id AS CHAR) LIKE ?)'); values.push(`%${q}%`, `%${q}%`); }
+    if (category) { conditions.push('r.category=?'); values.push(category); }
+    if (inStock) conditions.push('l.stock > 0');
+    const where = conditions.join(' AND ');
+    const [countRows] = await pool.query(`SELECT COUNT(*) AS count FROM item_listing l JOIN item_reference r ON r.source_id=l.item_source_id WHERE ${where}`, values);
+    const [rows] = await pool.query(`SELECT r.source_id AS id, r.name, r.category, r.sprite_url AS spriteUrl, l.price, l.stock, l.required_kyc_level AS requiredKycLevel FROM item_listing l JOIN item_reference r ON r.source_id=l.item_source_id WHERE ${where} ORDER BY r.source_id LIMIT ? OFFSET ?`, [...values, limit, offset]);
+    res.json({ count: Number((countRows as Row[])[0].count), limit, offset, results: rows });
+  } catch (error) { next(error); }
+});
+app.get('/pokemart/v1/catalog/item-categories', async (_req, res, next) => {
+  try {
+    const [rows] = await pool.query('SELECT DISTINCT r.category FROM item_listing l JOIN item_reference r ON r.source_id=l.item_source_id WHERE l.active=TRUE AND r.category IS NOT NULL ORDER BY r.category');
+    res.json({ categories: (rows as Row[]).map((row) => row.category) });
+  } catch (error) { next(error); }
+});
 app.get('/pokemart/v1/wallet', authenticate, async (req, res, next) => {
   try { const id = userId(res); const [rows] = await pool.query('SELECT user_id AS userId, balance FROM user_wallet WHERE user_id=?', [id]); if (!(rows as Row[]).length) throw new AppError(404, 'USER_NOT_FOUND', 'User not found'); res.json((rows as Row[])[0]); } catch (error) { next(error); }
+});
+app.get('/pokemart/v1/kyc/status', authenticate, async (_req, res, next) => {
+  try {
+    res.json(await fetchKyc(userId(res)));
+  } catch (error) { next(error); }
 });
 app.get('/pokemart/v1/inventory', authenticate, async (req, res, next) => {
   try { const id = userId(res); const [rows] = await pool.query(`SELECT i.pokemon_source_id AS pokemonId, r.name, i.quantity FROM user_inventory i JOIN pokemon_reference r ON r.source_id=i.pokemon_source_id WHERE i.user_id=? ORDER BY i.pokemon_source_id`, [id]); const results = (rows as Row[]).map((row) => ({ ...row, quantity: Number(row.quantity) })); res.json({ count: results.length, results }); } catch (error) { next(error); }
@@ -300,16 +382,18 @@ async function createPurchase(userId: string, body: unknown): Promise<{ status: 
   if (typeof candidate.purchaseId !== 'string' || !validUuid.test(candidate.purchaseId)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'purchaseId', message: 'must be a UUID' }]);
   const purchaseId = candidate.purchaseId as string;
   const pokemon = positiveInt(candidate.pokemonId, 'pokemonId'); const quantity = positiveInt(candidate.quantity, 'quantity', 99);
+  const kycGate = await prefetchKyc('SELECT required_kyc_level AS required FROM shop_listing WHERE pokemon_source_id=?', pokemon, userId);
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
-    const [listings] = await connection.query(`SELECT l.pokemon_source_id AS pokemonId,l.price,l.stock,l.active,r.name FROM shop_listing l JOIN pokemon_reference r ON r.source_id=l.pokemon_source_id WHERE l.pokemon_source_id=? FOR UPDATE`, [pokemon]);
+    const [listings] = await connection.query(`SELECT l.pokemon_source_id AS pokemonId,l.price,l.stock,l.active,l.required_kyc_level,r.name FROM shop_listing l JOIN pokemon_reference r ON r.source_id=l.pokemon_source_id WHERE l.pokemon_source_id=? FOR UPDATE`, [pokemon]);
     const listing = (listings as Row[])[0];
     const [existingPurchases] = await connection.query('SELECT id FROM purchases WHERE id=?', [purchaseId]);
     if ((existingPurchases as Row[]).length) throw new AppError(409, 'PURCHASE_DUPLICATE', 'Purchase ID has already been processed');
     const [references] = await connection.query('SELECT source_id FROM pokemon_reference WHERE source_id=?', [pokemon]);
     if (!(references as Row[]).length) throw new AppError(404, 'POKEMON_NOT_FOUND', 'Pokémon not found');
     if (!listing || !listing.active) throw new AppError(409, 'POKEMON_NOT_FOR_SALE', 'Pokémon is not for sale');
+    assertKyc(kycGate(), Number(listing.required_kyc_level ?? 0), 'Pokémon');
     if (Number(listing.stock) < quantity) throw new AppError(409, 'INSUFFICIENT_STOCK', 'Insufficient stock');
     const [wallets] = await connection.query('SELECT balance FROM user_wallet WHERE user_id=? FOR UPDATE', [userId]);
     const wallet = (wallets as Row[])[0]; const total = Number(listing.price) * quantity;
@@ -333,6 +417,95 @@ app.post('/pokemart/v1/purchases', authenticate, async (req, res, next) => {
     const id = userId(res);
     const result = await createPurchase(id, req.body);
     res.setHeader('Location', `/pokemart/v1/purchases/${result.body.id}`); res.status(result.status).json(result.body);
+  } catch (error) { next(error); }
+});
+
+app.post('/pokemart/v1/items/purchases', authenticate, async (req, res, next) => {
+  let connection: mysql.PoolConnection | undefined;
+  try {
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'body', message: 'must be an object' }]);
+    const body = req.body as Row;
+    if (Object.keys(body).some((field) => field !== 'purchaseId' && field !== 'itemId' && field !== 'quantity')) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'body', message: 'contains unknown fields' }]);
+    if (typeof body.purchaseId !== 'string' || !validUuid.test(body.purchaseId)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'purchaseId', message: 'must be a UUID' }]);
+    const itemId = positiveInt(body.itemId, 'itemId'); const quantity = positiveInt(body.quantity, 'quantity', 99); const id = userId(res);
+    const kycGate = await prefetchKyc('SELECT required_kyc_level AS required FROM item_listing WHERE item_source_id=?', itemId, id);
+    connection = await pool.getConnection(); // acquired only after the KYC HTTP call
+    await connection.beginTransaction();
+    const [existing] = await connection.query('SELECT id FROM item_purchases WHERE id=?', [body.purchaseId]);
+    if ((existing as Row[]).length) throw new AppError(409, 'ITEM_PURCHASE_DUPLICATE', 'Purchase ID has already been processed');
+    const [references] = await connection.query('SELECT source_id FROM item_reference WHERE source_id=?', [itemId]);
+    if (!(references as Row[]).length) throw new AppError(404, 'ITEM_NOT_FOUND', 'Item not found');
+    const [listings] = await connection.query('SELECT l.item_source_id AS itemId, l.price, l.stock, l.active, l.required_kyc_level, r.name FROM item_listing l JOIN item_reference r ON r.source_id=l.item_source_id WHERE l.item_source_id=? FOR UPDATE', [itemId]);
+    const listing = (listings as Row[])[0];
+    if (!listing || !listing.active) throw new AppError(409, 'ITEM_NOT_FOR_SALE', 'Item is not for sale');
+    assertKyc(kycGate(), Number(listing.required_kyc_level ?? 0), 'item');
+    if (Number(listing.stock) < quantity) throw new AppError(409, 'INSUFFICIENT_STOCK', 'Insufficient stock');
+    const [wallets] = await connection.query('SELECT balance FROM user_wallet WHERE user_id=? FOR UPDATE', [id]);
+    const wallet = (wallets as Row[])[0]; const total = Number(listing.price) * quantity;
+    if (!wallet || Number(wallet.balance) < total) throw new AppError(422, 'INSUFFICIENT_FUNDS', 'Insufficient funds');
+    const createdAt = new Date();
+    await connection.query('INSERT INTO item_purchases (id, user_id, item_source_id, quantity, unit_price, total_price, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)', [body.purchaseId, id, itemId, quantity, listing.price, total, createdAt]);
+    await connection.query('UPDATE item_listing SET stock=stock-? WHERE item_source_id=?', [quantity, itemId]);
+    await connection.query('UPDATE user_wallet SET balance=balance-? WHERE user_id=?', [total, id]);
+    await connection.query('INSERT INTO user_item_inventory (user_id, item_source_id, quantity) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE quantity=quantity+VALUES(quantity)', [id, itemId, quantity]);
+    await connection.commit();
+    const result = { purchaseId: body.purchaseId, itemId, itemName: listing.name, quantity, unitPrice: Number(listing.price), totalPrice: total, createdAt: createdAt.toISOString() };
+    res.setHeader('Location', `/pokemart/v1/items/purchases/${result.purchaseId}`); res.status(201).json(result);
+  } catch (error) {
+    await connection?.rollback();
+    if (isDuplicateEntry(error)) return next(new AppError(409, 'ITEM_PURCHASE_DUPLICATE', 'Purchase ID has already been processed'));
+    next(error);
+  } finally { connection?.release(); }
+});
+app.get('/pokemart/v1/items/purchases/:id', authenticate, async (req, res, next) => {
+  try {
+    if (!validUuid.test(String(req.params.id))) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'id', message: 'must be a UUID' }]);
+    const [rows] = await pool.query('SELECT p.id AS purchaseId, p.item_source_id AS itemId, r.name AS itemName, p.quantity, p.unit_price AS unitPrice, p.total_price AS totalPrice, p.created_at AS createdAt FROM item_purchases p JOIN item_reference r ON r.source_id=p.item_source_id WHERE p.id=? AND p.user_id=?', [req.params.id, userId(res)]);
+    const row = (rows as Row[])[0];
+    if (!row) throw new AppError(404, 'PURCHASE_NOT_FOUND', 'Purchase not found');
+    res.json({ ...row, quantity: Number(row.quantity), unitPrice: Number(row.unitPrice), totalPrice: Number(row.totalPrice), createdAt: new Date(row.createdAt).toISOString() });
+  } catch (error) { next(error); }
+});
+
+async function callPayment(topUpId: string, amount: number) {
+  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 3000);
+  try {
+    const response = await fetch(`${paymentBaseUrl}/v1/payment_intents`, { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json', 'Idempotency-Key': topUpId }, body: JSON.stringify({ amount: amount * 100, currency: 'thb', confirm: true, metadata: { topUpId } }) });
+    const text = await response.text(); let data: Row = {};
+    try { data = text ? JSON.parse(text) : {}; } catch { throw new AppError(503, 'DEPENDENCY_UNAVAILABLE', 'Payment provider returned an invalid response'); }
+    return { status: response.status, data };
+  } finally { clearTimeout(timer); }
+}
+async function finalizeTopUp(topUpId: string, status: 'COMPLETED' | 'FAILED' | 'UNKNOWN', providerPaymentId?: string, errorCode?: string) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query('SELECT * FROM top_ups WHERE top_up_id=? FOR UPDATE', [topUpId]);
+    const topUp = (rows as Row[])[0]; if (!topUp) throw new AppError(404, 'TOP_UP_NOT_FOUND', 'Top-up not found');
+    if (topUp.status === 'COMPLETED' || topUp.status === 'FAILED') { await connection.commit(); return topUp; }
+    await connection.query('UPDATE top_ups SET status=?, provider_payment_id=COALESCE(?, provider_payment_id), last_error_code=?, updated_at=NOW(3) WHERE top_up_id=?', [status, providerPaymentId ?? null, errorCode ?? null, topUpId]);
+    if (status === 'COMPLETED') await connection.query('UPDATE user_wallet SET balance=balance+? WHERE user_id=?', [topUp.amount_baht, topUp.user_id]);
+    await connection.commit();
+    const [updated] = await pool.query('SELECT * FROM top_ups WHERE top_up_id=?', [topUpId]); return (updated as Row[])[0];
+  } catch (error) { await connection.rollback(); throw error; } finally { connection.release(); }
+}
+app.get('/pokemart/v1/wallet/top-ups/:id', authenticate, async (req, res, next) => {
+  try {
+    const topUpId = req.params.id;
+    if (typeof topUpId !== 'string' || !validUuid.test(topUpId)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'id', message: 'must be a UUID' }]);
+    const [rows] = await pool.query('SELECT * FROM top_ups WHERE top_up_id=? AND user_id=?', [topUpId, userId(res)]);
+    if (!(rows as Row[]).length) throw new AppError(404, 'TOP_UP_NOT_FOUND', 'Top-up not found'); res.json(asTopUp((rows as Row[])[0]));
+  } catch (error) { next(error); }
+});
+app.post('/pokemart/v1/wallet/top-ups', authenticate, async (req, res, next) => {
+  try {
+    const body = req.body as Row;
+    if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some((field) => field !== 'topUpId' && field !== 'amount') || typeof body.topUpId !== 'string' || !validUuid.test(body.topUpId) || !Number.isInteger(body.amount) || body.amount < 1 || body.amount > 10000) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'body', message: 'topUpId must be a UUID and amount must be an integer from 1 to 10000' }]);
+    try { await pool.query('INSERT INTO top_ups (top_up_id,user_id,amount_baht,status) VALUES (?, ?, ?, "PENDING")', [body.topUpId, userId(res), body.amount]); } catch (error) { if (isDuplicateEntry(error)) throw new AppError(409, 'TOP_UP_DUPLICATE', 'Top-up ID has already been processed'); throw error; }
+    let provider; try { provider = await callPayment(body.topUpId, body.amount); } catch { await finalizeTopUp(body.topUpId, 'UNKNOWN', undefined, 'provider_timeout'); throw new AppError(503, 'DEPENDENCY_UNAVAILABLE', 'Payment provider is temporarily unavailable'); }
+    if (provider.status === 200 && provider.data.status === 'succeeded') { const row = await finalizeTopUp(body.topUpId, 'COMPLETED', provider.data.id); res.setHeader('Location', `/pokemart/v1/wallet/top-ups/${body.topUpId}`); return res.status(201).json(asTopUp(row)); }
+    if (provider.status === 402) { const row = await finalizeTopUp(body.topUpId, 'FAILED', undefined, String(provider.data?.error?.code ?? 'card_declined')); return res.status(402).json({ error: { code: 'PAYMENT_FAILED', message: 'Payment was declined', requestId: res.locals.requestId, details: [] }, topUp: asTopUp(row) }); }
+    await finalizeTopUp(body.topUpId, 'UNKNOWN', provider.data?.id, 'provider_unavailable'); throw new AppError(503, 'DEPENDENCY_UNAVAILABLE', 'Payment provider is temporarily unavailable');
   } catch (error) { next(error); }
 });
 app.use((error: any, req: Request, res: Response, _next: NextFunction) => {

@@ -36,7 +36,7 @@ export class ShippingWorker {
   private lastHeartbeatAt: Date = new Date();
 
   constructor(options: ShippingWorkerOptions = {}) {
-    this.baseUrl = (options.shippingBaseUrl ?? process.env.SHIPPING_BASE_URL ?? 'http://localhost:3002').replace(/\/$/, '');
+    this.baseUrl = (options.shippingBaseUrl ?? process.env.SHIPPING_BASE_URL ?? 'http://localhost:4002').replace(/\/$/, '');
     this.requestTimeoutMs = options.requestTimeoutMs ?? Number(process.env.SHIPPING_REQUEST_TIMEOUT_MS ?? 2000);
     this.maxAttempts = options.maxAttempts ?? Number(process.env.SHIPPING_MAX_ATTEMPTS ?? 5);
     this.batchSize = options.batchSize ?? Number(process.env.SHIPPING_BATCH_SIZE ?? 10);

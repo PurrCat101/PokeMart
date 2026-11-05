@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import express, { Request, Response } from 'express';
 
-const port = Number(process.env.PORT ?? 3002);
+const port = Number(process.env.PORT ?? 4002);
 const app = express();
 
 export type MockMode =
@@ -52,7 +52,7 @@ const validUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[
 
 app.use(express.json());
 
-// CORS support for Swagger UI
+// CORS support for the Scalar API reference
 app.use((req, res, next) => {
   const origin = req.header('origin');
   if (origin && (origin.includes('localhost') || origin.includes('127.0.0.1'))) {
