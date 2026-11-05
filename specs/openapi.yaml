@@ -4,10 +4,28 @@ info:
   version: 2.0.0
   description: Public client-facing API. Version 2 response DTOs are intentionally distinct from the internal PokéMart API DTOs.
 servers:
-  - url: http://localhost:3001
+  - url: http://localhost:4001
+tags:
+  - { name: Authentication, description: Sign in and identify the current user. }
+  - { name: Account, description: Profile and KYC level of the authenticated user. }
+  - { name: Pokémon Catalog, description: Browse Pokémon listings. Public. }
+  - { name: Item Catalog, description: Browse item listings and categories. Public. }
+  - { name: Inventory, description: Pokémon owned by the authenticated user. }
+  - { name: Pokémon Purchases, description: Buy a Pokémon and review purchase history. }
+  - { name: Item Purchases, description: Buy items and review item orders. }
+  - { name: Shipping, description: Shipment status for a purchase. }
+  - { name: Wallet, description: Balance and THB top-ups. }
+  - { name: Health, description: Liveness and readiness probes. }
+x-tagGroups:
+  - { name: Getting Started, tags: [Authentication, Account] }
+  - { name: Shop, tags: [Pokémon Catalog, Item Catalog, Inventory] }
+  - { name: Orders, tags: [Pokémon Purchases, Item Purchases, Shipping] }
+  - { name: Wallet & Payments, tags: [Wallet] }
+  - { name: System, tags: [Health] }
 paths:
   /api/auth/login:
     post:
+      tags: [Authentication]
       summary: Sign in with email and password
       description: |
         Returns a one-hour bearer token for the seeded local demo account or another provisioned user.
@@ -40,6 +58,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/auth/me:
     get:
+      tags: [Authentication]
       summary: Get the current authenticated user
       security:
         - bearerAuth: []
@@ -59,8 +78,20 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '503':
           $ref: '#/components/responses/Error'
+  /api/account-info:
+    get:
+      tags: [Account]
+      summary: Get the authenticated user's profile, wallet, and KYC status in one request
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Account information for the current user
+          content: { application/json: { schema: { type: object, required: [user, wallet, kyc], properties: { user: { $ref: '#/components/schemas/CurrentUser' }, wallet: { type: object, required: [userId, balance], properties: { userId: { type: string }, balance: { type: number } } }, kyc: { nullable: true, description: 'null when the KYC service is unavailable; the rest of the response is still valid.', allOf: [{ $ref: '#/components/schemas/KycStatus' }] } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/Error' }
   /api/pokemon:
     get:
+      tags: [Pokémon Catalog]
       summary: List active catalog Pokémon
       description: |
         Errors: 400 `VALIDATION_ERROR` or `UNKNOWN_QUERY_PARAMETER`;
@@ -69,6 +100,9 @@ paths:
         - $ref: '#/components/parameters/XRequestIdRequest'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
+        - { name: q, in: query, schema: { type: string, maxLength: 80 } }
+        - { name: type, in: query, schema: { type: string, maxLength: 32 } }
+        - { name: inStock, in: query, schema: { type: boolean } }
       responses:
         '200':
           $ref: '#/components/responses/PokemonPage'
@@ -80,6 +114,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/pokemon/{id}:
     get:
+      tags: [Pokémon Catalog]
       summary: Get a catalog Pokémon and its listing
       description: |
         Errors: 400 `VALIDATION_ERROR`; 404 `POKEMON_NOT_FOUND`;
@@ -100,6 +135,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/wallet:
     get:
+      tags: [Wallet]
       summary: Get the authenticated user's wallet
       security:
         - bearerAuth: []
@@ -121,6 +157,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/inventory:
     get:
+      tags: [Inventory]
       summary: Get the authenticated user's Pokémon inventory
       security:
         - bearerAuth: []
@@ -139,6 +176,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/purchases:
     get:
+      tags: [Pokémon Purchases]
       summary: List the authenticated user's purchases
       security:
         - bearerAuth: []
@@ -161,6 +199,7 @@ paths:
         '503':
           $ref: '#/components/responses/Error'
     post:
+      tags: [Pokémon Purchases]
       summary: Purchase a Pokémon
       security:
         - bearerAuth: []
@@ -215,6 +254,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/purchases/{id}:
     get:
+      tags: [Pokémon Purchases]
       summary: Get a purchase
       security:
         - bearerAuth: []
@@ -239,6 +279,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/purchases/{id}/shipment:
     get:
+      tags: [Shipping]
       summary: Get the local shipment status for a purchase
       operationId: getPurchaseShipment
       security:
@@ -269,8 +310,131 @@ paths:
         '500':
           $ref: '#/components/responses/Error'
 
+  /api/items:
+    get:
+      tags: [Item Catalog]
+      summary: List active item listings from the pinned PokéAPI snapshot
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdRequest'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - { name: q, in: query, schema: { type: string, maxLength: 80 } }
+        - { name: category, in: query, schema: { type: string, maxLength: 64 } }
+        - { name: inStock, in: query, schema: { type: boolean } }
+      responses:
+        '200':
+          description: Item page
+          content: { application/json: { schema: { $ref: '#/components/schemas/ItemPage' } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /api/item-categories:
+    get:
+      tags: [Item Catalog]
+      summary: List active item categories for catalog filtering
+      responses:
+        '200':
+          description: Item categories
+          content: { application/json: { schema: { type: object, required: [categories], properties: { categories: { type: array, items: { type: string } } } } } }
+        '503': { $ref: '#/components/responses/Error' }
+  /api/items/purchases:
+    post:
+      tags: [Item Purchases]
+      summary: Purchase one item listing
+      security: [{ bearerAuth: [] }]
+      description: The server enforces the item listing's KYC level, stock, and wallet balance atomically.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [purchaseId, itemId, quantity]
+              properties:
+                purchaseId: { type: string, format: uuid }
+                itemId: { type: integer, minimum: 1 }
+                quantity: { type: integer, minimum: 1, maximum: 99 }
+      responses:
+        '201':
+          description: Item purchased and added to item inventory
+          headers:
+            Location: { schema: { type: string, example: /api/items/purchases/6f1f0d7a-52a1-4c2a-9a0b-0c2e8f3d1a11 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/ItemPurchase' } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /api/items/purchases/{id}:
+    get:
+      tags: [Item Purchases]
+      summary: Get a caller-owned item purchase
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Item purchase
+          content: { application/json: { schema: { $ref: '#/components/schemas/ItemPurchase' } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /api/kyc/status:
+    get:
+      tags: [Account]
+      summary: Get the caller's KYC level
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: KYC status
+          content: { application/json: { schema: { $ref: '#/components/schemas/KycStatus' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/Error' }
+  /api/wallet/top-ups:
+    post:
+      tags: [Wallet]
+      summary: Create and confirm an idempotent THB wallet top-up
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [topUpId, amount], properties: { topUpId: { type: string, format: uuid }, amount: { type: integer, minimum: 1, maximum: 10000 } } } } }
+      responses:
+        '201':
+          description: Wallet credited once
+          headers:
+            Location: { schema: { type: string, example: /api/wallet/top-ups/6f1f0d7a-52a1-4c2a-9a0b-0c2e8f3d1a11 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/TopUp' } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '402': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /api/wallet/top-ups/{topUpId}:
+    get:
+      tags: [Wallet]
+      summary: Get a caller-owned top-up state
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: topUpId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Top-up state
+          content: { application/json: { schema: { $ref: '#/components/schemas/TopUp' } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/Error' }
   /health:
     get:
+      tags: [Health]
       summary: Liveness check
       parameters:
         - $ref: '#/components/parameters/XRequestIdRequest'
@@ -286,6 +450,7 @@ paths:
                 $ref: '#/components/schemas/Health'
   /ready:
     get:
+      tags: [Health]
       summary: Readiness check
       parameters:
         - $ref: '#/components/parameters/XRequestIdRequest'
@@ -365,6 +530,46 @@ components:
         type: string
         format: uuid
   schemas:
+    KycStatus:
+      type: object
+      required: [level, levelValue, status, updatedAt]
+      properties:
+        level: { type: string, enum: [NONE, BASIC, FULL] }
+        levelValue: { type: integer, enum: [0, 1, 2] }
+        status: { type: string, enum: [ACTIVE, PENDING_REVIEW, REJECTED] }
+        updatedAt: { type: string, format: date-time }
+    ItemPage:
+      type: object
+      required: [totalCount, page, items]
+      properties:
+        totalCount: { type: integer }
+        page: { type: object, required: [limit, offset], properties: { limit: { type: integer }, offset: { type: integer } } }
+        items:
+          type: array
+          items:
+            type: object
+            required: [item, listing]
+            properties:
+              item: { type: object, required: [id, name, category, spriteUrl], properties: { id: { type: integer }, name: { type: string }, category: { type: string, nullable: true }, spriteUrl: { type: string, nullable: true } } }
+              listing: { type: object, required: [price, availableStock, requiredKycLevel], properties: { price: { type: integer }, availableStock: { type: integer }, requiredKycLevel: { type: integer, enum: [0, 1, 2] } } }
+    ItemPurchase:
+      type: object
+      required: [purchaseId, item, quantity, pricing, createdAt]
+      properties:
+        purchaseId: { type: string, format: uuid }
+        item: { type: object, required: [id, name], properties: { id: { type: integer }, name: { type: string } } }
+        quantity: { type: integer }
+        pricing: { type: object, required: [unitPrice, totalPrice], properties: { unitPrice: { type: integer }, totalPrice: { type: integer } } }
+        createdAt: { type: string, format: date-time }
+    TopUp:
+      type: object
+      required: [topUpId, amount, status, createdAt, updatedAt]
+      properties:
+        topUpId: { type: string, format: uuid }
+        amount: { type: integer, minimum: 1, maximum: 10000 }
+        status: { type: string, enum: [PENDING, COMPLETED, FAILED, UNKNOWN] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
     LoginRequest:
       type: object
       additionalProperties: false
@@ -616,8 +821,11 @@ components:
       properties:
         error:
           type: object
-          required: [code, message, requestId, details]
+          required: [code, message, requestId, retryable, details]
           properties:
+            retryable:
+              type: boolean
+              description: True only for transient failures (503); the same request may be resent unchanged. A POST must reuse its purchaseId or topUpId.
             code:
               type: string
               enum:
@@ -631,9 +839,13 @@ components:
                 - USER_NOT_FOUND
                 - PURCHASE_NOT_FOUND
                 - POKEMON_NOT_FOR_SALE
+                - ITEM_NOT_FOUND
+                - ITEM_NOT_FOR_SALE
                 - INSUFFICIENT_STOCK
                 - INSUFFICIENT_FUNDS
                 - PURCHASE_DUPLICATE
+                - ITEM_PURCHASE_DUPLICATE
+                - KYC_LEVEL_REQUIRED
                 - DEPENDENCY_UNAVAILABLE
                 - INTERNAL_ERROR
             message:
