@@ -18,7 +18,7 @@ test('PUR-BIZ-001 missing Pokémon during purchase returns 404 without state cha
   try {
     snapshot = await snapshotPurchaseState(database, testEnvironment.userId, testEnvironment.pokemonId);
     const response = await bffRequest.post('/api/purchases', {
-      data: { purchaseId, pokemonId: 999, quantity: 1 },
+      data: { purchaseId, pokemonId: 99999, quantity: 1 },
       headers: { 'X-Request-Id': requestId },
     });
     await expectPublicError(response, {
