@@ -8,7 +8,7 @@ test('INT-CAT-LIST-001 GET catalog returns the internal paginated DTO and stable
   });
   expect(response.status()).toBe(200);
   const body = await response.json();
-  expect(body.count).toBe(151);
+  expect(body.count).toBe(1025);
   expect(body.limit).toBe(20);
   expect(body.offset).toBe(0);
   expect(body.results).toHaveLength(20);
@@ -34,15 +34,15 @@ test('INT-CAT-LIST-002 GET catalog supports pagination boundaries and empty page
     });
     expect(response.status()).toBe(200);
     const body = await response.json();
-    expect(body).toMatchObject({ count: 151, limit, offset: 0 });
-    expect(body.results.length).toBe(Math.min(limit, 151));
+    expect(body).toMatchObject({ count: 1025, limit, offset: 0 });
+    expect(body.results.length).toBe(Math.min(limit, 1025));
   }
 
-  const emptyResponse = await request.get('/pokemart/v1/catalog/pokemon?limit=2&offset=999', {
+  const emptyResponse = await request.get('/pokemart/v1/catalog/pokemon?limit=2&offset=5000', {
     headers: internalHeaders(testEnvironment.userId),
   });
   expect(emptyResponse.status()).toBe(200);
-  expect(await emptyResponse.json()).toEqual({ count: 151, limit: 2, offset: 999, results: [] });
+  expect(await emptyResponse.json()).toEqual({ count: 1025, limit: 2, offset: 5000, results: [] });
 });
 
 test('INT-CAT-LIST-003 GET catalog rejects invalid and unknown query parameters', async ({ request, testEnvironment }) => {
@@ -76,6 +76,6 @@ test('INT-CAT-LIST-004 GET catalog is public and ignores X-User-Id', async ({ re
     const response = await request.get('/pokemart/v1/catalog/pokemon', { headers });
     expect(response.status()).toBe(200);
     expect(response.headers()['x-request-id']).toBe(requestId);
-    expect(await response.json()).toMatchObject({ count: 151, results: expect.any(Array) });
+    expect(await response.json()).toMatchObject({ count: 1025, results: expect.any(Array) });
   }
 });

@@ -33,7 +33,7 @@ test('INT-CAT-DETAIL-002 GET catalog detail distinguishes invalid IDs, missing P
     details: [{ field: 'id', message: 'must be a positive integer' }],
   });
 
-  const missing = await request.get('/pokemart/v1/catalog/pokemon/999', {
+  const missing = await request.get('/pokemart/v1/catalog/pokemon/99999', {
     headers: internalHeaders(testEnvironment.userId, requestId),
   });
   await expectPublicError(missing, {

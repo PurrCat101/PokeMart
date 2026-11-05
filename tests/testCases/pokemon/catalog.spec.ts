@@ -8,7 +8,7 @@ test('CAT-API-001 GET /api/pokemon defaults to the seeded catalog and exact publ
   expect(response.status()).toBe(200);
   expect(response.headers()['content-type']).toContain('application/json');
   const body = await response.json();
-  expect(body.totalCount).toBe(151);
+  expect(body.totalCount).toBe(1025);
   expect(body.page).toEqual({ limit: 20, offset: 0 });
   expect(body.items).toHaveLength(20);
   expect(body.items[0]).toEqual({
@@ -29,8 +29,8 @@ test('CAT-API-002 pagination accepts lower, interior, and upper limit boundaries
     expect(response.status(), `limit=${limit}`).toBe(200);
     const body = await response.json();
     expect(body.page).toEqual({ limit, offset: 0 });
-    expect(body.totalCount).toBe(151);
-    expect(body.items.length).toBe(Math.min(limit, 151));
+    expect(body.totalCount).toBe(1025);
+    expect(body.items.length).toBe(Math.min(limit, 1025));
     expect(body.items.length).toBeLessThanOrEqual(limit);
     expect(body.items.map((item: { pokemon: { id: number } }) => item.pokemon.id)).toEqual(
       [...body.items].map((item: { pokemon: { id: number } }) => item.pokemon.id).sort((a: number, b: number) => a - b),
@@ -39,9 +39,9 @@ test('CAT-API-002 pagination accepts lower, interior, and upper limit boundaries
 });
 
 test('CAT-API-003 offset beyond the catalog returns an empty page', async ({ bffRequest }) => {
-  const response = await bffRequest.get('/api/pokemon?limit=2&offset=999');
+  const response = await bffRequest.get('/api/pokemon?limit=2&offset=5000');
   expect(response.status()).toBe(200);
-  expect(await response.json()).toEqual({ totalCount: 151, page: { limit: 2, offset: 999 }, items: [] });
+  expect(await response.json()).toEqual({ totalCount: 1025, page: { limit: 2, offset: 5000 }, items: [] });
 });
 
 const paginationErrors = [
@@ -119,7 +119,7 @@ for (const id of ['abc', '0', '-1', '1.5']) {
 }
 
 test('CAT-ERR-404 GET /api/pokemon/:id distinguishes a valid nonexistent ID', async ({ bffRequest }) => {
-  const response = await bffRequest.get('/api/pokemon/999', {
+  const response = await bffRequest.get('/api/pokemon/99999', {
     headers: { 'X-Request-Id': requestId },
   });
   await expectPublicError(response, {

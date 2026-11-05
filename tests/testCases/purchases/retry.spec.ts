@@ -22,7 +22,7 @@ test('@e2e @purchase-flow an uncommitted purchaseId can be retried, while a comm
     if (inventoryRows.length) inventoryBefore = Number(inventoryRows[0].quantity);
 
     const failedAttempt = await bffRequest.post('/api/purchases', {
-      data: { purchaseId, pokemonId: 999, quantity: 1 },
+      data: { purchaseId, pokemonId: 99999, quantity: 1 },
     });
     expect(failedAttempt.status()).toBe(404);
     expect(await failedAttempt.json()).toMatchObject({ error: { code: 'POKEMON_NOT_FOUND' } });

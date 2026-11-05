@@ -183,7 +183,7 @@ test('INT-PURCHASE-CREATE-003 POST purchase returns documented business errors w
       balance?: number;
       quantity?: number;
     }> = [
-      { pokemonId: 999, code: 'POKEMON_NOT_FOUND', status: 404, message: 'Pokémon not found' },
+      { pokemonId: 99999, code: 'POKEMON_NOT_FOUND', status: 404, message: 'Pokémon not found' },
       { pokemonId: testEnvironment.pokemonId, code: 'POKEMON_NOT_FOR_SALE', status: 409, message: 'Pokémon is not for sale', deactivate: true },
       { pokemonId: testEnvironment.pokemonId, code: 'INSUFFICIENT_STOCK', status: 409, message: 'Insufficient stock', stock: 0, quantity: 99 },
       { pokemonId: testEnvironment.pokemonId, code: 'INSUFFICIENT_FUNDS', status: 422, message: 'Insufficient funds', balance: 0 },
