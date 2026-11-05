@@ -10,6 +10,11 @@ import {
   CreatePurchaseRequest,
   ApiErrorResponse,
   ShipmentItem,
+  ItemCatalogItem,
+  ItemCatalogResponse,
+  CreateItemPurchaseRequest,
+  ItemPurchase,
+  AccountInfo,
 } from "../types/api";
 
 export class ApiError extends Error {
@@ -23,6 +28,19 @@ export class ApiError extends Error {
     super(message);
     this.name = "ApiError";
   }
+}
+
+function userMessage(code: string, fallback: string): string {
+  const messages: Record<string, string> = {
+    DEPENDENCY_UNAVAILABLE: "บริการชั่วคราวไม่พร้อมใช้งาน กรุณาลองใหม่ภายหลัง",
+    INTERNAL_ERROR: "เกิดข้อผิดพลาดบางอย่าง กรุณาลองใหม่ภายหลัง",
+    INSUFFICIENT_FUNDS: "ยอดเงินในกระเป๋าไม่เพียงพอ",
+    INSUFFICIENT_STOCK: "สินค้าในสต็อกไม่เพียงพอ",
+    KYC_LEVEL_REQUIRED: "ระดับ KYC ของคุณยังไม่เพียงพอสำหรับสินค้านี้",
+    UNAUTHORIZED: "กรุณาเข้าสู่ระบบก่อนดำเนินการ",
+    INVALID_CREDENTIALS: "อีเมลหรือรหัสผ่านไม่ถูกต้อง",
+  };
+  return messages[code] ?? fallback;
 }
 
 function getStoredToken(): string | null {
@@ -78,7 +96,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       throw new ApiError(
         response.status,
         payload.error.code || "REQUEST_FAILED",
-        payload.error.message || `Request failed with status ${response.status}`,
+        userMessage(payload.error.code || "REQUEST_FAILED", payload.error.message || `Request failed with status ${response.status}`),
         payload.error.requestId || resRequestId,
         payload.error.details || []
       );
@@ -110,34 +128,51 @@ export const api = {
     return request<{ user: AuthUser }>("/api/auth/me");
   },
 
+  async getAccountInfo(): Promise<AccountInfo> {
+    return request<AccountInfo>("/api/account-info");
+  },
+
   logout(): void {
     clearToken();
   },
 
   // Catalog
-  async getPokemonList(limit = 12, offset = 0): Promise<CatalogResponse> {
-    return request<CatalogResponse>(`/api/pokemon?limit=${limit}&offset=${offset}`);
-  },
-
-  async getAllPokemon(): Promise<CatalogItem[]> {
-    const firstPage = await request<CatalogResponse>("/api/pokemon?limit=100&offset=0");
-    const allItems = [...firstPage.items];
-    if (firstPage.totalCount > 100) {
-      const remainingPages = Math.ceil((firstPage.totalCount - 100) / 100);
-      const requests = [];
-      for (let i = 1; i <= remainingPages; i++) {
-        requests.push(request<CatalogResponse>(`/api/pokemon?limit=100&offset=${i * 100}`));
-      }
-      const additionalPages = await Promise.all(requests);
-      for (const page of additionalPages) {
-        allItems.push(...page.items);
-      }
-    }
-    return allItems;
+  async getPokemonList(limit = 12, offset = 0, filters: { q?: string; type?: string; inStock?: boolean } = {}): Promise<CatalogResponse> {
+    const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (filters.q) query.set("q", filters.q);
+    if (filters.type && filters.type !== "all") query.set("type", filters.type);
+    if (filters.inStock) query.set("inStock", "true");
+    return request<CatalogResponse>(`/api/pokemon?${query}`);
   },
 
   async getPokemonDetail(id: number): Promise<CatalogItem> {
     return request<CatalogItem>(`/api/pokemon/${id}`);
+  },
+
+  async getItemList(limit = 12, offset = 0, filters: { q?: string; category?: string; inStock?: boolean } = {}): Promise<ItemCatalogResponse> {
+    const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (filters.q) query.set("q", filters.q);
+    if (filters.category && filters.category !== "all") query.set("category", filters.category);
+    if (filters.inStock) query.set("inStock", "true");
+    const page = await request<{ totalCount: number; page: { limit: number; offset: number }; items: Array<{ item: { id: number; name: string; category: string | null; spriteUrl: string | null }; listing: { price: number; availableStock: number; requiredKycLevel: 0 | 1 | 2 } }> }>(`/api/items?${query}`);
+    // Public DTO groups item and listing like the Pokémon catalog; the item UI components use the flat view model.
+    return {
+      count: page.totalCount, limit: page.page.limit, offset: page.page.offset,
+      results: page.items.map(({ item, listing }) => ({ ...item, price: listing.price, stock: listing.availableStock, requiredKycLevel: listing.requiredKycLevel })),
+    };
+  },
+
+  async getItemCategories(): Promise<string[]> {
+    const result = await request<{ categories: string[] }>("/api/item-categories");
+    return result.categories;
+  },
+
+  async createItemPurchase(purchase: CreateItemPurchaseRequest): Promise<ItemPurchase> {
+    const result = await request<{ purchaseId: string; item: { id: number; name: string }; quantity: number; pricing: { unitPrice: number; totalPrice: number }; createdAt: string }>("/api/items/purchases", {
+      method: "POST",
+      body: JSON.stringify(purchase),
+    });
+    return { purchaseId: result.purchaseId, itemId: result.item.id, itemName: result.item.name, quantity: result.quantity, unitPrice: result.pricing.unitPrice, totalPrice: result.pricing.totalPrice, createdAt: result.createdAt };
   },
 
   // Wallet
