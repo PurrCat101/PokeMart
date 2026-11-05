@@ -13,7 +13,7 @@ test.describe('Shipping Integration and Resilience Suite', () => {
     await shippingMock.reset();
     await shippingMock.setMode('success');
     worker = new ShippingWorker({
-      shippingBaseUrl: 'http://localhost:3002',
+      shippingBaseUrl: 'http://localhost:4002',
       requestTimeoutMs: 1000,
       maxAttempts: 3,
       batchSize: 10,
@@ -328,7 +328,7 @@ test.describe('Shipping Integration and Resilience Suite', () => {
     const purchaseId = testEnvironment.purchaseId();
     let snapshot: PurchaseStateSnapshot | undefined;
     const worker2 = new ShippingWorker({
-      shippingBaseUrl: 'http://localhost:3002',
+      shippingBaseUrl: 'http://localhost:4002',
       requestTimeoutMs: 1000,
       batchSize: 10,
     });
@@ -413,12 +413,12 @@ test.describe('Shipping Integration and Resilience Suite', () => {
       );
 
       // Login as other user
-      const loginRes = await request.post('http://localhost:3000/pokemart/v1/auth/login', {
+      const loginRes = await request.post('http://localhost:4000/pokemart/v1/auth/login', {
         data: { email: 'other@example.test', password: 'PokeMartLab!2026' },
       });
       const otherToken = (await loginRes.json()).accessToken;
 
-      const forbiddenRes = await request.get(`http://localhost:3001/api/purchases/${purchaseId}/shipment`, {
+      const forbiddenRes = await request.get(`http://localhost:4001/api/purchases/${purchaseId}/shipment`, {
         headers: { Authorization: `Bearer ${otherToken}` },
       });
       expect(forbiddenRes.status()).toBe(404);
@@ -443,7 +443,7 @@ test.describe('Shipping Integration and Resilience Suite', () => {
     expect((await badUuidRes.json()).error.code).toBe('VALIDATION_ERROR');
 
     // Missing token
-    const unauthRes = await request.get('http://localhost:3001/api/purchases/00000000-0000-4000-8000-000000000001/shipment');
+    const unauthRes = await request.get('http://localhost:4001/api/purchases/00000000-0000-4000-8000-000000000001/shipment');
     expect(unauthRes.status()).toBe(401);
 
     // Unknown purchase

@@ -17,7 +17,7 @@ export type ProviderDeliveryStatus =
   | 'DELIVERY_FAILED';
 
 export class ShippingMockService extends Api3rdPartyServices {
-  constructor(request: APIRequestContext, private readonly baseUrl: string = 'http://localhost:3002') {
+  constructor(request: APIRequestContext, private readonly baseUrl: string = 'http://localhost:4002') {
     super(request);
   }
 

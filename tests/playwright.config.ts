@@ -8,8 +8,8 @@ export default defineConfig({
   workers: 1,
   reporter: [['list'], ['html', { open: 'never' }]],
   webServer: process.env.WEB_BASE_URL ? undefined : {
-    command: 'npm --prefix .. run dev:web',
-    url: 'http://localhost:3003',
+    command: 'npm --prefix .. run dev',
+    url: 'http://localhost:4003',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },
@@ -40,7 +40,7 @@ export default defineConfig({
     {
       name: 'ui',
       testMatch: ['ui/**/*.spec.ts'],
-      use: { baseURL: process.env.WEB_BASE_URL ?? 'http://localhost:3003' },
+      use: { baseURL: process.env.WEB_BASE_URL ?? 'http://localhost:4003' },
     },
     {
       name: 'pokeapi',

@@ -163,6 +163,7 @@ test('WireMock models dependency outages on every public business endpoint', asy
         code: 'DEPENDENCY_UNAVAILABLE',
         message: 'Catalog service is temporarily unavailable',
         requestId: 'wiremock-request',
+        retryable: true,
         details: [],
       },
     });
