@@ -7,5 +7,5 @@ COPY apps/bff/package.json apps/bff/package.json
 RUN npm ci --omit=dev
 COPY apps/bff apps/bff
 WORKDIR /app/apps/bff
-EXPOSE 3001
+EXPOSE 4001
 CMD ["npm", "run", "start"]
