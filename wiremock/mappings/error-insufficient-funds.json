@@ -8,6 +8,6 @@
   "response": {
     "status": 422,
     "headers": { "Content-Type": "application/json", "X-Request-Id": "wiremock-request" },
-    "jsonBody": { "error": { "code": "INSUFFICIENT_FUNDS", "message": "Insufficient funds", "requestId": "wiremock-request", "details": [] } }
+    "jsonBody": { "error": { "code": "INSUFFICIENT_FUNDS", "message": "Insufficient funds", "requestId": "wiremock-request", "retryable": false, "details": [] } }
   }
 }

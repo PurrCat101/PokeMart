@@ -8,6 +8,6 @@
   "response": {
     "status": 404,
     "headers": { "Content-Type": "application/json", "X-Request-Id": "wiremock-request" },
-    "jsonBody": { "error": { "code": "POKEMON_NOT_FOUND", "message": "Pokémon not found", "requestId": "wiremock-request", "details": [] } }
+    "jsonBody": { "error": { "code": "POKEMON_NOT_FOUND", "message": "Pokémon not found", "requestId": "wiremock-request", "retryable": false, "details": [] } }
   }
 }

@@ -8,6 +8,6 @@
   "response": {
     "status": 400,
     "headers": { "Content-Type": "application/json", "X-Request-Id": "wiremock-request" },
-    "jsonBody": { "error": { "code": "INVALID_JSON", "message": "Malformed JSON request body", "requestId": "wiremock-request", "details": [] } }
+    "jsonBody": { "error": { "code": "INVALID_JSON", "message": "Malformed JSON request body", "requestId": "wiremock-request", "retryable": false, "details": [] } }
   }
 }
