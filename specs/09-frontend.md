@@ -29,7 +29,8 @@ The BFF and its downstream services must be running for API-backed features to w
 ## 3. Application areas
 
 - **Catalog:** load Pokémon and item listings from the public API; search by name or ID; switch between product families; filter Pokémon by type or items by category and availability; sort by ID, price, or name; browse 12 results per page.
-- **Cart and checkout:** add listings with quantity limits based on available stock, adjust or remove cart items, and submit purchases through the BFF. The cart is stored in browser `localStorage`.
+- **Cart and checkout:** Pokémon and item listings share one bag. Both catalogs offer a quantity stepper (limited by available stock), **Add to bag** (primary action) and **Buy now** (secondary; pays for that one line without changing the bag). Checkout submits each line to its own public endpoint (`POST /api/purchases` for Pokémon, `POST /api/items/purchases` for items); a failed line does not block the others and stays in the bag. The cart is stored in browser `localStorage`; bags saved before items existed (lines without `kind`) are read as Pokémon.
+- **KYC awareness:** item listings may require a KYC level. The bag and checkout compare it with the level from `GET /api/account-info` and warn early: a known shortfall disables checkout for the bag; an unknown level (KYC service unavailable) only warns. The API stays the source of truth and still rejects with `KYC_LEVEL_REQUIRED`.
 - **Trainer sign-in:** use the demo login endpoint to establish a session. The access token is stored in browser `localStorage` and attached as a bearer token to authenticated API requests.
 - **Wallet:** display the signed-in trainer's balance and refresh it after purchase activity.
 - **Inventory:** display the signed-in trainer's owned Pokémon and refresh the view after checkout.
@@ -97,7 +98,7 @@ QA can use this mapping from requirements or a Figma screen to design a test bef
 | Navigate | Open catalog, inventory, or purchases | `nav-catalog`, `nav-inventory`, `nav-purchases` | `page.getByTestId('nav-inventory')` |
 | See current balance | Signed-in trainer wallet amount | `wallet-balance` | `page.getByTestId('wallet-balance')` |
 | Search catalog | Search field | `catalog-search` | `page.getByTestId('catalog-search')` |
-| Browse items | Switch to item catalog and choose an item category | `catalog-kind-items`, `catalog-item-category-{category}` | `page.getByTestId('catalog-kind-items')`; `page.getByTestId('catalog-item-category-standard-balls')` |
+| Browse items | Switch to item catalog and choose an item category from the dropdown (there are 50+ categories) | `catalog-kind-items`, `catalog-item-category` | `page.getByTestId('catalog-kind-items')`; `page.getByTestId('catalog-item-category').selectOption('standard-balls')` |
 | View an item | Item card, name, price, and stock | `item-card-{itemId}`, `item-name-{itemId}`, `item-price-{itemId}`, `item-stock-{itemId}` | `page.getByTestId('item-card-1')` |
 | Choose a Pokémon | Catalog card, name, price, available stock | `pokemon-card-{pokemonId}`, `pokemon-name-{pokemonId}`, `pokemon-price-{pokemonId}`, `pokemon-stock-{pokemonId}` | `page.getByTestId('pokemon-card-25')`; `page.getByTestId('pokemon-stock-25')` |
 | Add to cart | Item action and quantity | `pokemon-quantity-{pokemonId}`, `pokemon-add-to-cart-{pokemonId}` | `page.getByTestId('pokemon-add-to-cart-25')` |
@@ -129,16 +130,20 @@ Known IDs should always use `page.getByTestId('pokemon-card-25')` directly. Do n
 |---|---|
 | App shell | `app-shell`, `app-header`, `app-main` |
 | Navigation and cart entry | `nav-catalog`, `nav-inventory`, `nav-purchases`, `nav-catalog-mobile`, `nav-inventory-mobile`, `nav-purchases-mobile`, `open-cart`, `sign-in`, `sign-out` |
-| Catalog controls and states | `catalog-kind-pokemon`, `catalog-kind-items`, `catalog-search`, `catalog-in-stock-filter`, `catalog-sort`, `catalog-refresh`, `catalog-retry`, `catalog-service-error`, `catalog-type-{type}`, `catalog-item-category-{category}`, `catalog-results-summary`, `catalog-clear-filters`, `catalog-loading`, `catalog-empty`, `catalog-grid`, `catalog-pagination`, `catalog-page-previous`, `catalog-page-next`, `catalog-page-{number}` |
+| Catalog controls and states | `catalog-kind-pokemon`, `catalog-kind-items`, `catalog-search`, `catalog-in-stock-filter`, `catalog-sort`, `catalog-refresh`, `catalog-retry`, `catalog-service-error`, `catalog-type` (Pokémon type `<select>`, value = type or `all`), `catalog-item-category` (item category `<select>`, value = category slug or `all`), `catalog-results-summary`, `catalog-clear-filters`, `catalog-loading`, `catalog-empty`, `catalog-grid`, `catalog-pagination`, `catalog-page-previous`, `catalog-page-next`, `catalog-page-{number}` |
 | Catalog item | `pokemon-card-{pokemonId}`, `pokemon-name-{pokemonId}`, `pokemon-price-{pokemonId}`, `pokemon-stock-{pokemonId}`, `pokemon-quantity-{pokemonId}`, `pokemon-quantity-decrease-{pokemonId}`, `pokemon-quantity-increase-{pokemonId}`, `pokemon-add-to-cart-{pokemonId}` |
-| Item catalog item | `item-card-{itemId}`, `item-name-{itemId}`, `item-price-{itemId}`, `item-stock-{itemId}`, `item-kyc-{itemId}` |
+| Catalog item (Pokémon) | adds `pokemon-buy-now-{pokemonId}` to the selectors above |
+| Item catalog item | `item-card-{itemId}`, `item-name-{itemId}`, `item-price-{itemId}`, `item-stock-{itemId}`, `item-kyc-{itemId}`, `item-quantity-{itemId}`, `item-quantity-decrease-{itemId}`, `item-quantity-increase-{itemId}`, `item-add-to-cart-{itemId}`, `item-buy-now-{itemId}` |
 | Sign in | `login-dialog`, `login-email`, `login-password`, `login-submit`, `login-error`, `login-close` |
-| Cart | `cart-drawer`, `cart-empty`, `cart-close`, `cart-clear`, `cart-item-{pokemonId}`, `cart-item-quantity-{pokemonId}`, `cart-item-remove-{pokemonId}`, `cart-sign-in`, `cart-proceed-to-checkout` |
-| Checkout | `checkout-dialog`, `checkout-progress`, `checkout-confirm`, `checkout-close`, `checkout-success`, `checkout-errors`, `checkout-purchase-{purchaseId}` |
+| Cart | `cart-drawer`, `cart-empty`, `cart-close`, `cart-clear`, `cart-sign-in`, `cart-proceed-to-checkout`, `cart-kyc-warning`; Pokémon lines: `cart-item-{pokemonId}`, `cart-item-quantity-{pokemonId}`, `cart-item-remove-{pokemonId}`, `cart-item-kyc-{pokemonId}`; item lines (note the `item-` infix, so the two ID spaces never collide): `cart-item-item-{itemId}`, `cart-item-item-quantity-{itemId}`, `cart-item-item-remove-{itemId}`, `cart-item-item-kyc-{itemId}` |
+| Checkout | `checkout-dialog`, `checkout-progress`, `checkout-confirm`, `checkout-close`, `checkout-success`, `checkout-errors`, `checkout-kyc-warning`, `checkout-purchase-{purchaseId}` (one receipt per completed line, Pokémon or item) |
 | Inventory | `inventory-view`, `inventory-loading`, `inventory-auth-required`, `inventory-empty`, `inventory-refresh`, `inventory-sign-in`, `inventory-item-{pokemonId}` |
 | Purchase history | `purchases-view`, `purchases-auth-required`, `purchases-table`, `purchases-empty`, `purchase-row-{purchaseId}`, `purchase-item-{purchaseId}`, `purchase-quantity-{purchaseId}`, `purchase-delivery-status-{purchaseId}`, `purchase-tracking-number-{purchaseId}`, `purchase-open-detail-{purchaseId}`, `purchases-refresh`, `purchases-sign-in`, `purchases-page-previous`, `purchases-page-next` |
 | Order detail and shipping | `order-detail-{purchaseId}`, `order-detail-delivery-status`, `order-detail-tracking-number`, `order-detail-shipment-timeline`, `order-detail-refresh`, `order-detail-shipping-notice`, `shipment-timeline-step-{status}`, `shipment-timeline-current`, `shipment-timeline-loading`, `shipment-timeline-error` |
-| Trainer wallet | `wallet-balance` |
+| Order detail close | `order-detail-close` |
+| Catalog empty-state action | `catalog-reset-filters` |
+| Theme | `theme-toggle` |
+| Trainer wallet | `wallet-balance` (text is exactly `₽ {amount}`) |
 | Feedback | `toast-{success|error|info}` |
 
 UI tests belong in `tests/testCases/ui/` and run as Playwright project `ui`, independently of the real-state/database setup and other API test projects. The UI suite intentionally contains one complete successful-purchase E2E case: it signs in, chooses an affordable in-stock Pokémon, and verifies the wallet debit, stock reduction, inventory quantity increase, and purchase history entry against values observed before checkout. Configure the target origin with `WEB_BASE_URL`; it defaults to `http://localhost:4003`. Run with `npm run test:ui` after making the target web server reachable. For example:
