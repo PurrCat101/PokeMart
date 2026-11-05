@@ -1,38 +1,158 @@
+import { useState } from "react";
 import Image from "next/image";
 import { ItemCatalogItem } from "../types/api";
-import { BackpackIcon, AlertCircleIcon, CartIcon } from "./icons";
+import { BackpackIcon, CartIcon, CheckIcon, UserIcon } from "./icons";
+import { QuantityStepper } from "./QuantityStepper";
+import { Button, cx, money, titleCase } from "./ui";
 
-export function ItemCard({ item, onPurchase, isPurchasing = false }: { item: ItemCatalogItem; onPurchase: (item: ItemCatalogItem) => void; isPurchasing?: boolean }) {
+interface ItemCardProps {
+  item: ItemCatalogItem;
+  onAddToCart: (item: ItemCatalogItem, quantity: number) => void;
+  onBuyNow: (item: ItemCatalogItem, quantity: number) => void;
+  inCartQuantity?: number;
+}
+
+export function ItemCard({ item, onAddToCart, onBuyNow, inCartQuantity = 0 }: ItemCardProps) {
+  const [wanted, setWanted] = useState(1);
+  const [justAdded, setJustAdded] = useState(false);
+
   const outOfStock = item.stock <= 0;
+  const needsKyc = item.requiredKycLevel > 0;
+  const availableRemaining = Math.max(0, item.stock - inCartQuantity);
+  const maxPurchase = Math.min(availableRemaining > 0 ? availableRemaining : item.stock, 99);
+  const bagIsFull = availableRemaining <= 0 && inCartQuantity > 0;
+  const quantity = Math.max(1, Math.min(wanted, maxPurchase));
+  const stockTone = outOfStock ? "text-danger" : item.stock < 5 ? "text-warn" : "text-ok";
+  const displayName = item.name.replaceAll("-", " ");
+
+  const handleAdd = () => {
+    if (outOfStock || maxPurchase <= 0) return;
+    onAddToCart(item, quantity);
+    setJustAdded(true);
+    setWanted(1);
+    setTimeout(() => setJustAdded(false), 1200);
+  };
+
   return (
-    <article data-testid={`item-card-${item.id}`} className="flex flex-col overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-xs transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700">
-      <div className="flex items-center justify-between border-b border-zinc-100 bg-zinc-50/60 px-3.5 py-2.5 dark:border-zinc-800 dark:bg-zinc-900/60">
-        <span className="font-mono text-xs font-semibold text-zinc-500 dark:text-zinc-400">ITEM #{String(item.id).padStart(4, "0")}</span>
-        {item.requiredKycLevel > 0 && <span className="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">Verification needed</span>}
+    <article
+      data-testid={`item-card-${item.id}`}
+      className="group flex flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-card transition-shadow hover:shadow-pop"
+    >
+      <div className="relative flex h-40 items-center justify-center bg-surface-2">
+        <span className="absolute left-3 top-3 font-mono text-xs font-semibold tabular-nums text-fg-muted">
+          ITEM {String(item.id).padStart(4, "0")}
+        </span>
+        {inCartQuantity > 0 ? (
+          <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-surface px-2 py-0.5 text-xs font-medium text-fg shadow-card">
+            <CartIcon className="h-3 w-3" />
+            <span className="font-mono tabular-nums">{inCartQuantity}</span> in bag
+          </span>
+        ) : (
+          needsKyc && (
+            <span
+              data-testid={`item-kyc-${item.id}`}
+              className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full border border-warn/40 bg-warn-soft px-2 py-0.5 text-xs font-medium text-warn"
+            >
+              <UserIcon className="h-3 w-3" />
+              KYC level {item.requiredKycLevel}
+            </span>
+          )
+        )}
+        {item.spriteUrl ? (
+          <Image
+            src={item.spriteUrl}
+            alt=""
+            width={96}
+            height={96}
+            unoptimized
+            className="sprite h-24 w-24 object-contain transition-transform duration-200 group-hover:scale-105"
+          />
+        ) : (
+          <BackpackIcon className="h-10 w-10 text-fg-subtle" />
+        )}
       </div>
-      <div className="flex h-36 items-center justify-center border-b border-zinc-100 bg-zinc-50/30 p-3 dark:border-zinc-800 dark:bg-zinc-950/40">
-        {item.spriteUrl ? <Image src={item.spriteUrl} alt={item.name} width={88} height={88} unoptimized className="h-24 w-24 object-contain" /> : <BackpackIcon className="h-8 w-8 text-zinc-400" />}
-      </div>
-      <div className="flex flex-1 flex-col p-4">
-        <div className="flex items-start justify-between gap-2">
-          <h3 data-testid={`item-name-${item.id}`} className="capitalize font-semibold leading-tight text-zinc-900 dark:text-zinc-100">{item.name.replaceAll("-", " ")}</h3>
-          <span data-testid={`item-price-${item.id}`} className="shrink-0 font-mono text-sm font-bold tabular-nums text-zinc-900 dark:text-zinc-100">₽ {item.price.toLocaleString()}</span>
+
+      <div className="flex flex-1 flex-col gap-3 p-4">
+        <div>
+          <div className="flex items-start justify-between gap-3">
+            <h3 data-testid={`item-name-${item.id}`} className="text-base font-semibold capitalize leading-snug">
+              {displayName}
+            </h3>
+            <span data-testid={`item-price-${item.id}`} className="shrink-0 font-mono text-base font-semibold tabular-nums">
+              {money(item.price)}
+            </span>
+          </div>
+          <p className="mt-1 text-sm text-fg-muted">{item.category ? titleCase(item.category) : "Uncategorized"}</p>
         </div>
-        <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">{item.category?.replaceAll("-", " ") ?? "Uncategorized"}</p>
-        <div className="mt-4 flex items-center justify-between border-t border-zinc-100 pt-3 text-xs dark:border-zinc-800">
-          <span data-testid={`item-stock-${item.id}`} className={`font-mono ${outOfStock ? "text-red-600 dark:text-red-400" : "text-zinc-600 dark:text-zinc-400"}`}>{outOfStock ? "Out of stock" : `${item.stock} in stock`}</span>
-          {item.requiredKycLevel > 0 ? <span className="inline-flex items-center gap-1 text-zinc-600 dark:text-zinc-400"><AlertCircleIcon className="h-3.5 w-3.5" />Verification may be required</span> : <span className="text-emerald-700 dark:text-emerald-300">Available to all</span>}
+
+        <div className="flex items-center justify-between gap-2 text-sm">
+          <p className="flex items-center gap-2">
+            <span aria-hidden="true" className={cx("h-2 w-2 rounded-full bg-current", stockTone)} />
+            <span data-testid={`item-stock-${item.id}`} className={cx("font-mono tabular-nums", stockTone)}>
+              {outOfStock ? "Out of stock" : `${item.stock} in stock`}
+            </span>
+          </p>
+          {needsKyc && inCartQuantity > 0 && <span className="text-xs text-warn">KYC level {item.requiredKycLevel}</span>}
         </div>
-        <button
-          type="button"
-          onClick={() => onPurchase(item)}
-          disabled={outOfStock || isPurchasing}
-          data-testid={`item-purchase-${item.id}`}
-          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded bg-zinc-900 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-500 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white dark:disabled:bg-zinc-800 dark:disabled:text-zinc-500"
-        >
-          <CartIcon className="h-3.5 w-3.5" />
-          <span>{outOfStock ? "Out of stock" : isPurchasing ? "Buying…" : `Buy now • ₽ ${item.price.toLocaleString()}`}</span>
-        </button>
+
+        <div className="mt-auto space-y-3 border-t border-line pt-3">
+          {!outOfStock && availableRemaining > 0 && (
+            <div className="flex items-center justify-between gap-3">
+              <label htmlFor={`item-qty-input-${item.id}`} className="text-sm text-fg-muted">
+                Quantity
+              </label>
+              <QuantityStepper
+                value={quantity}
+                max={maxPurchase}
+                onChange={setWanted}
+                name={displayName}
+                inputId={`item-qty-input-${item.id}`}
+                inputTestId={`item-quantity-${item.id}`}
+                decreaseTestId={`item-quantity-decrease-${item.id}`}
+                increaseTestId={`item-quantity-increase-${item.id}`}
+              />
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Button
+              variant="primary"
+              onClick={handleAdd}
+              disabled={outOfStock || bagIsFull}
+              data-testid={`item-add-to-cart-${item.id}`}
+              className="w-full"
+            >
+              {outOfStock ? (
+                "Out of stock"
+              ) : bagIsFull ? (
+                "Max in bag"
+              ) : justAdded ? (
+                <>
+                  <CheckIcon className="h-4 w-4" />
+                  Added to bag
+                </>
+              ) : (
+                <>
+                  <CartIcon className="h-4 w-4" />
+                  <span>
+                    Add to bag{quantity > 1 ? ` (${quantity})` : ""} ·{" "}
+                    <span className="font-mono tabular-nums">{money(item.price * quantity)}</span>
+                  </span>
+                </>
+              )}
+            </Button>
+            {!outOfStock && (
+              <Button
+                variant="secondary"
+                onClick={() => onBuyNow(item, quantity)}
+                data-testid={`item-buy-now-${item.id}`}
+                className="w-full"
+              >
+                Buy now
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
     </article>
   );

@@ -1,13 +1,16 @@
 "use client";
 
 import React from "react";
-import { PokeballIcon, WalletIcon, BackpackIcon, LedgerIcon, UserIcon, CartIcon, SunIcon, MoonIcon } from "./icons";
+import { PokeballIcon, WalletIcon, BackpackIcon, LedgerIcon, CartIcon, SunIcon, MoonIcon, UserIcon } from "./icons";
 import { AuthUser, WalletData } from "../types/api";
 import { useTheme } from "../contexts/ThemeContext";
+import { Button, IconButton, cx, money } from "./ui";
+
+export type AppTab = "catalog" | "inventory" | "purchases";
 
 interface HeaderProps {
-  activeTab: "catalog" | "inventory" | "purchases";
-  onTabChange: (tab: "catalog" | "inventory" | "purchases") => void;
+  activeTab: AppTab;
+  onTabChange: (tab: AppTab) => void;
   user: AuthUser | null;
   wallet: WalletData | null;
   inventoryCount: number;
@@ -16,6 +19,12 @@ interface HeaderProps {
   onOpenLogin: () => void;
   onLogout: () => void;
 }
+
+const TABS: Array<{ id: AppTab; label: string; Icon: typeof PokeballIcon }> = [
+  { id: "catalog", label: "Catalog", Icon: PokeballIcon },
+  { id: "inventory", label: "Inventory", Icon: BackpackIcon },
+  { id: "purchases", label: "Orders", Icon: LedgerIcon },
+];
 
 export function Header({
   activeTab,
@@ -31,194 +40,139 @@ export function Header({
   const { theme, toggleTheme } = useTheme();
 
   return (
-    <header data-testid="app-header" className="sticky top-0 z-30 bg-white/95 dark:bg-zinc-900/95 border-b border-zinc-200 dark:border-zinc-800 backdrop-blur-sm">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          {/* Brand Identity */}
-          <div className="flex items-center space-x-6">
-            <div className="flex items-center space-x-2.5">
-              <div className="w-8 h-8 rounded bg-red-600 text-white flex items-center justify-center shadow-sm">
-                <PokeballIcon className="w-5 h-5" />
-              </div>
-              <div className="flex flex-col">
-                <span className="font-bold tracking-tight text-zinc-950 dark:text-zinc-50 text-base leading-none">
-                  POKÉMART
-                </span>
-                <span className="text-[10px] font-mono tracking-widest text-zinc-600 dark:text-zinc-400 uppercase mt-0.5">
-                  COMMERCE TERMINAL
-                </span>
-              </div>
+    <>
+      <header data-testid="app-header" className="sticky top-0 z-30 border-b border-line bg-surface">
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded-md focus:bg-brand focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-brand-fg"
+        >
+          Skip to content
+        </a>
+
+        <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4 sm:px-6 lg:px-8">
+          {/* Brand */}
+          <div className="flex shrink-0 items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand text-brand-fg">
+              <PokeballIcon className="h-5 w-5" />
             </div>
-
-            {/* Navigation Tabs */}
-            <nav className="hidden md:flex space-x-1 border-l border-zinc-200 dark:border-zinc-800 pl-6">
-              <button
-                type="button"
-                onClick={() => onTabChange("catalog")}
-                data-testid="nav-catalog"
-                className={`px-3 py-1.5 rounded text-sm font-medium transition-colors flex items-center space-x-2 ${
-                  activeTab === "catalog"
-                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                    : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                }`}
-              >
-                <PokeballIcon className="w-4 h-4" />
-                <span>Shop Catalog</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => onTabChange("inventory")}
-                data-testid="nav-inventory"
-                className={`px-3 py-1.5 rounded text-sm font-medium transition-colors flex items-center space-x-2 ${
-                  activeTab === "inventory"
-                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                    : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                }`}
-              >
-                <BackpackIcon className="w-4 h-4" />
-                <span>Trainer Bag</span>
-                {inventoryCount > 0 && (
-                  <span className="ml-1 text-xs font-mono font-semibold px-1.5 py-0.2 bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200 rounded">
-                    {inventoryCount}
-                  </span>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => onTabChange("purchases")}
-                data-testid="nav-purchases"
-                className={`px-3 py-1.5 rounded text-sm font-medium transition-colors flex items-center space-x-2 ${
-                  activeTab === "purchases"
-                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                    : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                }`}
-              >
-                <LedgerIcon className="w-4 h-4" />
-                <span>Order History</span>
-              </button>
-            </nav>
+            <span className="text-lg font-bold tracking-tight">PokéMart</span>
           </div>
 
-          {/* Right Status, Cart & Trainer Profile */}
-          <div className="flex items-center space-x-3">
-            {/* Theme Toggle Button */}
-            <button
-              type="button"
-              onClick={toggleTheme}
-              data-testid="theme-toggle"
-              className="p-2 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 dark:focus-visible:ring-zinc-100 focus-visible:ring-offset-1"
-              aria-label="Toggle theme"
-            >
-              {theme === "light" ? (
-                <MoonIcon className="w-4 h-4 text-zinc-700 dark:text-zinc-300" />
-              ) : (
-                <SunIcon className="w-4 h-4 text-zinc-700 dark:text-zinc-300" />
-              )}
-            </button>
+          {/* Primary navigation (desktop) */}
+          <nav aria-label="Primary" className="ml-4 hidden h-full items-stretch gap-1 md:flex">
+            {TABS.map(({ id, label, Icon }) => {
+              const active = activeTab === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => onTabChange(id)}
+                  data-testid={`nav-${id}`}
+                  aria-current={active ? "page" : undefined}
+                  className={cx(
+                    "relative flex items-center gap-2 px-3 text-sm font-medium transition-colors",
+                    active ? "text-fg" : "text-fg-muted hover:text-fg",
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span>{label}</span>
+                  {id === "inventory" && inventoryCount > 0 && (
+                    <span className="rounded-full bg-surface-2 px-1.5 font-mono text-xs font-semibold tabular-nums text-fg-muted">
+                      {inventoryCount}
+                    </span>
+                  )}
+                  <span
+                    aria-hidden="true"
+                    className={cx("absolute inset-x-3 -bottom-px h-0.5 rounded-full transition-colors", active ? "bg-brand" : "bg-transparent")}
+                  />
+                </button>
+              );
+            })}
+          </nav>
 
-            {/* Shopping Bag Button */}
+          <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+            {user && (
+              <div className="flex items-center gap-2 rounded-md border border-line bg-surface-2 px-2.5 py-1.5">
+                <WalletIcon className="h-4 w-4 text-ok" />
+                <span className="hidden text-xs text-fg-muted sm:inline">Balance</span>
+                <span data-testid="wallet-balance" className="font-mono text-sm font-semibold tabular-nums">
+                  {wallet ? money(wallet.balance) : "₽ ---"}
+                </span>
+              </div>
+            )}
+
             <button
               type="button"
               onClick={onOpenCart}
               data-testid="open-cart"
-              className="flex items-center space-x-2 px-3 py-1.5 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 dark:focus-visible:ring-zinc-100 focus-visible:ring-offset-1"
-              aria-label="Open Shopping Bag"
+              aria-label={cartCount > 0 ? `Open bag, ${cartCount} ${cartCount === 1 ? "item" : "items"}` : "Open bag, empty"}
+              className="relative inline-flex h-11 w-11 items-center justify-center rounded-md border border-line bg-surface text-fg transition-colors hover:bg-surface-2 sm:h-9 sm:w-auto sm:gap-2 sm:px-3"
             >
-              <CartIcon className="w-4 h-4 text-zinc-700 dark:text-zinc-300" />
-              <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">Bag</span>
-              {cartCount > 0 ? (
-                <span className="font-mono text-xs font-bold px-1.5 py-0.2 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 rounded-full tabular-nums">
+              <CartIcon className="h-5 w-5 sm:h-4 sm:w-4" />
+              <span className="hidden text-sm font-medium sm:inline">Bag</span>
+              {cartCount > 0 && (
+                <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-brand px-1 font-mono text-xs font-bold tabular-nums text-brand-fg sm:static sm:h-auto sm:min-w-0 sm:px-1.5">
                   {cartCount}
                 </span>
-              ) : (
-                <span className="font-mono text-[11px] text-zinc-400">0</span>
               )}
             </button>
 
-            {/* Wallet Balance Display */}
-            {user && (
-              <div className="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900">
-                <WalletIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                <span className="text-xs text-zinc-600 dark:text-zinc-400 font-medium">Balance:</span>
-                <span data-testid="wallet-balance" className="text-sm font-mono font-semibold tabular-nums text-zinc-950 dark:text-zinc-50">
-                  ₽ {wallet ? wallet.balance.toLocaleString() : "---"}
-                </span>
-              </div>
-            )}
+            <IconButton
+              label={theme === "light" ? "Switch to dark theme" : "Switch to light theme"}
+              onClick={toggleTheme}
+              data-testid="theme-toggle"
+              className="border border-line"
+            >
+              {theme === "light" ? <MoonIcon className="h-4 w-4" /> : <SunIcon className="h-4 w-4" />}
+            </IconButton>
 
-            {/* Auth Actions */}
             {user ? (
-              <div className="flex items-center space-x-2.5">
-                <div className="hidden lg:flex items-center space-x-1.5 text-xs text-zinc-600 dark:text-zinc-400">
-                  <UserIcon className="w-3.5 h-3.5 text-zinc-600" />
-                  <span className="font-medium text-zinc-800 dark:text-zinc-200 truncate max-w-[120px]">
-                    {user.displayName}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={onLogout}
-                  data-testid="sign-out"
-                  className="px-2.5 py-1 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded border border-zinc-200 dark:border-zinc-700 transition-colors"
-                >
-                  Sign Out
-                </button>
+              <div className="flex items-center gap-2">
+                <span className="hidden max-w-32 items-center gap-1.5 truncate text-sm text-fg-muted lg:inline-flex">
+                  <UserIcon className="h-4 w-4 shrink-0" />
+                  <span className="truncate">{user.displayName}</span>
+                </span>
+                <Button variant="secondary" size="sm" onClick={onLogout} data-testid="sign-out">
+                  Sign out
+                </Button>
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={onOpenLogin}
-                data-testid="sign-in"
-                className="px-3.5 py-1.5 text-xs font-semibold rounded bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-1"
-              >
-                Sign In as Trainer
-              </button>
+              <Button variant="primary" size="sm" onClick={onOpenLogin} data-testid="sign-in">
+                Sign in
+              </Button>
             )}
           </div>
         </div>
+      </header>
 
-        {/* Mobile Nav Tabs */}
-        <div className="flex md:hidden border-t border-zinc-200 dark:border-zinc-800 py-2 space-x-2 overflow-x-auto">
-          <button
-            type="button"
-            onClick={() => onTabChange("catalog")}
-            data-testid="nav-catalog-mobile"
-            className={`px-3 py-1 rounded text-xs font-medium ${
-              activeTab === "catalog"
-                ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                : "text-zinc-600 hover:bg-zinc-100"
-            }`}
-          >
-            Catalog
-          </button>
-          <button
-            type="button"
-            onClick={() => onTabChange("inventory")}
-            data-testid="nav-inventory-mobile"
-            className={`px-3 py-1 rounded text-xs font-medium ${
-              activeTab === "inventory"
-                ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                : "text-zinc-600 hover:bg-zinc-100"
-            }`}
-          >
-            Trainer Bag ({inventoryCount})
-          </button>
-          <button
-            type="button"
-            onClick={() => onTabChange("purchases")}
-            data-testid="nav-purchases-mobile"
-            className={`px-3 py-1 rounded text-xs font-medium ${
-              activeTab === "purchases"
-                ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                : "text-zinc-600 hover:bg-zinc-100"
-            }`}
-          >
-            Order History
-          </button>
-        </div>
-      </div>
-    </header>
+      {/* Primary navigation (mobile): bottom tab bar, icon + label */}
+      <nav
+        aria-label="Primary"
+        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
+      >
+        {TABS.map(({ id, label, Icon }) => {
+          const active = activeTab === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onTabChange(id)}
+              data-testid={`nav-${id}-mobile`}
+              aria-current={active ? "page" : undefined}
+              className={cx(
+                "flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors",
+                active ? "text-brand-text" : "text-fg-muted",
+              )}
+            >
+              <Icon className="h-5 w-5" />
+              <span>
+                {label}
+                {id === "inventory" && inventoryCount > 0 ? ` (${inventoryCount})` : ""}
+              </span>
+            </button>
+          );
+        })}
+      </nav>
+    </>
   );
 }

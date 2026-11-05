@@ -10,26 +10,21 @@ import {
   InventoryItem,
   PurchaseItem,
   CartItem,
+  CheckoutReceipt,
+  CheckoutFailure,
 } from "../types/api";
+import { type KycLevel, lineKey, lineMaxQuantity, normalizeCart } from "../lib/cart";
 import { Header } from "../components/Header";
 import { PokemonCard } from "../components/PokemonCard";
 import { ItemCard } from "../components/ItemCard";
-import { ItemCheckoutModal } from "../components/ItemCheckoutModal";
 import { CartDrawer } from "../components/CartDrawer";
 import { CheckoutModal } from "../components/CheckoutModal";
 import { LoginModal } from "../components/LoginModal";
 import { InventoryView } from "../components/InventoryView";
 import { PurchasesView } from "../components/PurchasesView";
 import { Toast, ToastMessage } from "../components/Toast";
-import {
-  SearchIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  RefreshIcon,
-  AlertCircleIcon,
-  FilterIcon,
-  XIcon,
-} from "../components/icons";
+import { SearchIcon, ChevronLeftIcon, ChevronRightIcon, RefreshIcon, FilterIcon, XIcon } from "../components/icons";
+import { Alert, Button, EmptyState, IconButton, Skeleton, cx, inputClass } from "../components/ui";
 
 const POKEMON_TYPES = [
   "all",
@@ -52,7 +47,7 @@ const POKEMON_TYPES = [
 
 const ITEMS_PER_PAGE = 12;
 
-export default function PokemartCommerceTerminal() {
+export default function PokeMartApp() {
   // Navigation & View Tab
   const [activeTab, setActiveTab] = useState<"catalog" | "inventory" | "purchases">("catalog");
 
@@ -64,7 +59,11 @@ export default function PokemartCommerceTerminal() {
   // Cart State
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  // null = checkout closed. Holds the whole bag, or one line for "Buy now".
+  const [checkoutLines, setCheckoutLines] = useState<CartItem[] | null>(null);
+  const [buyNowAfterLogin, setBuyNowAfterLogin] = useState<CartItem | null>(null);
+  // null = unknown (signed out, or the KYC service is unavailable).
+  const [kycLevel, setKycLevel] = useState<KycLevel | null>(null);
 
   // Current catalog page only: never download the full product snapshot to browse.
   const [allCatalog, setAllCatalog] = useState<CatalogItem[]>([]);
@@ -73,9 +72,6 @@ export default function PokemartCommerceTerminal() {
   const [itemCategories, setItemCategories] = useState<string[]>(["all"]);
   const [isCatalogLoading, setIsCatalogLoading] = useState(true);
   const [catalogKind, setCatalogKind] = useState<"pokemon" | "items">("pokemon");
-  const [purchasingItemId, setPurchasingItemId] = useState<number | null>(null);
-  const [checkoutItem, setCheckoutItem] = useState<ItemCatalogItem | null>(null);
-  const [itemAfterLogin, setItemAfterLogin] = useState<ItemCatalogItem | null>(null);
 
   // Filter & Search Controls
   const [searchQuery, setSearchQuery] = useState("");
@@ -103,8 +99,8 @@ export default function PokemartCommerceTerminal() {
     try {
       const stored = localStorage.getItem("pokemart_cart");
       if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) setCart(parsed);
+        // Bags saved before items existed have no `kind`; normalizeCart treats those as Pokemon.
+        setCart(normalizeCart(JSON.parse(stored)));
       }
     } catch {
       // ignore JSON parse error
@@ -127,9 +123,11 @@ export default function PokemartCommerceTerminal() {
       const account = await api.getAccountInfo();
       setUser(account.user);
       setWallet(account.wallet);
+      setKycLevel(account.kyc?.levelValue ?? null);
     } catch {
       setUser(null);
       setWallet(null);
+      setKycLevel(null);
     }
   }, []);
 
@@ -205,78 +203,51 @@ export default function PokemartCommerceTerminal() {
     if (activeTab === "purchases" && user) fetchPurchases(0);
   }, [activeTab, user, fetchInventory, fetchPurchases]);
 
-  // Cart operations
-  const handleAddToCart = (item: CatalogItem, quantity: number) => {
-    const existingIndex = cart.findIndex((c) => c.item.pokemon.id === item.pokemon.id);
-    let updatedCart: CartItem[];
-
-    if (existingIndex >= 0) {
-      const current = cart[existingIndex];
-      const newQty = Math.min(current.quantity + quantity, item.listing.availableStock);
-      updatedCart = [...cart];
-      updatedCart[existingIndex] = { ...current, quantity: newQty };
-    } else {
-      updatedCart = [...cart, { item, quantity: Math.min(quantity, item.listing.availableStock) }];
-    }
+  // Cart operations (Pokémon and item lines share one bag)
+  const handleAddLine = (line: CartItem) => {
+    const key = lineKey(line);
+    const max = lineMaxQuantity(line);
+    const existing = cart.find((c) => lineKey(c) === key);
+    const updatedCart: CartItem[] = existing
+      ? cart.map((c) => (lineKey(c) === key ? { ...c, quantity: Math.min(c.quantity + line.quantity, max) } : c))
+      : [...cart, { ...line, quantity: Math.min(line.quantity, max) }];
 
     saveCart(updatedCart);
+    const name = line.kind === "pokemon" ? line.item.pokemon.name : line.item.name.replaceAll("-", " ");
     setToast({
       id: crypto.randomUUID(),
       type: "success",
-      title: `Added ${item.pokemon.name} × ${quantity} to Bag`,
+      title: `Added ${name} × ${line.quantity} to bag`,
       message: `Total items in bag: ${updatedCart.reduce((a, b) => a + b.quantity, 0)}`,
     });
   };
 
-  const handleUpdateCartQuantity = (pokemonId: number, quantity: number) => {
+  const handleUpdateCartQuantity = (line: CartItem, quantity: number) => {
     if (quantity <= 0) {
-      handleRemoveFromCart(pokemonId);
+      handleRemoveFromCart(line);
       return;
     }
-    const updated = cart.map((c) => {
-      if (c.item.pokemon.id === pokemonId) {
-        return { ...c, quantity: Math.min(quantity, c.item.listing.availableStock) };
-      }
-      return c;
-    });
-    saveCart(updated);
+    const key = lineKey(line);
+    saveCart(cart.map((c) => (lineKey(c) === key ? { ...c, quantity: Math.min(quantity, lineMaxQuantity(c)) } : c)));
   };
 
-  const handleRemoveFromCart = (pokemonId: number) => {
-    const updated = cart.filter((c) => c.item.pokemon.id !== pokemonId);
-    saveCart(updated);
+  const handleRemoveFromCart = (line: CartItem) => {
+    const key = lineKey(line);
+    saveCart(cart.filter((c) => lineKey(c) !== key));
   };
 
   const handleClearCart = () => {
     saveCart([]);
   };
 
-  const handleItemPurchase = async (item: ItemCatalogItem) => {
+  // "Buy now" pays for one line without touching the bag.
+  const handleBuyNow = (line: CartItem) => {
     if (!user) {
-      setItemAfterLogin(item);
+      setBuyNowAfterLogin(line);
       setIsLoginOpen(true);
       return;
     }
-    setCheckoutItem(item);
-  };
-
-  const confirmItemPurchase = async (item: ItemCatalogItem) => {
-    setPurchasingItemId(item.id);
-    try {
-      const purchase = await api.createItemPurchase({ purchaseId: crypto.randomUUID(), itemId: item.id, quantity: 1 });
-      const account = await api.getAccountInfo();
-      setWallet(account.wallet);
-      await fetchFullCatalog();
-      setToast({ id: crypto.randomUUID(), type: "success", title: "Item purchased", message: `${purchase.itemName.replaceAll("-", " ")} added to your item inventory.` });
-    } catch (error) {
-      const message = error instanceof ApiError && error.code === "KYC_LEVEL_REQUIRED"
-        ? `สินค้านี้ต้องใช้ KYC ระดับ ${item.requiredKycLevel}`
-        : error instanceof Error ? error.message : "เกิดข้อผิดพลาดบางอย่าง กรุณาลองใหม่ภายหลัง";
-      setToast({ id: crypto.randomUUID(), type: "error", title: "Item purchase failed", message });
-      throw new Error(message);
-    } finally {
-      setPurchasingItemId(null);
-    }
+    setCheckoutLines([line]);
   };
 
   // Login handler
@@ -285,9 +256,10 @@ export default function PokemartCommerceTerminal() {
     setUser(res.user);
     const account = await api.getAccountInfo();
     setWallet(account.wallet);
-    if (itemAfterLogin) {
-      setCheckoutItem(itemAfterLogin);
-      setItemAfterLogin(null);
+    setKycLevel(account.kyc?.levelValue ?? null);
+    if (buyNowAfterLogin) {
+      setCheckoutLines([buyNowAfterLogin]);
+      setBuyNowAfterLogin(null);
     }
     setToast({
       id: crypto.randomUUID(),
@@ -303,6 +275,7 @@ export default function PokemartCommerceTerminal() {
     api.logout();
     setUser(null);
     setWallet(null);
+    setKycLevel(null);
     setInventoryItems([]);
     setPurchaseHistory([]);
     setToast({
@@ -313,49 +286,73 @@ export default function PokemartCommerceTerminal() {
     });
   };
 
-  // Multi-item Cart Checkout Execution
+  // Pays for each line against its own endpoint. A failed line never blocks the others.
   const handleExecuteCheckout = async (
-    items: CartItem[],
-    onProgress: (current: number, total: number, itemName: string) => void
+    lines: CartItem[],
+    onProgress: (current: number, total: number, itemName: string) => void,
   ) => {
-    const completed: PurchaseItem[] = [];
-    const errors: Array<{ pokemonId: number; name: string; error: string }> = [];
+    const completed: CheckoutReceipt[] = [];
+    const errors: CheckoutFailure[] = [];
 
-    for (let i = 0; i < items.length; i++) {
-      const line = items[i];
-      onProgress(i + 1, items.length, line.item.pokemon.name);
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const name = line.kind === "pokemon" ? line.item.pokemon.name : line.item.name.replaceAll("-", " ");
+      onProgress(i + 1, lines.length, name);
 
       try {
-        const purchaseId = crypto.randomUUID();
-        const purchase = await api.createPurchase({
-          purchaseId,
-          pokemonId: line.item.pokemon.id,
-          quantity: line.quantity,
-        });
-        completed.push(purchase);
-      } catch (err: any) {
-        errors.push({
-          pokemonId: line.item.pokemon.id,
-          name: line.item.pokemon.name,
-          error: err.message || "Purchase rejected by server.",
-        });
+        if (line.kind === "pokemon") {
+          const purchase = await api.createPurchase({
+            purchaseId: crypto.randomUUID(),
+            pokemonId: line.item.pokemon.id,
+            quantity: line.quantity,
+          });
+          completed.push({
+            purchaseId: purchase.purchaseId,
+            kind: "pokemon",
+            name: purchase.pokemon.name,
+            quantity: purchase.quantity,
+            totalPrice: purchase.pricing.totalPrice,
+          });
+        } else {
+          const purchase = await api.createItemPurchase({
+            purchaseId: crypto.randomUUID(),
+            itemId: line.item.id,
+            quantity: line.quantity,
+          });
+          completed.push({
+            purchaseId: purchase.purchaseId,
+            kind: "item",
+            name: purchase.itemName.replaceAll("-", " "),
+            quantity: purchase.quantity,
+            totalPrice: purchase.totalPrice,
+          });
+        }
+      } catch (err) {
+        const message =
+          err instanceof ApiError && err.code === "KYC_LEVEL_REQUIRED" && line.kind === "item"
+            ? `ต้องใช้ KYC ระดับ ${line.item.requiredKycLevel}`
+            : err instanceof Error && err.message
+              ? err.message
+              : "Purchase rejected by server.";
+        errors.push({ key: lineKey(line), name, error: message });
       }
     }
 
     // Refresh application state
     try {
-      const walletRes = await api.getWallet();
-      setWallet(walletRes.wallet);
+      const account = await api.getAccountInfo();
+      setWallet(account.wallet);
+      setKycLevel(account.kyc?.levelValue ?? null);
       await Promise.all([fetchInventory(), fetchFullCatalog()]);
     } catch {
       // ignore
     }
 
-    // Remove successfully purchased items from cart
+    // Remove successfully purchased lines from the bag (a no-op for "Buy now" lines)
     if (completed.length > 0) {
-      const completedIds = new Set(completed.map((p) => p.pokemon.id));
-      const remainingCart = cart.filter((c) => !completedIds.has(c.item.pokemon.id));
-      saveCart(remainingCart);
+      const failedKeys = new Set(errors.map((e) => e.key));
+      const boughtKeys = new Set(lines.map(lineKey).filter((k) => !failedKeys.has(k)));
+      saveCart(cart.filter((c) => !boughtKeys.has(lineKey(c))));
     }
 
     return { completed, errors };
@@ -369,6 +366,11 @@ export default function PokemartCommerceTerminal() {
 
   const handleTypeChange = (type: string) => {
     setSelectedType(type);
+    setCurrentPage(1);
+  };
+
+  const handleItemCategoryChange = (category: string) => {
+    setSelectedItemCategory(category);
     setCurrentPage(1);
   };
 
@@ -433,16 +435,21 @@ export default function PokemartCommerceTerminal() {
 
   // Cart item quantity lookup helper
   const cartQuantityMap = useMemo(() => {
-    const map = new Map<number, number>();
-    cart.forEach((c) => map.set(c.item.pokemon.id, c.quantity));
+    const map = new Map<string, number>();
+    cart.forEach((c) => map.set(lineKey(c), c.quantity));
     return map;
   }, [cart]);
 
   const hasActiveFilters = searchQuery !== "" || selectedType !== "all" || selectedItemCategory !== "all" || stockOnly || sortBy !== "id-asc";
 
+  const kindLabel = catalogKind === "pokemon" ? "Pokémon" : "items";
+
+  const pageNumbers = Array.from({ length: totalPages }, (_, idx) => idx + 1).filter(
+    (n) => n === 1 || n === totalPages || Math.abs(n - safeCurrentPage) <= 1,
+  );
+
   return (
-    <div data-testid="app-shell" className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 flex flex-col font-sans">
-      {/* Header */}
+    <div data-testid="app-shell" className="flex min-h-dvh flex-col">
       <Header
         activeTab={activeTab}
         onTabChange={setActiveTab}
@@ -455,267 +462,286 @@ export default function PokemartCommerceTerminal() {
         onLogout={handleLogout}
       />
 
-      {/* Main Container */}
-      <main data-testid="app-main" className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Offline / Error Diagnostic Banner */}
+      {/* pb-24 clears the fixed mobile tab bar */}
+      <main id="main" tabIndex={-1} data-testid="app-main" className="mx-auto w-full max-w-7xl flex-1 px-4 pb-24 pt-6 outline-none sm:px-6 md:pb-10 lg:px-8">
         {bffStatusError && (
-          <div data-testid="catalog-service-error" role="alert" className="mb-6 p-4 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 flex items-start space-x-3 text-red-900 dark:text-red-200 text-xs">
-            <AlertCircleIcon className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <span className="font-bold">System Status Warning: </span>
-              {bffStatusError}
-            </div>
-            <button
-              type="button"
-              onClick={fetchFullCatalog}
-              data-testid="catalog-retry"
-              className="px-2.5 py-1 text-xs font-semibold bg-red-600 hover:bg-red-700 text-white rounded transition-colors shrink-0"
-            >
-              Retry Connection
-            </button>
-          </div>
+          <Alert
+            tone="danger"
+            title="Catalog unavailable"
+            data-testid="catalog-service-error"
+            className="mb-6"
+            action={
+              <Button variant="secondary" size="sm" onClick={fetchFullCatalog} data-testid="catalog-retry">
+                Try again
+              </Button>
+            }
+          >
+            {bffStatusError}
+          </Alert>
         )}
 
-        {/* Tab 1: Shop Catalog */}
         {activeTab === "catalog" && (
-          <div className="space-y-6">
-            {/* Toolbar: Search, Filters, Sort, Count */}
-            <div className="space-y-3 pb-4 border-b border-zinc-200 dark:border-zinc-800">
-              <div className="flex items-center gap-2" role="tablist" aria-label="Catalog product type">
-                <button type="button" role="tab" aria-selected={catalogKind === "pokemon"} onClick={() => handleCatalogKindChange("pokemon")} data-testid="catalog-kind-pokemon" className={`rounded border px-3 py-1.5 text-xs font-semibold transition-colors ${catalogKind === "pokemon" ? "border-red-600 bg-red-600 text-white" : "border-zinc-200 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"}`}>Pokémon</button>
-                <button type="button" role="tab" aria-selected={catalogKind === "items"} onClick={() => handleCatalogKindChange("items")} data-testid="catalog-kind-items" className={`rounded border px-3 py-1.5 text-xs font-semibold transition-colors ${catalogKind === "items" ? "border-red-600 bg-red-600 text-white" : "border-zinc-200 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"}`}>Items</button>
-                <span className="text-xs text-zinc-500 dark:text-zinc-400">{catalogKind === "pokemon" ? "Browse by Pokémon type" : "Browse by item category and verification level"}</span>
-              </div>
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                {/* Search Bar */}
-                <div className="relative max-w-sm w-full">
-                  <SearchIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-                  <input
-                    type="text"
-                    data-testid="catalog-search"
-                    placeholder={catalogKind === "pokemon" ? "Search by Pokémon name or #ID..." : "Search by item name or #ID..."}
-                    value={searchQuery}
-                    onChange={(e) => handleSearchChange(e.target.value)}
-                    className="w-full pl-9 pr-8 py-1.5 text-xs font-mono rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-1"
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => handleSearchChange("")}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
-                    >
-                      <XIcon className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-
-                {/* Secondary Controls: In Stock Only, Sort, Refresh */}
-                <div className="flex items-center flex-wrap gap-2 text-xs">
-                  {/* Stock Filter Toggle */}
-                  <button
-                    type="button"
-                    onClick={handleStockToggle}
-                    data-testid="catalog-in-stock-filter"
-                    className={`px-3 py-1.5 rounded border text-xs font-medium transition-colors flex items-center space-x-1.5 ${
-                      stockOnly
-                        ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 border-zinc-900 dark:border-zinc-100"
-                        : "border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                    }`}
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full ${stockOnly ? "bg-emerald-400" : "bg-zinc-400"}`} />
-                    <span>In Stock Only</span>
-                  </button>
-
-                  {/* Sort Selector */}
-                  <div className="flex items-center space-x-1.5 border border-zinc-200 dark:border-zinc-700 rounded px-2.5 py-1 bg-white dark:bg-zinc-900">
-                    <span className="text-zinc-400 text-[11px]">Sort:</span>
-                    <select
-                      value={sortBy}
-                      onChange={(e) => handleSortChange(e.target.value as any)}
-                      data-testid="catalog-sort"
-                      aria-label="Sort catalog items"
-                      className="bg-transparent text-xs text-zinc-800 dark:text-zinc-200 focus:outline-none font-medium cursor-pointer"
-                    >
-                      <option value="id-asc" className="dark:bg-zinc-900">{catalogKind === "pokemon" ? "Pokédex" : "Item"} # (Low to High)</option>
-                      <option value="id-desc" className="dark:bg-zinc-900">{catalogKind === "pokemon" ? "Pokédex" : "Item"} # (High to Low)</option>
-                      <option value="price-asc" className="dark:bg-zinc-900">Price (Lowest first)</option>
-                      <option value="price-desc" className="dark:bg-zinc-900">Price (Highest first)</option>
-                      <option value="name-asc" className="dark:bg-zinc-900">Name (A to Z)</option>
-                    </select>
-                  </div>
-
-                  {/* Refresh Button */}
-                  <button
-                    type="button"
-                    onClick={fetchFullCatalog}
-                    disabled={isCatalogLoading}
-                    data-testid="catalog-refresh"
-                    className="p-1.5 rounded border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                    aria-label="Refresh Catalog"
-                  >
-                    <RefreshIcon className={`w-3.5 h-3.5 ${isCatalogLoading ? "animate-spin" : ""}`} />
-                  </button>
-                </div>
+          <section aria-labelledby="catalog-heading" className="space-y-6">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <h1 id="catalog-heading" className="text-2xl font-bold tracking-tight">
+                  Catalog
+                </h1>
+                <p className="mt-1 text-sm text-fg-muted">
+                  {catalogKind === "pokemon" ? "Choose a Pokémon, set a quantity, and add it to your bag." : "Items for your trainer. Some need identity verification."}
+                </p>
               </div>
 
-              {/* Product-specific filter chips */}
-              <div className="flex items-center space-x-1 overflow-x-auto pb-1 text-xs scrollbar-thin">
-                <span className="text-zinc-400 text-[11px] font-semibold uppercase tracking-wider shrink-0 mr-1 flex items-center space-x-1">
-                  <FilterIcon className="w-3 h-3" />
-                  <span>{catalogKind === "pokemon" ? "Type:" : "Category:"}</span>
-                </span>
-                {(catalogKind === "pokemon" ? POKEMON_TYPES : itemCategories).map((type) => (
+              {/* Product family */}
+              <div role="group" aria-label="Product type" className="inline-flex rounded-lg border border-line-strong bg-surface p-1">
+                {(["pokemon", "items"] as const).map((kind) => (
                   <button
-                    key={type}
+                    key={kind}
                     type="button"
-                    onClick={() => catalogKind === "pokemon" ? handleTypeChange(type) : (setSelectedItemCategory(type), setCurrentPage(1))}
-                    data-testid={catalogKind === "pokemon" ? `catalog-type-${type}` : `catalog-item-category-${type}`}
-                    className={`px-2.5 py-1 rounded text-xs font-medium uppercase tracking-wider transition-colors shrink-0 ${
-                      (catalogKind === "pokemon" ? selectedType : selectedItemCategory) === type
-                        ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-semibold shadow-xs"
-                        : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/60 dark:hover:bg-zinc-800/60"
-                    }`}
+                    aria-pressed={catalogKind === kind}
+                    onClick={() => handleCatalogKindChange(kind)}
+                    data-testid={`catalog-kind-${kind}`}
+                    className={cx(
+                      "min-h-11 rounded-md px-4 text-sm font-semibold transition-colors sm:min-h-9",
+                      catalogKind === kind ? "bg-brand text-brand-fg" : "text-fg-muted hover:bg-surface-2 hover:text-fg",
+                    )}
                   >
-                    {type}
+                    {kind === "pokemon" ? "Pokémon" : "Items"}
                   </button>
                 ))}
               </div>
+            </div>
 
-              {/* Results Count & Active Filter Indicator */}
-              <div data-testid="catalog-results-summary" className="flex items-center justify-between text-xs font-mono pt-1 text-zinc-500">
-                <div>
-                  Showing <span className="font-bold text-zinc-800 dark:text-zinc-200">{paginatedCatalog.length}</span> of{" "}
-                  <span className="font-bold text-zinc-800 dark:text-zinc-200">{totalFilteredCount}</span> {catalogKind === "pokemon" ? "Pokémon" : "items"}
-                  {hasActiveFilters && (
-                    <span className="ml-1 text-zinc-400">
-                      ({catalogKind === "pokemon" ? allCatalog.length : allItems.length} total in shop)
-                    </span>
+            {/* One filter panel, identical controls for Pokemon and items:
+                search on top, then Type/Category, Sort and Availability as equal labelled fields. */}
+            <div className="space-y-4 rounded-xl border border-line bg-surface p-3 shadow-card sm:p-4">
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <label htmlFor="catalog-search" className="sr-only">
+                    Search {kindLabel}
+                  </label>
+                  <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-subtle" />
+                  <input
+                    id="catalog-search"
+                    type="search"
+                    data-testid="catalog-search"
+                    placeholder={catalogKind === "pokemon" ? "Search by name or number" : "Search items by name or number"}
+                    value={searchQuery}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    className={`${inputClass} pl-9 pr-11 [&::-webkit-search-cancel-button]:appearance-none`}
+                  />
+                  {searchQuery && (
+                    <IconButton label="Clear search" onClick={() => handleSearchChange("")} className="absolute right-0 top-1/2 -translate-y-1/2">
+                      <XIcon className="h-4 w-4" />
+                    </IconButton>
                   )}
                 </div>
+                <IconButton
+                  label="Refresh catalog"
+                  onClick={fetchFullCatalog}
+                  disabled={isCatalogLoading}
+                  data-testid="catalog-refresh"
+                  className="border border-line-strong sm:h-10 sm:w-10"
+                >
+                  <RefreshIcon className={cx("h-4 w-4", isCatalogLoading && "animate-spin motion-reduce:animate-none")} />
+                </IconButton>
+              </div>
 
-                {hasActiveFilters && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div>
+                  <label htmlFor="catalog-filter" className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-fg-muted">
+                    <FilterIcon className="h-3.5 w-3.5" />
+                    {catalogKind === "pokemon" ? "Type" : "Category"}
+                  </label>
+                  <select
+                    id="catalog-filter"
+                    value={catalogKind === "pokemon" ? selectedType : selectedItemCategory}
+                    onChange={(e) => (catalogKind === "pokemon" ? handleTypeChange(e.target.value) : handleItemCategoryChange(e.target.value))}
+                    data-testid={catalogKind === "pokemon" ? "catalog-type" : "catalog-item-category"}
+                    className={`${inputClass} font-medium capitalize`}
+                  >
+                    {(catalogKind === "pokemon" ? POKEMON_TYPES : itemCategories).map((option) => (
+                      <option key={option} value={option}>
+                        {option === "all"
+                          ? catalogKind === "pokemon"
+                            ? "All types"
+                            : "All categories"
+                          : option.replaceAll("-", " ")}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label htmlFor="catalog-sort" className="mb-1.5 block text-xs font-medium text-fg-muted">
+                    Sort by
+                  </label>
+                  <select
+                    id="catalog-sort"
+                    value={sortBy}
+                    onChange={(e) => handleSortChange(e.target.value as typeof sortBy)}
+                    data-testid="catalog-sort"
+                    className={`${inputClass} font-medium`}
+                  >
+                    <option value="id-asc">{catalogKind === "pokemon" ? "Pokédex" : "Item"} number: low to high</option>
+                    <option value="id-desc">{catalogKind === "pokemon" ? "Pokédex" : "Item"} number: high to low</option>
+                    <option value="price-asc">Price: low to high</option>
+                    <option value="price-desc">Price: high to low</option>
+                    <option value="name-asc">Name: A to Z</option>
+                  </select>
+                </div>
+
+                <div>
+                  <span id="stock-filter-label" className="mb-1.5 block text-xs font-medium text-fg-muted">
+                    Availability
+                  </span>
                   <button
                     type="button"
-                    onClick={handleClearFilters}
-                    data-testid="catalog-clear-filters"
-                    className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 underline text-[11px] transition-colors"
+                    role="switch"
+                    aria-checked={stockOnly}
+                    aria-labelledby="stock-filter-label stock-filter-text"
+                    onClick={handleStockToggle}
+                    data-testid="catalog-in-stock-filter"
+                    className="flex min-h-11 w-full items-center justify-between gap-3 rounded-md border border-line-strong bg-surface px-3 text-base font-medium transition-colors hover:border-fg-subtle sm:min-h-10 sm:text-sm"
                   >
-                    Clear All Filters
+                    <span id="stock-filter-text">In stock only</span>
+                    <span
+                      aria-hidden="true"
+                      className={cx("relative h-5 w-9 shrink-0 rounded-full transition-colors", stockOnly ? "bg-ok" : "bg-line-strong")}
+                    >
+                      <span className={cx("absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-card transition-transform", stockOnly ? "translate-x-4.5" : "translate-x-0.5")} />
+                    </span>
                   </button>
-                )}
+                </div>
               </div>
             </div>
 
-            {/* Catalog Grid */}
+            {/* Results summary */}
+            <div data-testid="catalog-results-summary" aria-live="polite" className="flex items-center justify-between text-sm text-fg-muted">
+              <p>
+                Showing <span className="font-mono font-semibold tabular-nums text-fg">{paginatedCatalog.length}</span> of{" "}
+                <span className="font-mono font-semibold tabular-nums text-fg">{totalFilteredCount}</span> {kindLabel}
+              </p>
+              {hasActiveFilters && (
+                <Button variant="ghost" size="sm" onClick={handleClearFilters} data-testid="catalog-clear-filters" className="-mr-3">
+                  Clear filters
+                </Button>
+              )}
+            </div>
+
+            {/* Grid */}
             {isCatalogLoading ? (
-              <div data-testid="catalog-loading" className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              <div data-testid="catalog-loading" role="status" aria-label="Loading catalog" className="grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {Array.from({ length: ITEMS_PER_PAGE }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="h-80 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg animate-pulse"
-                  />
+                  <div key={i} className="overflow-hidden rounded-xl border border-line bg-surface">
+                    <Skeleton className="h-40 rounded-none" />
+                    <div className="space-y-3 p-4">
+                      <Skeleton className="h-5 w-2/3" />
+                      <Skeleton className="h-4 w-1/3" />
+                      <Skeleton className="h-11 w-full" />
+                    </div>
+                  </div>
                 ))}
               </div>
             ) : activeCatalog.length === 0 ? (
-              <div data-testid="catalog-empty" className="p-16 text-center bg-white dark:bg-zinc-900 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg space-y-2">
-                <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-                  No {catalogKind === "pokemon" ? "Pokémon" : "items"} matched your current filters.
-                </p>
-                <p className="text-xs text-zinc-500">
-                  Try another search or clear the active {catalogKind === "pokemon" ? "type" : "category"}/stock filters.
-                </p>
-                <button
-                  type="button"
-                  onClick={handleClearFilters}
-                  data-testid="catalog-reset-filters"
-                  className="mt-3 px-3.5 py-1.5 text-xs font-semibold text-white bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 rounded hover:bg-zinc-800 transition-colors"
-                >
-                  Reset Catalog Filters
-                </button>
-              </div>
+              <EmptyState
+                data-testid="catalog-empty"
+                icon={<SearchIcon className="h-6 w-6" />}
+                title={`No ${kindLabel} match your filters`}
+                description="Try a different search, or clear the type and stock filters."
+                action={
+                  <Button variant="primary" onClick={handleClearFilters} data-testid="catalog-reset-filters">
+                    Clear filters
+                  </Button>
+                }
+              />
             ) : (
-              <div data-testid="catalog-grid" className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              <div data-testid="catalog-grid" className="grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {catalogKind === "pokemon"
-                  ? (paginatedCatalog as CatalogItem[]).map((item) => <PokemonCard key={item.pokemon.id} item={item} onAddToCart={handleAddToCart} inCartQuantity={cartQuantityMap.get(item.pokemon.id) || 0} />)
-                  : (paginatedCatalog as ItemCatalogItem[]).map((item) => <ItemCard key={item.id} item={item} onPurchase={handleItemPurchase} isPurchasing={purchasingItemId === item.id} />)}
+                  ? (paginatedCatalog as CatalogItem[]).map((item) => (
+                      <PokemonCard
+                        key={item.pokemon.id}
+                        item={item}
+                        onAddToCart={(it, quantity) => handleAddLine({ kind: "pokemon", item: it, quantity })}
+                        onBuyNow={(it, quantity) => handleBuyNow({ kind: "pokemon", item: it, quantity })}
+                        inCartQuantity={cartQuantityMap.get(`pokemon-${item.pokemon.id}`) || 0}
+                      />
+                    ))
+                  : (paginatedCatalog as ItemCatalogItem[]).map((item) => (
+                      <ItemCard
+                        key={item.id}
+                        item={item}
+                        onAddToCart={(it, quantity) => handleAddLine({ kind: "item", item: it, quantity })}
+                        onBuyNow={(it, quantity) => handleBuyNow({ kind: "item", item: it, quantity })}
+                        inCartQuantity={cartQuantityMap.get(`item-${item.id}`) || 0}
+                      />
+                    ))}
               </div>
             )}
 
-            {/* Pagination Controls */}
+            {/* Pagination */}
             {totalPages > 1 && (
-              <div data-testid="catalog-pagination" className="flex items-center justify-between border-t border-zinc-200 dark:border-zinc-800 pt-4 text-xs font-mono">
-                <span className="text-zinc-500">
-                  Page <span className="font-bold text-zinc-900 dark:text-zinc-100">{safeCurrentPage}</span> of {totalPages}
+              <nav aria-label="Catalog pages" data-testid="catalog-pagination" className="flex items-center justify-between gap-3 border-t border-line pt-4 text-sm">
+                <span className="text-fg-muted">
+                  Page <span className="font-mono font-semibold tabular-nums text-fg">{safeCurrentPage}</span> of{" "}
+                  <span className="font-mono tabular-nums">{totalPages}</span>
                 </span>
 
-                <div className="flex items-center space-x-1.5">
-                  <button
-                    type="button"
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                     disabled={safeCurrentPage <= 1}
                     data-testid="catalog-page-previous"
-                    className="px-2.5 py-1 rounded border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center space-x-1"
                   >
-                    <ChevronLeftIcon className="w-3.5 h-3.5" />
-                    <span>Previous</span>
-                  </button>
+                    <ChevronLeftIcon className="h-4 w-4" />
+                    <span className="hidden sm:inline">Previous</span>
+                    <span className="sr-only sm:hidden">Previous page</span>
+                  </Button>
 
-                  {/* Page Number Chips */}
-                  <div className="hidden sm:flex items-center space-x-1">
-                    {Array.from({ length: totalPages }).map((_, idx) => {
-                      const pageNum = idx + 1;
-                      if (
-                        pageNum === 1 ||
-                        pageNum === totalPages ||
-                        Math.abs(pageNum - safeCurrentPage) <= 1
-                      ) {
-                        return (
-                          <button
-                            key={pageNum}
-                            type="button"
-                            onClick={() => setCurrentPage(pageNum)}
-                            data-testid={`catalog-page-${pageNum}`}
-                            className={`w-7 h-7 rounded text-xs font-semibold ${
-                              safeCurrentPage === pageNum
-                                ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                                : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                            }`}
-                          >
-                            {pageNum}
-                          </button>
-                        );
-                      }
-                      if (
-                        pageNum === safeCurrentPage - 2 ||
-                        pageNum === safeCurrentPage + 2
-                      ) {
-                        return (
-                          <span key={pageNum} className="px-1 text-zinc-400">
+                  <div className="hidden items-center gap-1 sm:flex">
+                    {pageNumbers.map((pageNum, i) => (
+                      <React.Fragment key={pageNum}>
+                        {i > 0 && pageNum - pageNumbers[i - 1] > 1 && (
+                          <span aria-hidden="true" className="px-1 text-fg-subtle">
                             …
                           </span>
-                        );
-                      }
-                      return null;
-                    })}
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setCurrentPage(pageNum)}
+                          data-testid={`catalog-page-${pageNum}`}
+                          aria-label={`Page ${pageNum}`}
+                          aria-current={safeCurrentPage === pageNum ? "page" : undefined}
+                          className={cx(
+                            "h-9 min-w-9 rounded-md px-2 font-mono text-sm font-semibold tabular-nums transition-colors",
+                            safeCurrentPage === pageNum ? "bg-fg text-bg" : "text-fg-muted hover:bg-surface-2",
+                          )}
+                        >
+                          {pageNum}
+                        </button>
+                      </React.Fragment>
+                    ))}
                   </div>
 
-                  <button
-                    type="button"
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                     disabled={safeCurrentPage >= totalPages}
                     data-testid="catalog-page-next"
-                    className="px-2.5 py-1 rounded border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center space-x-1"
                   >
-                    <span>Next</span>
-                    <ChevronRightIcon className="w-3.5 h-3.5" />
-                  </button>
+                    <span className="hidden sm:inline">Next</span>
+                    <span className="sr-only sm:hidden">Next page</span>
+                    <ChevronRightIcon className="h-4 w-4" />
+                  </Button>
                 </div>
-              </div>
+              </nav>
             )}
-          </div>
+          </section>
         )}
 
-        {/* Tab 2: Trainer Backpack / Inventory */}
         {activeTab === "inventory" && (
           <InventoryView
             items={inventoryItems}
@@ -727,7 +753,6 @@ export default function PokemartCommerceTerminal() {
           />
         )}
 
-        {/* Tab 3: Purchase Audit Ledger */}
         {activeTab === "purchases" && (
           <PurchasesView
             items={purchaseHistory}
@@ -743,19 +768,19 @@ export default function PokemartCommerceTerminal() {
         )}
       </main>
 
-      {/* Cart Drawer */}
       <CartDrawer
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
         cart={cart}
         wallet={wallet}
         user={user}
+        kycLevel={kycLevel}
         onUpdateQuantity={handleUpdateCartQuantity}
         onRemoveItem={handleRemoveFromCart}
         onClearCart={handleClearCart}
         onProceedToCheckout={() => {
           setIsCartOpen(false);
-          setIsCheckoutOpen(true);
+          setCheckoutLines(cart);
         }}
         onOpenLogin={() => {
           setIsCartOpen(false);
@@ -763,30 +788,24 @@ export default function PokemartCommerceTerminal() {
         }}
       />
 
-      {/* Checkout Modal */}
       <CheckoutModal
-        isOpen={isCheckoutOpen}
-        onClose={() => setIsCheckoutOpen(false)}
-        cart={cart}
+        isOpen={checkoutLines !== null}
+        onClose={() => setCheckoutLines(null)}
+        lines={checkoutLines ?? []}
         wallet={wallet}
+        kycLevel={kycLevel}
         onExecuteCheckout={handleExecuteCheckout}
-        onCheckoutSuccess={() => {
-          setActiveTab("inventory");
+        onCheckoutSuccess={(completed) => {
+          // Only Pokémon land in the inventory view.
+          if (completed.some((r) => r.kind === "pokemon")) setActiveTab("inventory");
         }}
       />
 
-      <ItemCheckoutModal item={checkoutItem} onClose={() => setCheckoutItem(null)} onConfirm={confirmItemPurchase} />
+      {isLoginOpen && <LoginModal isOpen={isLoginOpen} onClose={() => {
+              setIsLoginOpen(false);
+              setBuyNowAfterLogin(null);
+            }} onLoginSuccess={handleLogin} />}
 
-      {/* Sign In Modal */}
-      {isLoginOpen && (
-        <LoginModal
-          isOpen={isLoginOpen}
-          onClose={() => setIsLoginOpen(false)}
-          onLoginSuccess={handleLogin}
-        />
-      )}
-
-      {/* Toast Feedback */}
       <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );

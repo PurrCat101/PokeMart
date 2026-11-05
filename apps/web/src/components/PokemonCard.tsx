@@ -1,238 +1,160 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import Image from "next/image";
 import { CatalogItem } from "../types/api";
-import { TypeBadge } from "./TypeBadge";
-import { PlusIcon, MinusIcon, PokeballIcon, CheckIcon, CartIcon } from "./icons";
+import { TypeBadge, typeColor } from "./TypeBadge";
+import { PokeballIcon, CheckIcon, CartIcon } from "./icons";
+import { QuantityStepper } from "./QuantityStepper";
+import { Button, cx, formatPokemonId, money } from "./ui";
 
 interface PokemonCardProps {
   item: CatalogItem;
   onAddToCart: (item: CatalogItem, quantity: number) => void;
+  onBuyNow: (item: CatalogItem, quantity: number) => void;
   inCartQuantity?: number;
   disabled?: boolean;
 }
 
-export function PokemonCard({
-  item,
-  onAddToCart,
-  inCartQuantity = 0,
-  disabled = false,
-}: PokemonCardProps) {
+export function PokemonCard({ item, onAddToCart, onBuyNow, inCartQuantity = 0, disabled = false }: PokemonCardProps) {
   const { pokemon, listing } = item;
-  const [quantity, setQuantity] = useState(1);
-  const [quantityInput, setQuantityInput] = useState("1");
+  const [wanted, setWanted] = useState(1);
   const [justAdded, setJustAdded] = useState(false);
 
   const isOutOfStock = listing.availableStock <= 0;
   const availableRemaining = Math.max(0, listing.availableStock - inCartQuantity);
   const maxPurchase = Math.min(availableRemaining > 0 ? availableRemaining : listing.availableStock, 99);
-
-  // Sync input string when quantity changes internally
-  useEffect(() => {
-    if (quantity > maxPurchase && maxPurchase > 0) {
-      setQuantity(maxPurchase);
-      setQuantityInput(String(maxPurchase));
-    }
-  }, [maxPurchase, quantity]);
-
-  const handleIncrement = () => {
-    if (quantity < maxPurchase) {
-      const next = quantity + 1;
-      setQuantity(next);
-      setQuantityInput(String(next));
-    }
-  };
-
-  const handleDecrement = () => {
-    if (quantity > 1) {
-      const next = quantity - 1;
-      setQuantity(next);
-      setQuantityInput(String(next));
-    }
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value.replace(/[^0-9]/g, "");
-    setQuantityInput(val);
-    const parsed = parseInt(val, 10);
-    if (!isNaN(parsed) && parsed >= 1) {
-      const clamped = Math.min(parsed, maxPurchase);
-      setQuantity(clamped);
-    }
-  };
-
-  const handleInputBlur = () => {
-    const parsed = parseInt(quantityInput, 10);
-    if (isNaN(parsed) || parsed < 1) {
-      setQuantity(1);
-      setQuantityInput("1");
-    } else if (parsed > maxPurchase) {
-      setQuantity(maxPurchase);
-      setQuantityInput(String(maxPurchase));
-    } else {
-      setQuantity(parsed);
-      setQuantityInput(String(parsed));
-    }
-  };
+  const bagIsFull = availableRemaining <= 0 && inCartQuantity > 0;
+  // The bag can shrink what is still available; never offer more than that.
+  const quantity = Math.max(1, Math.min(wanted, maxPurchase));
 
   const handleAdd = () => {
     if (isOutOfStock || disabled || maxPurchase <= 0) return;
     onAddToCart(item, quantity);
     setJustAdded(true);
-    setQuantity(1);
-    setQuantityInput("1");
-    setTimeout(() => {
-      setJustAdded(false);
-    }, 1200);
+    setWanted(1);
+    setTimeout(() => setJustAdded(false), 1200);
   };
 
-  const formattedId = `#${String(pokemon.id).padStart(3, "0")}`;
-  const capitalizedName = pokemon.name.charAt(0).toUpperCase() + pokemon.name.slice(1);
+  const stockTone = isOutOfStock ? "text-danger" : listing.availableStock < 5 ? "text-warn" : "text-ok";
+  const primaryType = pokemon.types[0] ?? "normal";
 
   return (
-    <div data-testid={`pokemon-card-${pokemon.id}`} className="flex flex-col bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden transition-all hover:border-zinc-300 dark:hover:border-zinc-700 shadow-xs">
-      {/* Top Banner: ID & Stock Badge */}
-      <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-zinc-100 dark:border-zinc-800/80 bg-zinc-50/60 dark:bg-zinc-900/60">
-        <span className="font-mono text-xs font-semibold text-zinc-500 dark:text-zinc-400">
-          {formattedId}
+    <article
+      data-testid={`pokemon-card-${pokemon.id}`}
+      className="group flex flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-card transition-shadow hover:shadow-pop"
+    >
+      {/* Sprite on a panel tinted by the primary type */}
+      <div
+        className="relative flex h-40 items-center justify-center"
+        style={{ backgroundColor: `color-mix(in srgb, ${typeColor(primaryType)} 14%, var(--surface-2))` }}
+      >
+        <span className="absolute left-3 top-3 font-mono text-xs font-semibold tabular-nums text-fg-muted">
+          {formatPokemonId(pokemon.id)}
         </span>
-        <div className="flex items-center space-x-2">
-          {inCartQuantity > 0 && (
-            <span className="inline-flex items-center space-x-1 font-mono text-[11px] font-medium text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-700">
-              <CartIcon className="w-3 h-3 text-zinc-500" />
-              <span>{inCartQuantity} in bag</span>
-            </span>
-          )}
-          <div className="flex items-center space-x-1.5">
-            <span
-              className={`w-1.5 h-1.5 rounded-full ${
-                isOutOfStock ? "bg-red-500" : listing.availableStock < 5 ? "bg-amber-500" : "bg-emerald-500"
-              }`}
-            />
-            <span data-testid={`pokemon-stock-${pokemon.id}`} className="font-mono text-xs text-zinc-600 dark:text-zinc-400">
-              {isOutOfStock ? "Out of Stock" : `${listing.availableStock} in stock`}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Visual Sprite Container */}
-      <div className="relative h-36 bg-zinc-50/30 dark:bg-zinc-950/40 flex items-center justify-center p-2 border-b border-zinc-100 dark:border-zinc-800">
+        {inCartQuantity > 0 && (
+          <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-surface px-2 py-0.5 text-xs font-medium text-fg shadow-card">
+            <CartIcon className="h-3 w-3" />
+            <span className="font-mono tabular-nums">{inCartQuantity}</span> in bag
+          </span>
+        )}
         {pokemon.spriteUrl ? (
           <Image
             src={pokemon.spriteUrl}
-            alt={pokemon.name}
-            width={96}
-            height={96}
-            className="w-24 h-24 object-contain pixelated rendering-pixelated"
+            alt=""
+            width={112}
+            height={112}
             unoptimized
+            className="sprite h-28 w-28 object-contain transition-transform duration-200 group-hover:scale-105"
           />
         ) : (
-          <div className="w-16 h-16 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-400">
-            <PokeballIcon className="w-8 h-8" />
-          </div>
+          <PokeballIcon className="h-12 w-12 text-fg-subtle" />
         )}
       </div>
 
-      {/* Card Content & Details */}
-      <div className="p-4 flex-1 flex flex-col justify-between">
+      <div className="flex flex-1 flex-col gap-3 p-4">
         <div>
-          <div className="flex items-start justify-between gap-2">
-            <h3 data-testid={`pokemon-name-${pokemon.id}`} className="font-semibold text-zinc-900 dark:text-zinc-100 text-base leading-tight">
-              {capitalizedName}
+          <div className="flex items-start justify-between gap-3">
+            <h3 data-testid={`pokemon-name-${pokemon.id}`} className="text-base font-semibold capitalize leading-snug">
+              {pokemon.name}
             </h3>
-            <span data-testid={`pokemon-price-${pokemon.id}`} className="font-mono font-bold text-sm text-zinc-900 dark:text-zinc-100 tabular-nums whitespace-nowrap">
-              ₽ {listing.price.toLocaleString()}
+            <span data-testid={`pokemon-price-${pokemon.id}`} className="shrink-0 font-mono text-base font-semibold tabular-nums">
+              {money(listing.price)}
             </span>
           </div>
-
-          {/* Types */}
-          <div className="flex flex-wrap gap-1 mt-2">
+          <div className="mt-2 flex flex-wrap gap-1.5">
             {pokemon.types.map((type) => (
               <TypeBadge key={type} type={type} />
             ))}
           </div>
         </div>
 
-        {/* Purchase / Cart Controls */}
-        <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-2.5">
+        <p className="flex items-center gap-2 text-sm">
+          <span aria-hidden="true" className={cx("h-2 w-2 rounded-full bg-current", stockTone)} />
+          <span data-testid={`pokemon-stock-${pokemon.id}`} className={cx("font-mono tabular-nums", stockTone)}>
+            {isOutOfStock ? "Out of Stock" : `${listing.availableStock} in stock`}
+          </span>
+        </p>
+
+        <div className="mt-auto space-y-3 border-t border-line pt-3">
           {!isOutOfStock && availableRemaining > 0 && (
-            <div className="flex items-center justify-between text-xs">
-              <label htmlFor={`qty-input-${pokemon.id}`} className="text-zinc-600 dark:text-zinc-400 font-medium">
+            <div className="flex items-center justify-between gap-3">
+              <label htmlFor={`qty-input-${pokemon.id}`} className="text-sm text-fg-muted">
                 Quantity
               </label>
-              <div className="flex items-center border border-zinc-200 dark:border-zinc-700 rounded bg-zinc-50 dark:bg-zinc-800/60">
-                <button
-                  type="button"
-                  onClick={handleDecrement}
-                  disabled={quantity <= 1 || disabled}
-                  data-testid={`pokemon-quantity-decrease-${pokemon.id}`}
-                  className="p-1.5 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                  aria-label="Decrease quantity"
-                >
-                  <MinusIcon className="w-3 h-3" />
-                </button>
-                <input
-                  id={`qty-input-${pokemon.id}`}
-                  type="text"
-                  data-testid={`pokemon-quantity-${pokemon.id}`}
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  value={quantityInput}
-                  onChange={handleInputChange}
-                  onBlur={handleInputBlur}
-                  disabled={disabled}
-                  aria-label={`Quantity for ${pokemon.name}`}
-                  className="w-11 text-center font-mono font-semibold text-xs py-0.5 bg-transparent border-0 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:bg-white dark:focus:bg-zinc-900 focus:ring-1 focus:ring-zinc-400 rounded tabular-nums"
-                />
-                <button
-                  type="button"
-                  onClick={handleIncrement}
-                  disabled={quantity >= maxPurchase || disabled}
-                  data-testid={`pokemon-quantity-increase-${pokemon.id}`}
-                  className="p-1.5 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                  aria-label="Increase quantity"
-                >
-                  <PlusIcon className="w-3 h-3" />
-                </button>
-              </div>
+              <QuantityStepper
+                value={quantity}
+                max={maxPurchase}
+                onChange={setWanted}
+                name={pokemon.name}
+                inputId={`qty-input-${pokemon.id}`}
+                inputTestId={`pokemon-quantity-${pokemon.id}`}
+                decreaseTestId={`pokemon-quantity-decrease-${pokemon.id}`}
+                increaseTestId={`pokemon-quantity-increase-${pokemon.id}`}
+                disabled={disabled}
+              />
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={handleAdd}
-            disabled={isOutOfStock || disabled || (availableRemaining <= 0 && inCartQuantity > 0)}
-            data-testid={`pokemon-add-to-cart-${pokemon.id}`}
-            className={`w-full py-2 px-3 rounded text-xs font-semibold tracking-wide uppercase transition-colors flex items-center justify-center space-x-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 dark:focus-visible:ring-zinc-100 focus-visible:ring-offset-1 ${
-              isOutOfStock
-                ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-600 cursor-not-allowed"
-                : availableRemaining <= 0 && inCartQuantity > 0
-                ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 cursor-not-allowed"
-                : justAdded
-                ? "bg-emerald-700 text-white"
-                : "bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-950 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white shadow-xs"
-            }`}
-          >
-            {isOutOfStock ? (
-              <span>Out of Stock</span>
-            ) : availableRemaining <= 0 && inCartQuantity > 0 ? (
-              <span>Max in Bag</span>
-            ) : justAdded ? (
-              <>
-                <CheckIcon className="w-4 h-4" />
-                <span>Added to Bag</span>
-              </>
-            ) : (
-              <>
-                <CartIcon className="w-3.5 h-3.5" />
-                <span>
-                  Add to Bag {quantity > 1 ? `(${quantity})` : ""} • ₽ {(listing.price * quantity).toLocaleString()}
-                </span>
-              </>
+          <div className="space-y-2">
+            <Button
+              variant="primary"
+              onClick={handleAdd}
+              disabled={isOutOfStock || disabled || bagIsFull}
+              data-testid={`pokemon-add-to-cart-${pokemon.id}`}
+              className="w-full"
+            >
+              {isOutOfStock ? (
+                "Out of Stock"
+              ) : bagIsFull ? (
+                "Max in bag"
+              ) : justAdded ? (
+                <>
+                  <CheckIcon className="h-4 w-4" />
+                  Added to bag
+                </>
+              ) : (
+                <>
+                  <CartIcon className="h-4 w-4" />
+                  <span>
+                    Add to bag{quantity > 1 ? ` (${quantity})` : ""} ·{" "}
+                    <span className="font-mono tabular-nums">{money(listing.price * quantity)}</span>
+                  </span>
+                </>
+              )}
+            </Button>
+            {!isOutOfStock && (
+              <Button
+                variant="secondary"
+                onClick={() => onBuyNow(item, quantity)}
+                disabled={disabled}
+                data-testid={`pokemon-buy-now-${pokemon.id}`}
+                className="w-full"
+              >
+                Buy now
+              </Button>
             )}
-          </button>
+          </div>
         </div>
       </div>
-    </div>
+    </article>
   );
 }
