@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { XIcon, AlertCircleIcon, UserIcon } from "./icons";
+import { UserIcon } from "./icons";
+import { Alert, Button, Field, Modal, ModalHeader, inputClass } from "./ui";
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -10,6 +11,7 @@ interface LoginModalProps {
 export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -19,85 +21,81 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps)
     e.preventDefault();
     setIsLoading(true);
     setError(null);
-
     try {
       await onLoginSuccess({ email, password });
       onClose();
-    } catch (err: any) {
-      setError(err.message || "Authentication failed. Check credentials.");
+    } catch (err) {
+      setError(err instanceof Error && err.message ? err.message : "Sign in failed. Check your email and password.");
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div data-testid="login-dialog" role="dialog" aria-modal="true" aria-labelledby="login-title" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/60 backdrop-blur-[2px]">
-      <div className="w-full max-w-sm bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50">
-          <div className="flex items-center space-x-2">
-            <UserIcon className="w-4 h-4 text-red-600" />
-            <h2 id="login-title" className="text-sm font-bold uppercase tracking-wider text-zinc-950 dark:text-zinc-50">
-              Trainer Terminal Sign In
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            data-testid="login-close"
-            className="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded transition-colors"
-          >
-            <XIcon className="w-4 h-4" />
-          </button>
-        </div>
+    <Modal onClose={onClose} labelledBy="login-title" testId="login-dialog" size="sm">
+      <ModalHeader
+        id="login-title"
+        icon={<UserIcon className="h-5 w-5" />}
+        title="Sign in"
+        subtitle="Use your trainer account to see your wallet, inventory, and orders."
+        onClose={onClose}
+        closeTestId="login-close"
+      />
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          {error && (
-            <div data-testid="login-error" role="alert" className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 rounded text-xs flex items-start space-x-2 text-red-800 dark:text-red-200">
-              <AlertCircleIcon className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-              <span>{error}</span>
-            </div>
-          )}
+      <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto p-5" noValidate={false}>
+        {error && (
+          <Alert tone="danger" title="Couldn't sign you in" data-testid="login-error">
+            {error}
+          </Alert>
+        )}
 
-          <div className="space-y-1">
-            <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-              Trainer Email
-            </label>
+        <Field id="login-email" label="Email">
+          <input
+            id="login-email"
+            type="email"
+            name="email"
+            autoComplete="username"
+            inputMode="email"
+            data-testid="login-email"
+            data-autofocus
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            aria-invalid={error ? true : undefined}
+            className={inputClass}
+          />
+        </Field>
+
+        <Field id="login-password" label="Password">
+          <div className="relative">
             <input
-              type="email"
-              data-testid="login-email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full px-3 py-1.5 text-xs font-mono rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-1"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-              Password
-            </label>
-            <input
-              type="password"
+              id="login-password"
+              type={showPassword ? "text" : "password"}
+              name="password"
+              autoComplete="current-password"
               data-testid="login-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full px-3 py-1.5 text-xs font-mono rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-1"
+              aria-invalid={error ? true : undefined}
+              className={`${inputClass} pr-16`}
             />
-          </div>
-
-          <div className="pt-2">
             <button
-              type="submit"
-              disabled={isLoading}
-              data-testid="login-submit"
-              className="w-full py-2 text-xs font-bold uppercase tracking-wider text-white bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white disabled:opacity-50 rounded shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-1"
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-pressed={showPassword}
+              className="absolute inset-y-0 right-0 flex items-center rounded-r-md px-3 text-sm font-medium text-fg-muted hover:text-fg"
             >
-              {isLoading ? "Authenticating..." : "Connect Session"}
+              {showPassword ? "Hide" : "Show"}
+              <span className="sr-only"> password</span>
             </button>
           </div>
-        </form>
-      </div>
-    </div>
+        </Field>
+
+        <Button type="submit" variant="primary" disabled={isLoading} data-testid="login-submit" className="w-full">
+          {isLoading ? "Signing in…" : "Sign in"}
+        </Button>
+      </form>
+    </Modal>
   );
 }

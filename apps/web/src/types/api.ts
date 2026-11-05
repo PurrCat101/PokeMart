@@ -156,7 +156,22 @@ export interface ApiErrorResponse {
   };
 }
 
-export interface CartItem {
-  item: CatalogItem;
+/** A line in the bag: either a Pokémon listing or an item listing. */
+export type CartItem =
+  | { kind: "pokemon"; item: CatalogItem; quantity: number }
+  | { kind: "item"; item: ItemCatalogItem; quantity: number };
+
+/** What a completed checkout line looks like, whichever endpoint produced it. */
+export interface CheckoutReceipt {
+  purchaseId: string;
+  kind: "pokemon" | "item";
+  name: string;
   quantity: number;
+  totalPrice: number;
+}
+
+export interface CheckoutFailure {
+  key: string;
+  name: string;
+  error: string;
 }

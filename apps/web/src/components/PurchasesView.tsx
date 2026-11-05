@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { PurchaseItem, AuthUser } from "../types/api";
 import { LedgerIcon, RefreshIcon, ChevronLeftIcon, ChevronRightIcon } from "./icons";
 import { OrderDetailModal } from "./OrderDetailModal";
+import { DeliveryBadge, usePurchaseShipment } from "./ShipmentStatus";
+import { Button, EmptyState, IconButton, Skeleton, formatPokemonId, money } from "./ui";
 
 interface PurchasesViewProps {
   items: PurchaseItem[];
@@ -13,6 +15,69 @@ interface PurchasesViewProps {
   onRefresh: () => void;
   onPageChange: (newOffset: number) => void;
   onOpenLogin: () => void;
+}
+
+// On small screens each row becomes a labelled card; from md up it is a regular table row.
+const CELL = "block px-4 py-1.5 before:mr-3 before:text-xs before:font-medium before:text-fg-subtle before:content-[attr(data-label)] md:table-cell md:px-4 md:py-3.5 md:before:content-none";
+
+function PurchaseRow({
+  tx,
+  refreshToken,
+  onOpen,
+}: {
+  tx: PurchaseItem;
+  refreshToken: number;
+  onOpen: (order: PurchaseItem) => void;
+}) {
+  // Quick status comes from the public shipment API, so it shows without opening the order.
+  const { shipment, loading, error } = usePurchaseShipment(tx.purchaseId, refreshToken);
+  const status = shipment?.deliveryStatus;
+
+  return (
+    <tr
+      data-testid={`purchase-row-${tx.purchaseId}`}
+      onClick={() => onOpen(tx)}
+      className="block cursor-pointer border-b border-line py-2 transition-colors last:border-b-0 hover:bg-surface-2 md:table-row md:py-0"
+    >
+      <td data-label="Date" className={`${CELL} whitespace-nowrap text-fg-muted`}>
+        {new Date(tx.createdAt).toLocaleString()}
+      </td>
+      <td data-label="Pokémon" data-testid={`purchase-item-${tx.purchaseId}`} className={`${CELL} font-medium capitalize`}>
+        {formatPokemonId(tx.pokemon.id)} {tx.pokemon.name}
+      </td>
+      <td data-label="Qty" data-testid={`purchase-quantity-${tx.purchaseId}`} className={`${CELL} font-mono tabular-nums md:text-center`}>
+        {tx.quantity}
+      </td>
+      <td data-label="Total" className={`${CELL} font-mono font-semibold tabular-nums md:text-right`}>
+        {money(tx.pricing.totalPrice)}
+      </td>
+      <td data-label="Delivery" className={CELL}>
+        <div className="inline-flex flex-wrap items-center gap-x-3 gap-y-1 align-middle">
+          <DeliveryBadge status={status} loading={loading && !shipment} data-testid={`purchase-delivery-status-${tx.purchaseId}`} />
+          {shipment?.trackingNumber && (
+            <span data-testid={`purchase-tracking-number-${tx.purchaseId}`} className="font-mono text-xs tabular-nums text-fg-muted">
+              {shipment.trackingNumber}
+            </span>
+          )}
+          {error && shipment && <span className="text-xs text-warn">อัปเดตล่าสุดไม่ได้</span>}
+        </div>
+      </td>
+      <td className={`${CELL} md:text-right`}>
+        <Button
+          variant="secondary"
+          size="sm"
+          data-testid={`purchase-open-detail-${tx.purchaseId}`}
+          aria-label={`View order details for ${tx.pokemon.name}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpen(tx);
+          }}
+        >
+          Details
+        </Button>
+      </td>
+    </tr>
+  );
 }
 
 export function PurchasesView({
@@ -27,37 +92,22 @@ export function PurchasesView({
   onOpenLogin,
 }: PurchasesViewProps) {
   const [selectedOrder, setSelectedOrder] = useState<PurchaseItem | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-
-  const handleOrderClick = (order: PurchaseItem) => {
-    setSelectedOrder(order);
-    setIsModalOpen(true);
-  };
-
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setSelectedOrder(null);
-  };
+  const [refreshToken, setRefreshToken] = useState(0);
 
   if (!user) {
     return (
-      <div data-testid="purchases-auth-required" className="p-8 text-center bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg max-w-lg mx-auto my-8">
-        <LedgerIcon className="w-10 h-10 mx-auto text-zinc-400 mb-3" />
-        <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
-          Authentication Required
-        </h3>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 mb-4">
-          Sign in to view your order history and purchase records.
-        </p>
-        <button
-          type="button"
-          onClick={onOpenLogin}
-          data-testid="purchases-sign-in"
-          className="px-4 py-2 text-xs font-semibold uppercase tracking-wider text-white bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-white rounded transition-colors"
-        >
-          Sign In Now
-        </button>
-      </div>
+      <EmptyState
+        data-testid="purchases-auth-required"
+        icon={<LedgerIcon className="h-6 w-6" />}
+        title="Sign in to see your orders"
+        description="Your purchase history and delivery status live in your trainer account."
+        action={
+          <Button variant="primary" onClick={onOpenLogin} data-testid="purchases-sign-in">
+            Sign in
+          </Button>
+        }
+        className="mx-auto my-8 max-w-lg"
+      />
     );
   }
 
@@ -66,129 +116,91 @@ export function PurchasesView({
   const currentPage = Math.floor(offset / limit) + 1;
   const totalPages = Math.max(1, Math.ceil(totalCount / limit));
 
+  const refresh = () => {
+    setRefreshToken((n) => n + 1);
+    onRefresh();
+  };
+
   return (
-    <div data-testid="order-history-view" className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-3">
+    <section data-testid="purchases-view" aria-labelledby="orders-heading" className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center space-x-2">
-            <span>Order History</span>
-            <span className="text-xs font-mono font-normal text-zinc-500">
-              ({totalCount} orders)
-            </span>
-          </h2>
-          <p className="text-xs text-zinc-500">
-            Your complete purchase history and order records.
+          <h1 id="orders-heading" className="text-2xl font-bold tracking-tight">
+            Orders
+          </h1>
+          <p className="mt-1 text-sm text-fg-muted">
+            <span className="font-mono tabular-nums">{totalCount}</span> {totalCount === 1 ? "order" : "orders"} · delivery status updates automatically
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onRefresh}
-          disabled={isLoading}
-          data-testid="purchases-refresh"
-          className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded transition-colors"
-        >
-          <RefreshIcon className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
-          <span>Refresh</span>
-        </button>
+        <Button variant="secondary" size="sm" onClick={refresh} disabled={isLoading} data-testid="purchases-refresh">
+          <RefreshIcon className={`h-4 w-4 ${isLoading ? "animate-spin motion-reduce:animate-none" : ""}`} />
+          Refresh
+        </Button>
       </div>
 
-      {/* Table Container */}
-      <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden bg-white dark:bg-zinc-900 shadow-sm">
-        <div className="overflow-x-auto">
-          <table data-testid="purchases-table" className="w-full text-left text-xs font-mono">
-            <thead className="bg-zinc-50 dark:bg-zinc-800/60 border-b border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 uppercase tracking-wider text-[11px]">
-              <tr>
-                <th className="py-2.5 px-4 font-semibold">Timestamp</th>
-                <th className="py-2.5 px-4 font-semibold">Item Procured</th>
-                <th className="py-2.5 px-4 font-semibold text-center">Qty</th>
-                <th className="py-2.5 px-4 font-semibold text-right">Unit Price</th>
-                <th className="py-2.5 px-4 font-semibold text-right">Total</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-              {isLoading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i} className="animate-pulse">
-                    <td colSpan={5} className="py-3 px-4">
-                      <div className="h-4 bg-zinc-100 dark:bg-zinc-800 rounded w-full" />
-                    </td>
-                  </tr>
-                ))
-              ) : items.length === 0 ? (
-                <tr data-testid="purchases-empty">
-                  <td colSpan={5} className="py-12 text-center text-zinc-500">
-                    No orders found.
+      <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-card">
+        <table data-testid="purchases-table" className="block w-full text-left text-sm md:table">
+          <caption className="sr-only">Your Pokémon orders, newest first</caption>
+          <thead className="hidden border-b border-line bg-surface-2 text-xs font-medium uppercase tracking-wide text-fg-muted md:table-header-group">
+            <tr>
+              <th scope="col" className="px-4 py-3 font-medium">Date</th>
+              <th scope="col" className="px-4 py-3 font-medium">Pokémon</th>
+              <th scope="col" className="px-4 py-3 text-center font-medium">Qty</th>
+              <th scope="col" className="px-4 py-3 text-right font-medium">Total</th>
+              <th scope="col" className="px-4 py-3 font-medium">Delivery</th>
+              <th scope="col" className="px-4 py-3"><span className="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody className="block md:table-row-group">
+            {isLoading ? (
+              Array.from({ length: 4 }).map((_, i) => (
+                <tr key={i} className="block md:table-row">
+                  <td colSpan={6} className="block px-4 py-3 md:table-cell">
+                    <Skeleton className="h-8 w-full" />
                   </td>
                 </tr>
-              ) : (
-                items.map((tx) => (
-                  <tr
-                    key={tx.purchaseId}
-                    data-testid={`purchase-row-${tx.purchaseId}`}
-                    className="hover:bg-zinc-50/80 dark:hover:bg-zinc-800/40 transition-colors cursor-pointer"
-                    onClick={() => handleOrderClick(tx)}
-                  >
-                    <td className="py-3 px-4 text-zinc-500 whitespace-nowrap">
-                      {new Date(tx.createdAt).toLocaleString()}
-                    </td>
-                    <td data-testid={`purchase-item-${tx.purchaseId}`} className="py-3 px-4 text-zinc-900 dark:text-zinc-100 font-sans font-medium capitalize">
-                      #{String(tx.pokemon.id).padStart(3, "0")} {tx.pokemon.name}
-                    </td>
-                    <td data-testid={`purchase-quantity-${tx.purchaseId}`} className="py-3 px-4 text-center font-bold text-zinc-800 dark:text-zinc-200">
-                      {tx.quantity}
-                    </td>
-                    <td className="py-3 px-4 text-right text-zinc-600 dark:text-zinc-400 tabular-nums">
-                      ₽ {tx.pricing.unitPrice.toLocaleString()}
-                    </td>
-                    <td className="py-3 px-4 text-right font-bold text-zinc-900 dark:text-zinc-100 tabular-nums">
-                      ₽ {tx.pricing.totalPrice.toLocaleString()}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+              ))
+            ) : items.length === 0 ? (
+              <tr data-testid="purchases-empty" className="block md:table-row">
+                <td colSpan={6} className="block px-4 py-14 text-center md:table-cell">
+                  <p className="font-semibold">No orders yet</p>
+                  <p className="mt-1 text-fg-muted">Orders you place will show up here with their delivery status.</p>
+                </td>
+              </tr>
+            ) : (
+              items.map((tx) => <PurchaseRow key={tx.purchaseId} tx={tx} refreshToken={refreshToken} onOpen={setSelectedOrder} />)
+            )}
+          </tbody>
+        </table>
 
-        {/* Pagination Bar */}
         {totalCount > 0 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 text-xs">
-            <span className="text-zinc-500 font-mono">
-              Page {currentPage} of {totalPages} ({totalCount} items)
+          <div className="flex items-center justify-between border-t border-line bg-surface-2 px-4 py-2.5 text-sm">
+            <span className="text-fg-muted">
+              Page <span className="font-mono tabular-nums">{currentPage}</span> of <span className="font-mono tabular-nums">{totalPages}</span>
             </span>
-            <div className="flex items-center space-x-1.5">
-              <button
-                type="button"
+            <div className="flex items-center gap-1">
+              <IconButton
+                label="Previous page"
                 onClick={() => onPageChange(offset - limit)}
                 disabled={!hasPrevPage || isLoading}
                 data-testid="purchases-page-previous"
-                className="p-1 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                aria-label="Previous Page"
               >
-                <ChevronLeftIcon className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
+                <ChevronLeftIcon className="h-5 w-5" />
+              </IconButton>
+              <IconButton
+                label="Next page"
                 onClick={() => onPageChange(offset + limit)}
                 disabled={!hasNextPage || isLoading}
                 data-testid="purchases-page-next"
-                className="p-1 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                aria-label="Next Page"
               >
-                <ChevronRightIcon className="w-4 h-4" />
-              </button>
+                <ChevronRightIcon className="h-5 w-5" />
+              </IconButton>
             </div>
           </div>
         )}
       </div>
 
-      {/* Order Detail Modal */}
-      <OrderDetailModal
-        order={selectedOrder}
-        isOpen={isModalOpen}
-        onClose={handleCloseModal}
-      />
-    </div>
+      {selectedOrder && <OrderDetailModal order={selectedOrder} onClose={() => setSelectedOrder(null)} />}
+    </section>
   );
 }
