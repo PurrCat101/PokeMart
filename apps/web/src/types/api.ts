@@ -24,6 +24,39 @@ export interface CatalogResponse {
   items: CatalogItem[];
 }
 
+export interface ItemCatalogItem {
+  id: number;
+  name: string;
+  category: string | null;
+  spriteUrl: string | null;
+  price: number;
+  stock: number;
+  requiredKycLevel: 0 | 1 | 2;
+}
+
+export interface ItemCatalogResponse {
+  count: number;
+  limit: number;
+  offset: number;
+  results: ItemCatalogItem[];
+}
+
+export interface CreateItemPurchaseRequest {
+  purchaseId: string;
+  itemId: number;
+  quantity: number;
+}
+
+export interface ItemPurchase {
+  purchaseId: string;
+  itemId: number;
+  itemName: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  createdAt: string;
+}
+
 export interface AuthUser {
   userId: string;
   email: string;
@@ -40,6 +73,20 @@ export interface LoginResponse {
 export interface WalletData {
   userId: string;
   balance: number;
+}
+
+export interface KycStatus {
+  level: "NONE" | "BASIC" | "FULL";
+  levelValue: 0 | 1 | 2;
+  status: "ACTIVE" | "PENDING_REVIEW" | "REJECTED";
+  updatedAt: string;
+}
+
+export interface AccountInfo {
+  user: AuthUser;
+  wallet: WalletData;
+  /** null when the KYC service is unavailable. */
+  kyc: KycStatus | null;
 }
 
 export interface InventoryItem {

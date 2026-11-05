@@ -2,7 +2,7 @@
 
 High-density, intentional PokéMart commerce and inventory terminal built with **Next.js (App Router)** and **Tailwind CSS**.
 
-Integrated seamlessly into the monorepo workspace and connected to the public **BFF (Backend-For-Frontend)** at `http://localhost:3001`.
+Integrated seamlessly into the monorepo workspace and connected to the public **BFF (Backend-For-Frontend)** at `http://localhost:4001`.
 
 ---
 
@@ -24,8 +24,8 @@ See [ANTI_AI_SLOP_UI_GUIDE.md](./ANTI_AI_SLOP_UI_GUIDE.md) for full design token
 From the repository root:
 
 ```bash
-# Run Next.js in development mode (starts on http://localhost:3002)
-npm run dev:web
+# Run Next.js in development mode (starts on http://localhost:4003)
+npm run dev
 
 # Build for production
 npm run build:web
@@ -35,12 +35,12 @@ npm run start:web
 ```
 
 ### Port Allocation:
-- `3000`: PokéMart Internal API
-- `3001`: PokéMart BFF Service
-- `3002`: PokéMart Web Frontend (Next.js)
+- `4000`: PokéMart Internal API
+- `4001`: PokéMart BFF Service
+- `4002`: PokéMart Web Frontend (Next.js)
 - `8080`: WireMock
-- `8081`: Swagger UI
-- `3307`: MySQL (host)
+- `8081`: Scalar API reference
+- `4306`: MySQL (host)
 
 ---
 
@@ -59,12 +59,12 @@ Frontend controls expose a stable `data-testid` contract for browser tests. Sele
 The UI suite has one end-to-end purchase case that checks wallet debit, stock reduction, inventory increase, and the purchase ledger. It lives in `tests/testCases/ui/` and runs separately from API, database-state setup, and Docker Compose:
 
 ```powershell
-$env:WEB_BASE_URL = 'http://localhost:3002'
+$env:WEB_BASE_URL = 'http://localhost:4003'
 npm run test:ui
 ```
 
 ```bash
-WEB_BASE_URL=http://localhost:3002 npm run test:ui
+WEB_BASE_URL=http://localhost:4003 npm run test:ui
 ```
 
 Set `WEB_BASE_URL` to the target site's origin to run the same suite against another deployment. The target web server and its BFF/API/database must already be reachable, with the configured demo trainer and a funded wallet. UI tests do not start these services or require the API test project's global state setup. The purchase case creates a real transaction and changes wallet, inventory, and stock; use an isolated test environment. Set `AUTH_TEST_EMAIL` and `AUTH_TEST_PASSWORD` if the target uses credentials different from the selected `tests/configs/.env.*` file. Add browser scenarios under `tests/testCases/ui/` and use `page.getByTestId('...')` with the selector names documented in [specs/09-frontend.md](../../specs/09-frontend.md).

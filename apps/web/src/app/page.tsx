@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { api, ApiError } from "../lib/api";
 import {
   CatalogItem,
+  ItemCatalogItem,
   AuthUser,
   WalletData,
   InventoryItem,
@@ -12,6 +13,8 @@ import {
 } from "../types/api";
 import { Header } from "../components/Header";
 import { PokemonCard } from "../components/PokemonCard";
+import { ItemCard } from "../components/ItemCard";
+import { ItemCheckoutModal } from "../components/ItemCheckoutModal";
 import { CartDrawer } from "../components/CartDrawer";
 import { CheckoutModal } from "../components/CheckoutModal";
 import { LoginModal } from "../components/LoginModal";
@@ -63,13 +66,21 @@ export default function PokemartCommerceTerminal() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
 
-  // Complete Catalog Data (All 151 Pokémon)
+  // Current catalog page only: never download the full product snapshot to browse.
   const [allCatalog, setAllCatalog] = useState<CatalogItem[]>([]);
+  const [allItems, setAllItems] = useState<ItemCatalogItem[]>([]);
+  const [catalogTotal, setCatalogTotal] = useState(0);
+  const [itemCategories, setItemCategories] = useState<string[]>(["all"]);
   const [isCatalogLoading, setIsCatalogLoading] = useState(true);
+  const [catalogKind, setCatalogKind] = useState<"pokemon" | "items">("pokemon");
+  const [purchasingItemId, setPurchasingItemId] = useState<number | null>(null);
+  const [checkoutItem, setCheckoutItem] = useState<ItemCatalogItem | null>(null);
+  const [itemAfterLogin, setItemAfterLogin] = useState<ItemCatalogItem | null>(null);
 
   // Filter & Search Controls
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedType, setSelectedType] = useState("all");
+  const [selectedItemCategory, setSelectedItemCategory] = useState("all");
   const [stockOnly, setStockOnly] = useState(false);
   const [sortBy, setSortBy] = useState<"id-asc" | "id-desc" | "price-asc" | "price-desc" | "name-asc">("id-asc");
   const [currentPage, setCurrentPage] = useState(1);
@@ -113,23 +124,30 @@ export default function PokemartCommerceTerminal() {
   // 2. Check existing session
   const syncSession = useCallback(async () => {
     try {
-      const me = await api.getMe();
-      setUser(me.user);
-      const walletRes = await api.getWallet();
-      setWallet(walletRes.wallet);
+      const account = await api.getAccountInfo();
+      setUser(account.user);
+      setWallet(account.wallet);
     } catch {
       setUser(null);
       setWallet(null);
     }
   }, []);
 
-  // 3. Fetch Full Catalog (Loads all 151 Generation 1 Pokémon)
+  // 3. Fetch just the current server-filtered catalog page.
   const fetchFullCatalog = useCallback(async () => {
     setIsCatalogLoading(true);
     setBffStatusError(null);
     try {
-      const items = await api.getAllPokemon();
-      setAllCatalog(items);
+      const offset = (currentPage - 1) * ITEMS_PER_PAGE;
+      if (catalogKind === "pokemon") {
+        const page = await api.getPokemonList(ITEMS_PER_PAGE, offset, { q: searchQuery.trim(), type: selectedType, inStock: stockOnly });
+        setAllCatalog(page.items);
+        setCatalogTotal(page.totalCount);
+      } else {
+        const page = await api.getItemList(ITEMS_PER_PAGE, offset, { q: searchQuery.trim(), category: selectedItemCategory, inStock: stockOnly });
+        setAllItems(page.results);
+        setCatalogTotal(page.count);
+      }
     } catch (err: any) {
       setBffStatusError(
         err instanceof ApiError && err.code === "DEPENDENCY_UNAVAILABLE"
@@ -139,6 +157,10 @@ export default function PokemartCommerceTerminal() {
     } finally {
       setIsCatalogLoading(false);
     }
+  }, [catalogKind, currentPage, searchQuery, selectedType, selectedItemCategory, stockOnly]);
+
+  useEffect(() => {
+    api.getItemCategories().then((categories) => setItemCategories(["all", ...categories])).catch(() => setItemCategories(["all"]));
   }, []);
 
   // 4. Fetch Inventory
@@ -229,12 +251,44 @@ export default function PokemartCommerceTerminal() {
     saveCart([]);
   };
 
+  const handleItemPurchase = async (item: ItemCatalogItem) => {
+    if (!user) {
+      setItemAfterLogin(item);
+      setIsLoginOpen(true);
+      return;
+    }
+    setCheckoutItem(item);
+  };
+
+  const confirmItemPurchase = async (item: ItemCatalogItem) => {
+    setPurchasingItemId(item.id);
+    try {
+      const purchase = await api.createItemPurchase({ purchaseId: crypto.randomUUID(), itemId: item.id, quantity: 1 });
+      const account = await api.getAccountInfo();
+      setWallet(account.wallet);
+      await fetchFullCatalog();
+      setToast({ id: crypto.randomUUID(), type: "success", title: "Item purchased", message: `${purchase.itemName.replaceAll("-", " ")} added to your item inventory.` });
+    } catch (error) {
+      const message = error instanceof ApiError && error.code === "KYC_LEVEL_REQUIRED"
+        ? `สินค้านี้ต้องใช้ KYC ระดับ ${item.requiredKycLevel}`
+        : error instanceof Error ? error.message : "เกิดข้อผิดพลาดบางอย่าง กรุณาลองใหม่ภายหลัง";
+      setToast({ id: crypto.randomUUID(), type: "error", title: "Item purchase failed", message });
+      throw new Error(message);
+    } finally {
+      setPurchasingItemId(null);
+    }
+  };
+
   // Login handler
   const handleLogin = async (credentials: { email: string; password: string }) => {
     const res = await api.login(credentials);
     setUser(res.user);
-    const walletRes = await api.getWallet();
-    setWallet(walletRes.wallet);
+    const account = await api.getAccountInfo();
+    setWallet(account.wallet);
+    if (itemAfterLogin) {
+      setCheckoutItem(itemAfterLogin);
+      setItemAfterLogin(null);
+    }
     setToast({
       id: crypto.randomUUID(),
       type: "success",
@@ -318,6 +372,15 @@ export default function PokemartCommerceTerminal() {
     setCurrentPage(1);
   };
 
+  const handleCatalogKindChange = (kind: "pokemon" | "items") => {
+    setCatalogKind(kind);
+    setSearchQuery("");
+    setSelectedType("all");
+    setSelectedItemCategory("all");
+    setStockOnly(false);
+    setCurrentPage(1);
+  };
+
   const handleStockToggle = () => {
     setStockOnly((prev) => !prev);
     setCurrentPage(1);
@@ -331,39 +394,15 @@ export default function PokemartCommerceTerminal() {
   const handleClearFilters = () => {
     setSearchQuery("");
     setSelectedType("all");
+    setSelectedItemCategory("all");
     setStockOnly(false);
     setSortBy("id-asc");
     setCurrentPage(1);
   };
 
-  // Filter & Sort Pipeline across complete 151 Pokémon catalog
+  // The server has already filtered the current page; client sorting is page-local.
   const filteredCatalog = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-
-    const filtered = allCatalog.filter((item) => {
-      // 1. Search Query: matches name or numerical ID
-      const matchesName = item.pokemon.name.toLowerCase().includes(query);
-      const matchesId = String(item.pokemon.id).includes(query);
-      if (query && !matchesName && !matchesId) return false;
-
-      // 2. Type Filter: check if Pokémon possesses the selected type
-      if (selectedType !== "all") {
-        const hasType = item.pokemon.types.some(
-          (t) => t.toLowerCase() === selectedType.toLowerCase()
-        );
-        if (!hasType) return false;
-      }
-
-      // 3. Stock Filter: in stock only
-      if (stockOnly && item.listing.availableStock <= 0) {
-        return false;
-      }
-
-      return true;
-    });
-
-    // 4. Sorting
-    return filtered.sort((a, b) => {
+    return [...allCatalog].sort((a, b) => {
       if (sortBy === "id-asc") return a.pokemon.id - b.pokemon.id;
       if (sortBy === "id-desc") return b.pokemon.id - a.pokemon.id;
       if (sortBy === "price-asc") return a.listing.price - b.listing.price;
@@ -371,14 +410,24 @@ export default function PokemartCommerceTerminal() {
       if (sortBy === "name-asc") return a.pokemon.name.localeCompare(b.pokemon.name);
       return 0;
     });
-  }, [allCatalog, searchQuery, selectedType, stockOnly, sortBy]);
+  }, [allCatalog, sortBy]);
+
+  const filteredItems = useMemo(() => {
+    return [...allItems].sort((a, b) => {
+      if (sortBy === "id-asc") return a.id - b.id;
+      if (sortBy === "id-desc") return b.id - a.id;
+      if (sortBy === "price-asc") return a.price - b.price;
+      if (sortBy === "price-desc") return b.price - a.price;
+      return a.name.localeCompare(b.name);
+    });
+  }, [allItems, sortBy]);
 
   // Pagination calculation
-  const totalFilteredCount = filteredCatalog.length;
+  const activeCatalog = catalogKind === "pokemon" ? filteredCatalog : filteredItems;
+  const totalFilteredCount = catalogTotal;
   const totalPages = Math.max(1, Math.ceil(totalFilteredCount / ITEMS_PER_PAGE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-  const paginatedCatalog = filteredCatalog.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  const paginatedCatalog = activeCatalog;
 
   const cartTotalQuantity = cart.reduce((acc, c) => acc + c.quantity, 0);
 
@@ -389,7 +438,7 @@ export default function PokemartCommerceTerminal() {
     return map;
   }, [cart]);
 
-  const hasActiveFilters = searchQuery !== "" || selectedType !== "all" || stockOnly || sortBy !== "id-asc";
+  const hasActiveFilters = searchQuery !== "" || selectedType !== "all" || selectedItemCategory !== "all" || stockOnly || sortBy !== "id-asc";
 
   return (
     <div data-testid="app-shell" className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 flex flex-col font-sans">
@@ -432,6 +481,11 @@ export default function PokemartCommerceTerminal() {
           <div className="space-y-6">
             {/* Toolbar: Search, Filters, Sort, Count */}
             <div className="space-y-3 pb-4 border-b border-zinc-200 dark:border-zinc-800">
+              <div className="flex items-center gap-2" role="tablist" aria-label="Catalog product type">
+                <button type="button" role="tab" aria-selected={catalogKind === "pokemon"} onClick={() => handleCatalogKindChange("pokemon")} data-testid="catalog-kind-pokemon" className={`rounded border px-3 py-1.5 text-xs font-semibold transition-colors ${catalogKind === "pokemon" ? "border-red-600 bg-red-600 text-white" : "border-zinc-200 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"}`}>Pokémon</button>
+                <button type="button" role="tab" aria-selected={catalogKind === "items"} onClick={() => handleCatalogKindChange("items")} data-testid="catalog-kind-items" className={`rounded border px-3 py-1.5 text-xs font-semibold transition-colors ${catalogKind === "items" ? "border-red-600 bg-red-600 text-white" : "border-zinc-200 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"}`}>Items</button>
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">{catalogKind === "pokemon" ? "Browse by Pokémon type" : "Browse by item category and verification level"}</span>
+              </div>
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                 {/* Search Bar */}
                 <div className="relative max-w-sm w-full">
@@ -439,7 +493,7 @@ export default function PokemartCommerceTerminal() {
                   <input
                     type="text"
                     data-testid="catalog-search"
-                    placeholder="Search by Pokémon name or #ID..."
+                    placeholder={catalogKind === "pokemon" ? "Search by Pokémon name or #ID..." : "Search by item name or #ID..."}
                     value={searchQuery}
                     onChange={(e) => handleSearchChange(e.target.value)}
                     className="w-full pl-9 pr-8 py-1.5 text-xs font-mono rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-1"
@@ -482,8 +536,8 @@ export default function PokemartCommerceTerminal() {
                       aria-label="Sort catalog items"
                       className="bg-transparent text-xs text-zinc-800 dark:text-zinc-200 focus:outline-none font-medium cursor-pointer"
                     >
-                      <option value="id-asc" className="dark:bg-zinc-900">Pokedex # (Low to High)</option>
-                      <option value="id-desc" className="dark:bg-zinc-900">Pokedex # (High to Low)</option>
+                      <option value="id-asc" className="dark:bg-zinc-900">{catalogKind === "pokemon" ? "Pokédex" : "Item"} # (Low to High)</option>
+                      <option value="id-desc" className="dark:bg-zinc-900">{catalogKind === "pokemon" ? "Pokédex" : "Item"} # (High to Low)</option>
                       <option value="price-asc" className="dark:bg-zinc-900">Price (Lowest first)</option>
                       <option value="price-desc" className="dark:bg-zinc-900">Price (Highest first)</option>
                       <option value="name-asc" className="dark:bg-zinc-900">Name (A to Z)</option>
@@ -504,20 +558,20 @@ export default function PokemartCommerceTerminal() {
                 </div>
               </div>
 
-              {/* Type Filter Chips */}
+              {/* Product-specific filter chips */}
               <div className="flex items-center space-x-1 overflow-x-auto pb-1 text-xs scrollbar-thin">
                 <span className="text-zinc-400 text-[11px] font-semibold uppercase tracking-wider shrink-0 mr-1 flex items-center space-x-1">
                   <FilterIcon className="w-3 h-3" />
-                  <span>Type:</span>
+                  <span>{catalogKind === "pokemon" ? "Type:" : "Category:"}</span>
                 </span>
-                {POKEMON_TYPES.map((type) => (
+                {(catalogKind === "pokemon" ? POKEMON_TYPES : itemCategories).map((type) => (
                   <button
                     key={type}
                     type="button"
-                    onClick={() => handleTypeChange(type)}
-                    data-testid={`catalog-type-${type}`}
+                    onClick={() => catalogKind === "pokemon" ? handleTypeChange(type) : (setSelectedItemCategory(type), setCurrentPage(1))}
+                    data-testid={catalogKind === "pokemon" ? `catalog-type-${type}` : `catalog-item-category-${type}`}
                     className={`px-2.5 py-1 rounded text-xs font-medium uppercase tracking-wider transition-colors shrink-0 ${
-                      selectedType === type
+                      (catalogKind === "pokemon" ? selectedType : selectedItemCategory) === type
                         ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-semibold shadow-xs"
                         : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/60 dark:hover:bg-zinc-800/60"
                     }`}
@@ -531,10 +585,10 @@ export default function PokemartCommerceTerminal() {
               <div data-testid="catalog-results-summary" className="flex items-center justify-between text-xs font-mono pt-1 text-zinc-500">
                 <div>
                   Showing <span className="font-bold text-zinc-800 dark:text-zinc-200">{paginatedCatalog.length}</span> of{" "}
-                  <span className="font-bold text-zinc-800 dark:text-zinc-200">{totalFilteredCount}</span> Pokémon
+                  <span className="font-bold text-zinc-800 dark:text-zinc-200">{totalFilteredCount}</span> {catalogKind === "pokemon" ? "Pokémon" : "items"}
                   {hasActiveFilters && (
                     <span className="ml-1 text-zinc-400">
-                      ({allCatalog.length} total in shop)
+                      ({catalogKind === "pokemon" ? allCatalog.length : allItems.length} total in shop)
                     </span>
                   )}
                 </div>
@@ -562,13 +616,13 @@ export default function PokemartCommerceTerminal() {
                   />
                 ))}
               </div>
-            ) : filteredCatalog.length === 0 ? (
+            ) : activeCatalog.length === 0 ? (
               <div data-testid="catalog-empty" className="p-16 text-center bg-white dark:bg-zinc-900 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg space-y-2">
                 <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-                  No Pokémon matched your current filters.
+                  No {catalogKind === "pokemon" ? "Pokémon" : "items"} matched your current filters.
                 </p>
                 <p className="text-xs text-zinc-500">
-                  Try searching for another species or clear the active type/stock filters.
+                  Try another search or clear the active {catalogKind === "pokemon" ? "type" : "category"}/stock filters.
                 </p>
                 <button
                   type="button"
@@ -581,14 +635,9 @@ export default function PokemartCommerceTerminal() {
               </div>
             ) : (
               <div data-testid="catalog-grid" className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {paginatedCatalog.map((item) => (
-                  <PokemonCard
-                    key={item.pokemon.id}
-                    item={item}
-                    onAddToCart={handleAddToCart}
-                    inCartQuantity={cartQuantityMap.get(item.pokemon.id) || 0}
-                  />
-                ))}
+                {catalogKind === "pokemon"
+                  ? (paginatedCatalog as CatalogItem[]).map((item) => <PokemonCard key={item.pokemon.id} item={item} onAddToCart={handleAddToCart} inCartQuantity={cartQuantityMap.get(item.pokemon.id) || 0} />)
+                  : (paginatedCatalog as ItemCatalogItem[]).map((item) => <ItemCard key={item.id} item={item} onPurchase={handleItemPurchase} isPurchasing={purchasingItemId === item.id} />)}
               </div>
             )}
 
@@ -725,6 +774,8 @@ export default function PokemartCommerceTerminal() {
           setActiveTab("inventory");
         }}
       />
+
+      <ItemCheckoutModal item={checkoutItem} onClose={() => setCheckoutItem(null)} onConfirm={confirmItemPurchase} />
 
       {/* Sign In Modal */}
       {isLoginOpen && (
