@@ -10,14 +10,16 @@
 
 | Service | URL เมื่อรัน local | หน้าที่ |
 |---|---|---|
-| Web frontend | `http://localhost:3003` | Next.js UI (เริ่มแยกด้วย `npm run dev:web`) สำหรับ catalog, cart/checkout, wallet, inventory และ purchase history |
-| BFF | `http://localhost:3001` | Public API สำหรับ client และแปลง response เป็น DTO ฝั่ง public |
-| PokéMart API | `http://localhost:3000` | Internal service สำหรับ business rules และการเข้าถึงข้อมูล |
-| Shipping Mock | `http://localhost:3002` (Docker) | Express Mock จำลองระบบจัดส่งบุคคลที่สาม (3rd-party shipping provider) |
+| Web frontend | `http://localhost:4003` | Next.js UI (เริ่มแยกด้วย `npm run dev`) สำหรับ catalog, cart/checkout, wallet, inventory และ purchase history |
+| BFF | `http://localhost:4001` | Public API สำหรับ client และแปลง response เป็น DTO ฝั่ง public |
+| PokéMart API | `http://localhost:4000` | Internal service สำหรับ business rules และการเข้าถึงข้อมูล |
+| KYC API | `http://localhost:4005` (Docker) | Internal service ระดับ KYC 3 ระดับ (NONE/BASIC/FULL) ที่ PokéMart API เรียกก่อนขายสินค้าที่ต้องยืนยันตัวตน; มี test-only routes สำหรับตั้งระดับและจำลองความล้มเหลว |
+| Payment Mock | `http://localhost:4004` (Docker) | Stripe-style PaymentIntent mock สำหรับ wallet top-up (idempotency + recovery) |
+| Shipping Mock | `http://localhost:4002` (Docker) | Express Mock จำลองระบบจัดส่งบุคคลที่สาม (3rd-party shipping provider) |
 | Shipping Worker | Background process / Docker | Worker อ่านคิวงาน `shipments` จาก MySQL ยิง provider HTTP และ sync delivery status |
 | WireMock | `http://localhost:8080` | จำลอง public API สำหรับ contract tests |
-| Swagger UI | `http://localhost:8081` | เลือกดู BFF OpenAPI หรือ internal API OpenAPI |
-| MySQL | `localhost:3306` หรือ `3307` | เก็บ catalog, wallet, inventory, purchases และ shipments |
+| Scalar API reference | `http://localhost:8081` | เลือกดู OpenAPI ของ BFF, internal API, KYC, Payment และ Shipping mock |
+| MySQL | `localhost:4306` (container 3306) | เก็บ catalog, wallet, inventory, purchases และ shipments |
 
 ## 1. Prerequisites
 
@@ -44,7 +46,7 @@ docker compose version
 
 ### Windows — PowerShell
 
-1. สร้าง `.env` หากยังไม่มี แล้วเปิดไฟล์และตั้ง `MYSQL_HOST_PORT=3307` ให้ตรงกับ `MYSQL_PORT=3307` ใน `tests/configs/.env.test`:
+1. สร้าง `.env` หากยังไม่มี แล้วเปิดไฟล์และตั้ง `MYSQL_HOST_PORT=4306` ให้ตรงกับ `MYSQL_PORT=4306` ใน `tests/configs/.env.test`:
 
    ```powershell
    if (-not (Test-Path .env)) { Copy-Item .env.example .env }
@@ -62,14 +64,14 @@ docker compose version
 
    ```powershell
    docker compose ps
-   curl.exe -fsS http://localhost:3001/health
-   curl.exe -fsS http://localhost:3001/ready
-   curl.exe -fsS http://localhost:3000/ready
+   curl.exe -fsS http://localhost:4001/health
+   curl.exe -fsS http://localhost:4001/ready
+   curl.exe -fsS http://localhost:4000/ready
    ```
 
 ### macOS — Terminal (zsh)
 
-1. สร้าง `.env` หากยังไม่มี แล้วตั้ง `MYSQL_HOST_PORT=3307` ให้ตรงกับ `MYSQL_PORT=3307` ใน `tests/configs/.env.test`:
+1. สร้าง `.env` หากยังไม่มี แล้วตั้ง `MYSQL_HOST_PORT=4306` ให้ตรงกับ `MYSQL_PORT=4306` ใน `tests/configs/.env.test`:
 
    ```zsh
    if [ ! -f .env ]; then cp .env.example .env; fi
@@ -87,12 +89,12 @@ docker compose version
 
    ```zsh
    docker compose ps
-   curl --fail --silent --show-error http://localhost:3001/health
-   curl --fail --silent --show-error http://localhost:3001/ready
-   curl --fail --silent --show-error http://localhost:3000/ready
+   curl --fail --silent --show-error http://localhost:4001/health
+   curl --fail --silent --show-error http://localhost:4001/ready
+   curl --fail --silent --show-error http://localhost:4000/ready
    ```
 
-MySQL จะสร้าง schema และ seed data เมื่อเริ่มด้วย volume ใหม่ เปิด Swagger UI ที่ `http://localhost:8081` แล้วเลือก **BFF Public API** หรือ **PokéMart Internal API** ได้เลย
+MySQL จะสร้าง schema และ seed data เมื่อเริ่มด้วย volume ใหม่ เปิด Scalar API reference ที่ `http://localhost:8081` แล้วเลือก **BFF Public API** หรือ **PokéMart Internal API** ได้เลย
 
 > ค่าใน `.env.example` เป็น local-development values เท่านั้น ห้ามใช้กับ shared/production environment หรือ commit `.env` และ credentials จริง
 
@@ -101,12 +103,12 @@ MySQL จะสร้าง schema และ seed data เมื่อเริ�
 เว็บแอปไม่รวมอยู่ใน Docker Compose ให้เปิด terminal อีกหน้าที่ root หลังจาก BFF พร้อม แล้วรัน:
 
 ```powershell
-npm run dev:web
+npm run dev
 ```
 
-เปิด `http://localhost:3003` เว็บแอปเรียก public BFF ผ่าน Next.js rewrite โดยค่าเริ่มต้นชี้ไปที่ `http://localhost:3001`; ตั้ง `NEXT_PUBLIC_BFF_URL` หรือ `BFF_INTERNAL_URL` ใน `apps/web/.env.local` เมื่อต้องการเปลี่ยนปลายทาง ดูรายละเอียด feature และขอบเขตการเชื่อมต่อที่ [specs/09-frontend.md](specs/09-frontend.md)
+เปิด `http://localhost:4003` เว็บแอปเรียก public BFF ผ่าน Next.js rewrite โดยค่าเริ่มต้นชี้ไปที่ `http://localhost:4001`; ตั้ง `NEXT_PUBLIC_BFF_URL` หรือ `BFF_INTERNAL_URL` ใน `apps/web/.env.local` เมื่อต้องการเปลี่ยนปลายทาง ดูรายละเอียด feature และขอบเขตการเชื่อมต่อที่ [specs/09-frontend.md](specs/09-frontend.md)
 
-Playwright จะเปิดเว็บบน `http://localhost:3003` ให้อัตโนมัติระหว่าง `npm test` และ `npm run test:ui`; หากต้องการทดสอบเว็บที่เปิดอยู่แล้ว ให้ตั้ง `WEB_BASE_URL` เป็น origin ของเว็บนั้น โดย test selectors ใช้ `data-testid` ตาม convention ใน [specs/09-frontend.md](specs/09-frontend.md)
+Playwright จะเปิดเว็บบน `http://localhost:4003` ให้อัตโนมัติระหว่าง `npm test` และ `npm run test:ui`; หากต้องการทดสอบเว็บที่เปิดอยู่แล้ว ให้ตั้ง `WEB_BASE_URL` เป็น origin ของเว็บนั้น โดย test selectors ใช้ `data-testid` ตาม convention ใน [specs/09-frontend.md](specs/09-frontend.md)
 
 ## ทดลอง login และเรียก API
 
@@ -123,20 +125,20 @@ Playwright จะเปิดเว็บบน `http://localhost:3003` ให�
 ### Windows — PowerShell
 
 ```powershell
-$login = Invoke-RestMethod -Method Post http://localhost:3001/api/auth/login -ContentType 'application/json' -Body '{"email":"lab-user-001@example.test","password":"PokeMartLab!2026"}'
+$login = Invoke-RestMethod -Method Post http://localhost:4001/api/auth/login -ContentType 'application/json' -Body '{"email":"lab-user-001@example.test","password":"PokeMartLab!2026"}'
 $headers = @{ Authorization = "Bearer $($login.accessToken)" }
-Invoke-RestMethod http://localhost:3001/api/auth/me -Headers $headers
-Invoke-RestMethod http://localhost:3001/api/wallet -Headers $headers
+Invoke-RestMethod http://localhost:4001/api/auth/me -Headers $headers
+Invoke-RestMethod http://localhost:4001/api/wallet -Headers $headers
 ```
 
 ### macOS — Terminal
 
 ```zsh
-TOKEN=$(curl --fail --silent --show-error -X POST http://localhost:3001/api/auth/login \
+TOKEN=$(curl --fail --silent --show-error -X POST http://localhost:4001/api/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"email":"lab-user-001@example.test","password":"PokeMartLab!2026"}' | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).accessToken")
-curl --fail --silent --show-error http://localhost:3001/api/auth/me -H "Authorization: Bearer $TOKEN"
-curl --fail --silent --show-error http://localhost:3001/api/wallet -H "Authorization: Bearer $TOKEN"
+curl --fail --silent --show-error http://localhost:4001/api/auth/me -H "Authorization: Bearer $TOKEN"
+curl --fail --silent --show-error http://localhost:4001/api/wallet -H "Authorization: Bearer $TOKEN"
 ```
 
 Login returns a one-hour JWT. A frontend should send it as `Authorization: Bearer <accessToken>` for wallet, inventory, and purchase requests; catalog reads are public. No signup or password-reset flow is included. Replace the local-only `AUTH_JWT_SECRET`, enable HTTPS, and add rate limiting and a refresh/revocation strategy before exposing this flow beyond the lab.
@@ -201,7 +203,7 @@ TEST_ENV=sit npm run test:api
 
 กำหนดค่า SIT/STG จริงใน `tests/configs/.env.sit` หรือ `.env.stg` ก่อนใช้งาน ไฟล์ตัวอย่างมี URL placeholder และห้ามใส่ credentials จริงลงใน Git การรัน real-system project จะ reset เฉพาะ wallet และ listing ที่ระบุ พร้อมลบ inventory row ของ user/โปเกมอนที่เลือก ดังนั้นต้องใช้ user และ MySQL database ที่แยกไว้สำหรับ test โดยเฉพาะ ห้ามชี้ไปยัง production หรือข้อมูล shared ที่ไม่อนุญาตให้แก้ไข ใน environment ที่ไม่ใช่ `test` การเชื่อมต่อฐานข้อมูลจะ fail หากไม่ได้กำหนด `MYSQL_HOST`, `MYSQL_DATABASE`, `MYSQL_USER` และ `MYSQL_PASSWORD` ไว้ชัดเจน
 
-`MYSQL_HOST_PORT` ใน `.env` คือ port ที่ Docker เปิดบน host ส่วน `MYSQL_PORT` ในไฟล์ `tests/configs/.env.*` คือ port ที่ test runner ใช้เชื่อมต่อจาก host ทั้งสองค่าต้องตรงกัน เช่น `MYSQL_HOST_PORT=3307` ต้องคู่กับ `MYSQL_PORT=3307`
+`MYSQL_HOST_PORT` ใน `.env` คือ port ที่ Docker เปิดบน host ส่วน `MYSQL_PORT` ในไฟล์ `tests/configs/.env.*` คือ port ที่ test runner ใช้เชื่อมต่อจาก host ทั้งสองค่าต้องตรงกัน เช่น `MYSQL_HOST_PORT=4306` ต้องคู่กับ `MYSQL_PORT=4306`
 
 ## Build, stop และจัดการฐานข้อมูล
 
@@ -268,7 +270,7 @@ Client สร้าง UUID `purchaseId` ก่อนเริ่มซื้อ
 
 ## ฐานข้อมูลและ Pokémon seed
 
-ฐานข้อมูลใช้ SQL ใน `database/schema/` และ `database/seed/`; การ initialize อัตโนมัติทำงานเมื่อสร้าง MySQL volume ใหม่เท่านั้น Seed ปัจจุบันมี Pokémon Generation I 151 ตัวจาก PokeAPI v2 พร้อมราคาและ stock จำลองของ PokéMart
+ฐานข้อมูลใช้ SQL ใน `database/schema/` และ `database/seed/`; การ initialize อัตโนมัติทำงานเมื่อสร้าง MySQL volume ใหม่เท่านั้น Seed ปัจจุบันมี Pokémon 1,025 ตัวและ item 2,223 รายการจาก PokeAPI snapshot ที่ pin ไว้ พร้อมราคา, stock และ KYC requirement จำลองของ PokéMart
 
 ### ERD: ตารางและความสัมพันธ์
 
@@ -276,7 +278,7 @@ Client สร้าง UUID `purchaseId` ก่อนเริ่มซื้อ
 
 ทุกเส้นใน ERD คือ foreign key ที่ประกาศใน MySQL รวมถึง `users.user_id` ที่เชื่อมกับ wallet, inventory และ purchases คัดลอก DBML ไปใช้ใน dbdiagram.io ได้จาก [database/schema/pokemart.dbml](database/schema/pokemart.dbml); ดูรายละเอียดคอลัมน์และ constraints ที่ [database/README.md](database/README.md).
 
-ราคา derive จาก base experience ปัดทีละ 50 และจำกัดช่วง 200–1500 ส่วน stock ลดลงตาม experience tier และมี variation แบบ deterministic จาก Pokémon ID ทำให้ seed ซ้ำได้ผลเดิม Runtime และ tests ไม่เรียก PokéAPI ดูรายละเอียดที่ [database/README.md](database/README.md) และข้อมูลใน [database/seed/001_seed_shop_data.sql](database/seed/001_seed_shop_data.sql)
+ราคา Pokémon derive จาก base experience และราคา item ใช้ข้อมูลอ้างอิง PokéAPI; stock เป็น deterministic. Pokémon ทุกตัวซื้อได้ที่ KYC 0 ส่วน KYC 1/2 ใช้กับ item ระดับสูง เช่น Master Ball และยาระดับสูง Runtime/test ไม่เรียก PokéAPI และไม่ต้องมี clone `api-data`; ดู [database/README.md](database/README.md) และ seed ที่ generate ใน [database/seed](database/seed)
 
 ที่มาข้อมูล: [PokeAPI REST API](https://pokeapi.co/) โปรดตรวจสอบ license/attribution ก่อนนำ snapshot ไปเผยแพร่ต่อ
 
@@ -303,7 +305,7 @@ npm run sync-shipment ba3d80c1-8e01-44a0-9c64-42c8d210f26c 3
 ```
 
 **สิ่งที่ command นี้ทำ:**
-1. อัปเดต status ใน shipping-mock (`http://localhost:3002`)
+1. อัปเดต status ใน shipping-mock (`http://localhost:4002`)
 2. อัปเดต delivery_status ใน database โดยตรง
 3. ไม่ต้องรอ shipping-worker sync (ทุก 15 วินาที)
 
@@ -318,4 +320,6 @@ npm run sync-shipment ba3d80c1-8e01-44a0-9c64-42c8d210f26c 3
 - Testing approach: [specs/04-testing.md](specs/04-testing.md)
 - Public/internal API test design, traceability และ coverage gaps: [specs/08-test-design.md](specs/08-test-design.md)
 - Database, seed และ migration: [database/README.md](database/README.md)
+- Payment top-up และ recovery contract: [specs/11-payment-integration.md](specs/11-payment-integration.md)
+- KYC levels และ purchase gating: [specs/12-kyc.md](specs/12-kyc.md)
 - โครงสร้าง Playwright: [Playwright structure.md](Playwright%20structure.md)

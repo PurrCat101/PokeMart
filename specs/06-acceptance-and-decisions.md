@@ -5,7 +5,7 @@
 ### Reference data
 - The data source, selected generation, and snapshot retrieval date are documented.
 - Tests do not need a live network call to PokéAPI.
-- Pokémon IDs and names match the 151-record Generation I snapshot.
+- Pokémon IDs and names match the 1,025-record pinned snapshot, and item IDs/names match its 2,223 item resources.
 - Shop price and stock are clearly identified as lab-owned data.
 
 ### API contract
@@ -67,7 +67,7 @@
 
 ### Still open
 
-- Whether to extend the pinned reference dataset beyond Generation I.
+- Whether to include non-main PokéAPI form resources in a later catalog expansion (the baseline includes one main Pokémon resource per National Pokédex ID).
 - Whether the catalog snapshot is stored in MySQL or served from a local static source while shop fields are stored separately.
 - Whether `purchase_items` is a separate table or single-item purchases live on `purchases`.
 - Whether catalog search and filter parameters are included in the first iteration.

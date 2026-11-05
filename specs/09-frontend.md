@@ -10,16 +10,16 @@ The frontend is part of the monorepo at `apps/web`. It is not included in `docke
 
 - Next.js App Router with React and TypeScript.
 - Tailwind CSS for application styles.
-- Development and production server port: `3002`.
-- Public BFF default URL: `http://localhost:3001`.
+- Development and production server port: `4003`.
+- Public BFF default URL: `http://localhost:4001`.
 - `apps/web/next.config.ts` rewrites browser requests from `/api/:path*` to the configured BFF URL.
 
-Configure the BFF URL with `NEXT_PUBLIC_BFF_URL` or `BFF_INTERNAL_URL`; if neither is set, the app uses `http://localhost:3001`. The example values are in `apps/web/.env.example`.
+Configure the BFF URL with `NEXT_PUBLIC_BFF_URL` or `BFF_INTERNAL_URL`; if neither is set, the app uses `http://localhost:4001`. The example values are in `apps/web/.env.example`.
 
 Run from the repository root:
 
 ```bash
-npm run dev:web
+npm run dev
 npm run build:web
 npm run start:web
 ```
@@ -28,7 +28,7 @@ The BFF and its downstream services must be running for API-backed features to w
 
 ## 3. Application areas
 
-- **Catalog:** load catalog data from the public API; search by Pokémon name or ID; filter by type and availability; sort by ID, price, or name; browse 12 results per page.
+- **Catalog:** load Pokémon and item listings from the public API; search by name or ID; switch between product families; filter Pokémon by type or items by category and availability; sort by ID, price, or name; browse 12 results per page.
 - **Cart and checkout:** add listings with quantity limits based on available stock, adjust or remove cart items, and submit purchases through the BFF. The cart is stored in browser `localStorage`.
 - **Trainer sign-in:** use the demo login endpoint to establish a session. The access token is stored in browser `localStorage` and attached as a bearer token to authenticated API requests.
 - **Wallet:** display the signed-in trainer's balance and refresh it after purchase activity.
@@ -42,7 +42,7 @@ Login fields start blank; the UI does not prefill or auto-fill demo credentials.
 
 ## 4. API boundary and request behavior
 
-The frontend calls public routes such as `/api/pokemon`, `/api/auth/login`, `/api/wallet`, `/api/inventory`, and `/api/purchases`. Next.js rewrites these requests to the BFF. The browser does not need a direct URL or credential for the internal API.
+The frontend calls public routes such as `/api/pokemon`, `/api/items`, `/api/auth/login`, `/api/wallet`, `/api/inventory`, and `/api/purchases`. Next.js rewrites these requests to the BFF. The browser does not need a direct URL or credential for the internal API.
 
 The shared API client in `apps/web/src/lib/api.ts` sends an `X-Request-Id`, adds the stored bearer token when present, and converts public API error envelopes into `ApiError` instances. Purchase requests use a client-generated UUID `purchaseId` in the JSON body, following the public API contract.
 
@@ -97,6 +97,8 @@ QA can use this mapping from requirements or a Figma screen to design a test bef
 | Navigate | Open catalog, inventory, or purchases | `nav-catalog`, `nav-inventory`, `nav-purchases` | `page.getByTestId('nav-inventory')` |
 | See current balance | Signed-in trainer wallet amount | `wallet-balance` | `page.getByTestId('wallet-balance')` |
 | Search catalog | Search field | `catalog-search` | `page.getByTestId('catalog-search')` |
+| Browse items | Switch to item catalog and choose an item category | `catalog-kind-items`, `catalog-item-category-{category}` | `page.getByTestId('catalog-kind-items')`; `page.getByTestId('catalog-item-category-standard-balls')` |
+| View an item | Item card, name, price, and stock | `item-card-{itemId}`, `item-name-{itemId}`, `item-price-{itemId}`, `item-stock-{itemId}` | `page.getByTestId('item-card-1')` |
 | Choose a Pokémon | Catalog card, name, price, available stock | `pokemon-card-{pokemonId}`, `pokemon-name-{pokemonId}`, `pokemon-price-{pokemonId}`, `pokemon-stock-{pokemonId}` | `page.getByTestId('pokemon-card-25')`; `page.getByTestId('pokemon-stock-25')` |
 | Add to cart | Item action and quantity | `pokemon-quantity-{pokemonId}`, `pokemon-add-to-cart-{pokemonId}` | `page.getByTestId('pokemon-add-to-cart-25')` |
 | Review cart | Drawer, item quantity, remove, proceed | `cart-drawer`, `cart-item-{pokemonId}`, `cart-item-quantity-{pokemonId}`, `cart-proceed-to-checkout` | `page.getByTestId('cart-item-25')`; `page.getByTestId('cart-proceed-to-checkout')` |
@@ -127,8 +129,9 @@ Known IDs should always use `page.getByTestId('pokemon-card-25')` directly. Do n
 |---|---|
 | App shell | `app-shell`, `app-header`, `app-main` |
 | Navigation and cart entry | `nav-catalog`, `nav-inventory`, `nav-purchases`, `nav-catalog-mobile`, `nav-inventory-mobile`, `nav-purchases-mobile`, `open-cart`, `sign-in`, `sign-out` |
-| Catalog controls and states | `catalog-search`, `catalog-in-stock-filter`, `catalog-sort`, `catalog-refresh`, `catalog-retry`, `catalog-service-error`, `catalog-type-{type}`, `catalog-results-summary`, `catalog-clear-filters`, `catalog-loading`, `catalog-empty`, `catalog-grid`, `catalog-pagination`, `catalog-page-previous`, `catalog-page-next`, `catalog-page-{number}` |
+| Catalog controls and states | `catalog-kind-pokemon`, `catalog-kind-items`, `catalog-search`, `catalog-in-stock-filter`, `catalog-sort`, `catalog-refresh`, `catalog-retry`, `catalog-service-error`, `catalog-type-{type}`, `catalog-item-category-{category}`, `catalog-results-summary`, `catalog-clear-filters`, `catalog-loading`, `catalog-empty`, `catalog-grid`, `catalog-pagination`, `catalog-page-previous`, `catalog-page-next`, `catalog-page-{number}` |
 | Catalog item | `pokemon-card-{pokemonId}`, `pokemon-name-{pokemonId}`, `pokemon-price-{pokemonId}`, `pokemon-stock-{pokemonId}`, `pokemon-quantity-{pokemonId}`, `pokemon-quantity-decrease-{pokemonId}`, `pokemon-quantity-increase-{pokemonId}`, `pokemon-add-to-cart-{pokemonId}` |
+| Item catalog item | `item-card-{itemId}`, `item-name-{itemId}`, `item-price-{itemId}`, `item-stock-{itemId}`, `item-kyc-{itemId}` |
 | Sign in | `login-dialog`, `login-email`, `login-password`, `login-submit`, `login-error`, `login-close` |
 | Cart | `cart-drawer`, `cart-empty`, `cart-close`, `cart-clear`, `cart-item-{pokemonId}`, `cart-item-quantity-{pokemonId}`, `cart-item-remove-{pokemonId}`, `cart-sign-in`, `cart-proceed-to-checkout` |
 | Checkout | `checkout-dialog`, `checkout-progress`, `checkout-confirm`, `checkout-close`, `checkout-success`, `checkout-errors`, `checkout-purchase-{purchaseId}` |
@@ -138,7 +141,7 @@ Known IDs should always use `page.getByTestId('pokemon-card-25')` directly. Do n
 | Trainer wallet | `wallet-balance` |
 | Feedback | `toast-{success|error|info}` |
 
-UI tests belong in `tests/testCases/ui/` and run as Playwright project `ui`, independently of the real-state/database setup and other API test projects. The UI suite intentionally contains one complete successful-purchase E2E case: it signs in, chooses an affordable in-stock Pokémon, and verifies the wallet debit, stock reduction, inventory quantity increase, and purchase history entry against values observed before checkout. Configure the target origin with `WEB_BASE_URL`; it defaults to `http://localhost:3002`. Run with `npm run test:ui` after making the target web server reachable. For example:
+UI tests belong in `tests/testCases/ui/` and run as Playwright project `ui`, independently of the real-state/database setup and other API test projects. The UI suite intentionally contains one complete successful-purchase E2E case: it signs in, chooses an affordable in-stock Pokémon, and verifies the wallet debit, stock reduction, inventory quantity increase, and purchase history entry against values observed before checkout. Configure the target origin with `WEB_BASE_URL`; it defaults to `http://localhost:4003`. Run with `npm run test:ui` after making the target web server reachable. For example:
 
 ```powershell
 $env:WEB_BASE_URL = 'https://web-under-test.example'
