@@ -11,6 +11,7 @@ Learning goals:
 - Use WireMock to simulate a BFF before it is ready and to mock external dependencies.
 - Practice MySQL schema, deterministic seed data, transactions, and repeatable environments.
 - Practice third-party HTTP integration, a durable database-backed work queue, bounded retries, batch workers, idempotency, and outage recovery with a real Express mock service.
+- Practice resilience testing across several dependencies (Shipping, Payment, KYC): timeouts, 5xx, lost responses, fail-closed vs degraded behavior, and race conditions on stock, wallet, and duplicate IDs.
 - Test pagination, query validation, business rules, purchase-ID retries, and later race conditions.
 - Maintain two complementary functional test layers: end-to-end business flows and endpoint-level API specification/validation tests.
 - Standardize local operations through a Makefile.
@@ -24,9 +25,11 @@ Learning goals:
 - BFF and PokéMart API services.
 - MySQL for shop-owned business data and durable shipment work/status.
 - A Node.js + Express Shipping Mock and a separate worker process for asynchronous third-party shipping integration.
+- A Stripe-style Payment Mock for wallet top-ups with idempotency and recovery of uncertain charges ([`11-payment-integration.md`](11-payment-integration.md)). No real money moves.
+- An internal KYC API service with three verification levels that gates purchases of some items ([`12-kyc.md`](12-kyc.md)).
 - Versioned Pokémon reference data based on https://github.com/PokeAPI/api-data.
 - WireMock for mocked-BFF contract tests and selected external dependencies.
-- Docker Compose, schema/seed scripts, OpenAPI specification, and Swagger UI for browsing it.
+- Docker Compose, schema/seed scripts, OpenAPI specifications, and the Scalar API reference for browsing them.
 - Separate mocked-BFF and real-system test runs.
 - Deterministic test-data setup, cleanup, and reset workflows suitable for repeatable functional tests and future performance runs.
 - Basic structured application logs and health/readiness endpoints from the first implementation.
@@ -36,7 +39,7 @@ Learning goals:
 
 ### Out of scope for the first iteration
 - Production-grade authentication/authorization, registration, password recovery, refresh/revocation, and login abuse controls.
-- Real-money transactions or real Pokémon trading.
+- Real-money transactions (the Payment Mock never contacts a real provider) or real Pokémon trading.
 - Live PokéAPI calls during ordinary test execution.
 - Kubernetes, cloud deployment, heavy load tests, or a full CI/CD pipeline.
 - Human-readable order numbers (for example `ORD-20261017-000123`). Purchases use a client-generated UUID as `purchaseId`.
@@ -60,6 +63,12 @@ The real integration path must not mock the BFF or PokéMart API. Mock only depe
 
 Real API validation and E2E cases live in their own suites and run against the configured BFF. `TEST_ENV=test|sit` selects URLs and test data from the matching environment file; Playwright projects select the test suite, not the environment.
 
+### Payment and KYC dependencies
+
+`PokéMart API -> Payment Mock (HTTP, Idempotency-Key = topUpId)` and `PokéMart API -> KYC API (HTTP, level check)`.
+
+Both are called outside database transactions. The payment recovery sweep runs in the worker process. A KYC outage blocks only listings that need KYC; a payment outage leaves the top-up `UNKNOWN` until recovery. Ports are listed in [`05-operations.md`](05-operations.md) §11.1.
+
 ### Shipping integration track
 
 `Playwright -> BFF -> PokéMart API + MySQL -> Shipping Worker -> Shipping Mock (HTTP)`
@@ -68,12 +77,14 @@ The purchase transaction records a pending shipment in MySQL. The worker sends i
 
 ### Responsibilities
 
-- **Web frontend** is the browser client. It calls the public BFF through same-origin `/api` routes rewritten by Next.js; it must not call the internal API directly. The development server runs on port `3002` outside Docker Compose.
+- **Web frontend** is the browser client. It calls the public BFF through same-origin `/api` routes rewritten by Next.js; it must not call the internal API directly. The development server runs on port `4003` outside Docker Compose.
 - **BFF** is the only public entry point. It validates the public contract, forwards requests (including `X-Request-Id` and the purchase request body) to the PokéMart API, and maps responses and errors to the public contract.
 - **PokéMart API** owns business rules, transactions, duplicate-purchase detection, and MySQL access.
 - **MySQL** is the durable store for all shop-owned business state, including pending shipment work and retry metadata.
 - **Shipping Worker** claims due shipment rows in bounded batches and performs HTTP calls outside database transactions.
 - **Shipping Mock** simulates an external provider over HTTP; it is not trusted as durable PokéMart state and does not share the PokéMart database.
+- **Payment Mock** simulates a card payment provider (PaymentIntent style). It owns charge state; PokéMart owns the wallet.
+- **KYC API** is an internal service that owns verification levels with its own data store; PokéMart owns only each listing's required level.
 
 ## 5. Technology choices
 
@@ -84,7 +95,7 @@ The purchase transaction records a pending shipment in MySQL. The worker sends i
 - MySQL 8.x with a pinned image tag
 - WireMock with a pinned image tag for existing mocked-BFF tests
 - Node.js + Express Shipping Mock in its own Docker Compose service
-- Swagger UI with a pinned image tag, serving `specs/openapi.yaml`
+- Scalar API reference (`scalarapi/api-reference`, pinned tag) rendering the BFF, PokéMart, KYC, Payment, and Shipping OpenAPI files
 - Docker Compose
 - npm
 
@@ -99,7 +110,10 @@ pokemart-api-lab/
 ├── apps/
 │   ├── bff/
 │   ├── pokemart-api/
-│   └── web/                    # Next.js frontend; run separately on port 3002
+│   ├── shipping-mock/
+│   ├── payment-mock/
+│   ├── kyc-api/
+│   └── web/                    # Next.js frontend; run separately on port 4003
 ├── database/
 │   ├── schema/
 │   ├── seed/

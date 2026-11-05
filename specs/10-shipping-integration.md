@@ -12,10 +12,10 @@ PokéMart owns purchases, shipment state, retry scheduling, and recovery. The pr
 Playwright API tests
        |
        v
-Public BFF :3001
+Public BFF :4001
        |
        v
-PokéMart API :3000 ---- MySQL
+PokéMart API :4000 ---- MySQL
        |                 | purchases
        |                 | shipments (durable work + status)
        v                 |
@@ -23,7 +23,7 @@ Shipping Worker ---------+
        |
        | HTTP (SHIPPING_BASE_URL)
        v
-Shipping Mock :3002 (container port; host port configurable)
+Shipping Mock :4002 (container port; host port configurable)
 ```
 
 - The BFF remains the only public entry point for client business journeys.
@@ -35,7 +35,7 @@ Shipping Mock :3002 (container port; host port configurable)
 
 ## 3. Shipping Mock HTTP contract
 
-Base URL inside Compose: `http://shipping-mock:3002`. The host-published port is configurable and must not be hard-coded in tests.
+Base URL inside Compose: `http://shipping-mock:4002`. The host-published port is configurable and must not be hard-coded in tests.
 
 ### Provider endpoints
 
@@ -193,7 +193,7 @@ Return the current local shipment state, not a live proxy to the provider. Sugge
 - Add counters for shipment attempts/results, retries, exhausted retries, queue depth, oldest pending age, provider latency, and provider errors. Keep labels low-cardinality; never label metrics by purchase ID or tracking number.
 
 Configuration (example names; all values validated on startup):
-- `SHIPPING_BASE_URL=http://shipping-mock:3002`
+- `SHIPPING_BASE_URL=http://shipping-mock:4002`
 - `SHIPPING_REQUEST_TIMEOUT_MS=1000`
 - `SHIPPING_MAX_ATTEMPTS=5`
 - `SHIPPING_BATCH_SIZE=10`

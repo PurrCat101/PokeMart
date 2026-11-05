@@ -4,9 +4,9 @@
 
 ### Pokémon reference data
 
-The local seed contains the Generation I PokéAPI REST API v2 response fields for Pokémon IDs 1-151. The checked-in SQL seed is the versioned snapshot retrieved on 2026-10-17; normal startup and tests do not make network calls. Review the PokeAPI license and attribution terms before redistributing this dataset.
+The local seed contains every main Pokédex Pokémon resource available in the pinned `PokeAPI/api-data` checkout (currently 1,025 IDs) and 2,222 canonical item names. The source's duplicate Roseli Berry resource is canonicalized to its lowest source ID so the unique shop-item model remains valid. The checked-in SQL seed is generated from commit `447bd5c378bf87da964bfe4dd7487a7bf1d97cbd`; normal startup and tests do not make network calls. Review the PokeAPI license and attribution terms before redistributing this dataset.
 
-Imported fields: source ID, name, base experience, types, and default front sprite URL when available. Base experience is retained in reference data but not included in catalog responses.
+Pokémon reference fields are source ID, name, base experience, types, and default front sprite URL. Item reference fields are source ID, name, PokéAPI cost, category, and default sprite URL. PokéAPI values are reference data only; price, stock, sale activation, and KYC requirement are owned by PokéMart.
 
 ### PokéMart-owned data
 
@@ -27,12 +27,17 @@ The schema must support the shop listing/reference relationship, wallet, Pokémo
 
 - `pokemon_reference`: source ID (PK), name, types, sprite URL. Read-only during tests.
 - `users`: stable user ID (PK), unique email, display name, nullable scrypt `password_hash`, active flag, and creation timestamp. The password hash is NULL for legacy profiles until credentials are provisioned.
-- `shop_listing`: pokemon source ID (PK/FK), price, stock, active flag. Lab-owned.
+- `shop_listing`: Pokémon source ID (PK/FK), price, stock, active flag, and `required_kyc_level` (0–2). Lab-owned.
+- `item_reference`: source ID (PK), name, PokéAPI cost, category, and sprite URL. Read-only snapshot.
+- `item_listing`: item source ID (PK/FK), price, stock, active flag, and `required_kyc_level` (0–2). Lab-owned.
 - `user_wallet`: user ID (PK/FK to `users`), balance. Balance must never go negative; at most one wallet per user.
 - `user_inventory`: user ID (FK to `users`) + pokemon source ID (FK to `pokemon_reference`) as a composite PK, quantity.
-- `purchases`: client-generated purchase UUID (PK), user ID (FK to `users`), Pokémon source ID (FK to `pokemon_reference`), quantity, unit price, total price, created timestamp. The primary key prevents a successfully processed purchase ID from being used a second time.
-- `purchase_items` is optional for the first iteration; a single-item purchase may be stored on `purchases`. Decide when the schema is finalized and record it here.
-There is no idempotency-key table. A client creates a UUID purchase ID before its first attempt and sends that same ID in the JSON body for retries of the same attempt. A committed `purchases.id` is the duplicate guard. Failed transactions roll back the purchase row and all wallet/stock/inventory changes, so the ID remains usable on retry.
+- `user_item_inventory`: user ID + item source ID as a composite PK, quantity. This keeps Pokémon and item ownership type-safe while the established Pokémon purchase API remains backward compatible.
+- `purchases`: client-generated purchase UUID (PK), user ID (FK to `users`), Pokémon source ID (FK to `pokemon_reference`), quantity, unit price, total price, created timestamp. The primary key prevents a successfully processed Pokémon purchase ID from being used a second time.
+- `item_purchases`: client-generated purchase UUID (PK), user ID (FK to `users`), item source ID (FK to `item_reference`), quantity, price snapshots, and created timestamp. It records completed item transactions separately from Pokémon purchases so shipment behavior remains Pokémon-only.
+- KYC levels are **not** stored in MySQL. They are owned by the KYC API (see [`12-kyc.md`](12-kyc.md)); only the listing's `required_kyc_level` (0–2) lives in `shop_listing` and `item_listing`.
+- `top_ups`: client-generated UUID (PK), user ID, integer THB amount, payment state, provider payment ID, recovery fields, and timestamps. `COMPLETED` is the only state that credits the wallet.
+There is no idempotency-key table. A client creates a UUID purchase ID before its first attempt and sends that same ID in the JSON body for retries of the same attempt. A committed `purchases.id` or `item_purchases.id` is the duplicate guard for its respective endpoint. Failed transactions roll back the purchase row and all wallet/stock/inventory changes, so the ID remains usable on retry.
 
 Requirements:
 - A fresh MySQL volume automatically initializes schema and baseline shop seed data.
@@ -51,9 +56,7 @@ Requirements:
 
 ### Reference-data setup
 
-Choose and document one approach:
-1. Commit a suitably scoped, versioned static snapshot from `PokeAPI/api-data`, respecting license and attribution requirements; or
-2. Provide an explicit setup/import step from a pinned local copy of that repository.
+The checked-in SQL seed and manifest are the runtime source of truth; no `api-data` checkout is required. For a deliberate future refresh, obtain a separately pinned PokeAPI/api-data checkout and run `node scripts/import-reference-data.mjs <path-to-api-data> --max=1351 --items`. It writes `010_reference_pokemon.sql`, `011_reference_items.sql`, `012_seed_catalog.sql`, and `data/reference-manifest.json`. Pokémon are always KYC 0; item KYC is explicitly assigned by item name. Generated SQL is committed.
 
 Normal startup and tests must not fetch the latest data from the internet. The lab must remain runnable when PokéAPI is unavailable.
 
@@ -72,3 +75,9 @@ The purchase transaction inserts the shipment row as `PENDING` atomically with p
 
 
 For the local/test provider's API contract, including status simulation controls, see [`shipping-mock-openapi.yaml`](shipping-mock-openapi.yaml). Customer-facing UI requirements are in [`09-frontend.md`](09-frontend.md).
+
+## 12. Payments and purchase gating
+
+Wallet balance changes only through a completed top-up or a committed purchase. A top-up is created in `PENDING`, calls the payment mock outside a transaction, and atomically changes to `COMPLETED` with the wallet credit. Ambiguous provider outcomes remain `UNKNOWN` and must not be credited until recovery verifies the provider result. See [`11-payment-integration.md`](11-payment-integration.md).
+
+Before a purchase, the service compares the listing's `required_kyc_level` with the level returned by the KYC API. A failure leaves wallet, stock, inventory, purchase history, and shipment state unchanged. `POST /api/items/purchases` owns item purchases; it does not create a shipment. See [`12-kyc.md`](12-kyc.md).

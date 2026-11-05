@@ -1,6 +1,6 @@
 # PokéMart API Automation Lab
 
-โปรเจ็กต์ตัวอย่างสำหรับฝึก API testing ด้วย Playwright และ TypeScript พร้อมเว็บแอป Next.js มี BFF, PokéMart API, MySQL, WireMock และ OpenAPI/Swagger UI โดยใช้ข้อมูล Pokémon แบบ static เพื่อให้ทดสอบซ้ำได้โดยไม่ต้องเรียก PokéAPI ทุกครั้ง
+โปรเจ็กต์ตัวอย่างสำหรับฝึก API testing ด้วย Playwright และ TypeScript พร้อมเว็บแอป Next.js มี BFF, PokéMart API, MySQL, WireMock และ OpenAPI/Scalar UI โดยใช้ข้อมูล Pokémon แบบ static เพื่อให้ทดสอบซ้ำได้โดยไม่ต้องเรียก PokéAPI ทุกครั้ง
 
 ## สถาปัตยกรรม
 
@@ -10,7 +10,8 @@
 
 - **BFF** เป็นทางเข้าสำหรับ client ที่ `/api` ตรวจ request, ส่งต่อไปยัง service และดูแล contract ฝั่ง public
 - **PokéMart API** อยู่ใต้ `/pokemart/v1` และเป็นเจ้าของ business rules, purchase, duplicate detection และการเข้าถึงฐานข้อมูล
-- **MySQL** เก็บข้อมูลร้าน, wallet, inventory, purchase และสถานะ/งาน shipment ที่ต้อง retry
+- **MySQL** เก็บข้อมูลร้าน (Pokémon และ item), wallet/top-up, inventory, purchase และสถานะ/งาน shipment ที่ต้อง retry (ข้อมูล KYC อยู่ใน KYC API ไม่ใช่ MySQL)
+- **Payment Mock** จำลอง PaymentIntent สำหรับ top-up แบบ idempotent โดยไม่มีเงินจริงเคลื่อนย้าย
 - **Shipping Mock** เป็น HTTP service จำลองผู้ให้บริการขนส่งภายนอก; **Shipping Worker** ทำ batch/retry แยกจาก request ของผู้ซื้อ
 - **WireMock** ใช้จำลอง BFF สำหรับ contract tests เท่านั้น การทดสอบ integration จริงต้องเรียก BFF และ service จริง
 - การทดสอบและการเริ่มระบบไม่ควรต้องเรียก PokéAPI แบบ live
@@ -35,31 +36,31 @@ docker compose up -d --build
 
 ```powershell
 docker compose ps
-Invoke-RestMethod http://localhost:3001/health
-Invoke-RestMethod http://localhost:3001/ready
-Invoke-RestMethod http://localhost:3000/ready
+Invoke-RestMethod http://localhost:4001/health
+Invoke-RestMethod http://localhost:4001/ready
+Invoke-RestMethod http://localhost:4000/ready
 ```
 
-ค่าเริ่มต้นของ host ports คือ BFF `3001`, PokéMart API `3000`, WireMock `8080`, Swagger UI `8081` และ MySQL `3306` หาก port MySQL ในเครื่องถูกใช้อยู่ ให้กำหนด `MYSQL_HOST_PORT` ใน `.env` เป็น port ว่างก่อน start ระบบ
+ค่าเริ่มต้นของ host ports: PokéMart API `4000`, BFF `4001`, Shipping Mock `4002`, Web `4003`, Payment Mock `4004`, KYC API `4005`, MySQL `4306`, WireMock `8080`, Scalar UI `8081` (ตารางเต็มอยู่ใน [`05-operations.md`](05-operations.md) §11.1) หาก port MySQL ในเครื่องถูกใช้อยู่ ให้กำหนด `MYSQL_HOST_PORT` ใน `.env` เป็น port ว่างก่อน start ระบบ
 
-## API และ Swagger
+## API และ Scalar
 
 | สิ่งที่เรียก | Base URL | Contract |
 |---|---|---|
-| Public BFF | `http://localhost:3001` | [`specs/openapi.yaml`](specs/openapi.yaml) |
-| Internal PokéMart API | `http://localhost:3000` | [`specs/pokemart-openapi.yaml`](specs/pokemart-openapi.yaml) |
-| Swagger UI | `http://localhost:8081` | เลือกดู BFF public API หรือ PokéMart internal API ได้ |
+| Public BFF | `http://localhost:4001` | [`specs/openapi.yaml`](specs/openapi.yaml) |
+| Internal PokéMart API | `http://localhost:4000` | [`specs/pokemart-openapi.yaml`](specs/pokemart-openapi.yaml) |
+| Scalar API reference | `http://localhost:8081` | เลือกดู BFF public API, PokéMart internal API, KYC, Payment mock และ Shipping mock จากเมนูด้านซ้าย |
 | WireMock | `http://localhost:8080` | Mappings ใน `wiremock/mappings/` สำหรับ mocked-BFF suite |
 | Shipping Mock | host port ที่กำหนดใน Compose | [`shipping-mock-openapi.yaml`](shipping-mock-openapi.yaml) และ [`10-shipping-integration.md`](10-shipping-integration.md) |
 
-**สถานะ Swagger:** มี OpenAPI แยกสำหรับ BFF และ internal API แล้ว Swagger UI แสดงทั้งสองสเปกผ่าน dropdown; contract ของ service ระบุ schemas และ error responses แยกจาก public contract
+**สถานะ API docs:** ใช้ Scalar แทน Scalar UI; Compose mount ไฟล์ OpenAPI ทั้งห้าไฟล์ที่ `/docs` และ Scalar สร้างรายการให้อัตโนมัติ (`make docs` แสดง URL)
 
 ### Endpoints ที่มีใน contract
 
 Public API:
 
 - `GET /api/pokemon` และ `GET /api/pokemon/{id}`
-- `GET /api/wallet`
+- `GET /api/wallet`, `POST /api/wallet/top-ups`, `GET /api/wallet/top-ups/{topUpId}` และ `GET /api/kyc/status`
 - `GET /api/inventory`
 - `GET /api/purchases` และ `GET /api/purchases/{id}`
 - `GET /api/purchases/{id}/shipment`
@@ -86,13 +87,13 @@ npm run test:e2e
 - เลือก URL และ test data ด้วย `TEST_ENV` (`test` เป็นค่าเริ่มต้น หรือ `sit`) ผ่าน `tests/configs/.env.test` และ `.env.sit` เช่น `$env:TEST_ENV='sit'; npm test` ใน PowerShell
 - ผลจาก mock ไม่เท่ากับการยืนยันพฤติกรรมของระบบจริง ขอบเขตการทดสอบแยกไว้ใน [`04-testing.md`](04-testing.md)
 
-คำสั่ง `make` ที่มีให้ใช้ ได้แก่ `make up`, `make down`, `make ps`, `make logs`, `make swagger`, `make test-*`, `make db-seed` และ `make db-reset` (ขึ้นกับ GNU Make ในเครื่อง) โดย `make down` ไม่ลบข้อมูล ส่วน `make db-reset` ลบ Compose volumes และข้อมูลฐานข้อมูลในเครื่อง
+คำสั่ง `make` ที่มีให้ใช้ ได้แก่ `make up`, `make down`, `make ps`, `make logs`, `make docs`, `make test-*`, `make db-seed` และ `make db-reset` (ขึ้นกับ GNU Make ในเครื่อง) โดย `make down` ไม่ลบข้อมูล ส่วน `make db-reset` ลบ Compose volumes และข้อมูลฐานข้อมูลในเครื่อง
 
-## ฐานข้อมูลและข้อมูล Pokémon
+## ฐานข้อมูลและข้อมูลอ้างอิง PokéAPI
 
-ฐานข้อมูลเริ่มต้นจาก SQL ใน `database/schema/` และ `database/seed/` เมื่อสร้าง MySQL volume ใหม่เท่านั้น seed ปัจจุบันมี Pokémon Gen I 151 ตัวจาก PokeAPI v2 พร้อมราคา/stock จำลองของ PokéMart
+ฐานข้อมูลเริ่มต้นจาก SQL ใน `database/schema/` และ `database/seed/` เมื่อสร้าง MySQL volume ใหม่เท่านั้น seed มี Pokémon 1,025 ตัวและ item 2,223 รายการจาก PokeAPI snapshot ที่ pin commit แล้ว พร้อมราคา/stock/KYC จำลองของ PokéMart
 
-ราคาใช้ base experience คำนวณแล้วปัดทีละ 50 และจำกัดช่วง 200–1500 ส่วน stock ลดลงตาม experience tier พร้อม deterministic variation จาก Pokémon ID จึงมีความหลากหลายแต่สร้าง seed ซ้ำได้ผลเดิม ข้อมูลอยู่ใน [001_seed_shop_data.sql](database/seed/001_seed_shop_data.sql) และ runtime/test ไม่เรียก PokéAPI
+ราคา Pokémon ใช้ base experience คำนวณแล้วปัดทีละ 50 และราคา item ใช้ PokéAPI cost เป็นฐาน; Pokémon ทุกตัวเป็น KYC 0 ขณะที่ KYC 1/2 สงวนไว้สำหรับ item ระดับสูง เช่น Master Ball และยาระดับสูง ข้อมูลที่ generate อยู่ใน `010_reference_pokemon.sql`, `011_reference_items.sql` และ `012_seed_catalog.sql`; runtime/test ไม่เรียก PokéAPI
 
 ที่มาข้อมูล: [PokeAPI REST API](https://pokeapi.co/). ตรวจสอบ license/attribution ก่อนนำ snapshot ไปแจกจ่ายต่อ
 
@@ -111,10 +112,10 @@ npm run test:e2e
 - Database volume เดิมต้อง migrate หนึ่งครั้งด้วย `database/migrations/001_rename_player_identity.sql`; volume ใหม่ได้ schema ใหม่ทันที
 - Volume เดิมที่มีตาราง `idempotency_keys` ให้รัน `database/migrations/002_drop_idempotency_keys.sql` หลัง migration 001
 
-### Pokémon seed
+### Reference-data seed
 
-- มีข้อมูล Generation I 151 ตัวจาก PokeAPI v2 พร้อม source ID, name, types และ sprite URL
-- ราคา/stock เป็นข้อมูลจำลองของร้านและสร้างซ้ำได้ตามกติกาใน [database/README.md](database/README.md)
+- มี Pokémon 1,025 ตัวและ item ชื่อไม่ซ้ำ 2,222 รายการจาก snapshot ที่ generate และ commit แล้ว; ไม่ต้องเก็บ clone `api-data` ไว้ในโปรเจ็กต์
+- ราคา/stock เป็นข้อมูลจำลองของร้าน; Pokémon ทุกตัว KYC 0 และ KYC ระดับสูงใช้กับ items ตามกติกาใน [database/README.md](database/README.md)
 
 ### BFF DTO
 
@@ -141,6 +142,8 @@ npm run test:e2e
 | [`06-acceptance-and-decisions.md`](06-acceptance-and-decisions.md) | Acceptance criteria และ decisions |
 | [`09-frontend.md`](09-frontend.md) | Web frontend, API boundary และ local runtime |
 | [`10-shipping-integration.md`](10-shipping-integration.md) | Shipping provider, shipment lifecycle, retry/batch, recovery และ UI/API test scenarios |
+| [`11-payment-integration.md`](11-payment-integration.md) | Payment mock, wallet top-up และ idempotent recovery contract |
+| [`12-kyc.md`](12-kyc.md) | KYC levels และ purchase gating |
 | [`shipping-mock-openapi.yaml`](shipping-mock-openapi.yaml) | Express Shipping Mock API รวม endpoint จำลอง fault และปรับสถานะการจัดส่ง |
 | [`PROGRESS.md`](PROGRESS.md) | สถานะงานและ validation ที่ทำแล้ว |
 

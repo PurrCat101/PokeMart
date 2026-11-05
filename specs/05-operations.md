@@ -2,34 +2,33 @@
 
 ## 11. Docker Compose requirements
 
-Compose defines `mysql`, `wiremock`, `pokemart-api`, `shipping-worker`, `shipping-mock`, `bff`, and `swagger-ui`.
+Compose defines `mysql`, `wiremock`, `pokemart-api`, `shipping-worker` (also runs the payment recovery sweep), `shipping-mock`, `payment-mock`, `kyc-api`, `bff`, and `api-reference` (Scalar).
 
-Requirements:
-- Persistent MySQL volume for normal runs.
-- SQL initialization scripts mounted into the supported initialization directory.
-- MySQL health check and clear startup behavior when the database is unavailable.
-- Internal Docker network and published ports needed by host-run tests.
-- WireMock mappings remain dedicated to mocked-BFF contract tests; Shipping uses a separate Express HTTP mock service.
-- `shipping-worker` depends on MySQL readiness and can start even if the provider is unavailable; queued work is durable and retried.
-- The Shipping Mock has its own health check and test-only fault-control endpoints that are not exposed by the public BFF.
-- Pinned image versions and no production secrets or data.
+## 11.1 Service ports (single source of truth)
 
-Swagger UI example (pin the image to a specific v5 patch release):
+Every other document refers to this table. Change a port here first. Inside Compose a service listens on the same number it publishes on the host (identity mapping), so a service started directly on the host (`npm run start:api`) behaves the same.
 
-```yaml
-swagger-ui:
-  image: swaggerapi/swagger-ui:v5.x.x
-  ports:
-    - "8081:8080"
-  environment:
-    URLS: '[{"url":"/openapi.yaml","name":"BFF Public API"},{"url":"/pokemart-openapi.yaml","name":"PokéMart Internal API"}]'
-    URLS_PRIMARY_NAME: BFF Public API
-  volumes:
-    - ./specs/openapi.yaml:/usr/share/nginx/html/openapi.yaml:ro
-    - ./specs/pokemart-openapi.yaml:/usr/share/nginx/html/pokemart-openapi.yaml:ro
+| Service | Port | Env override (host port) | Used by | Notes |
+|---|---|---|---|---|
+| PokéMart API | 4000 | `POKEMART_API_HOST_PORT` | BFF, workers | Internal. Not a public entry point. |
+| BFF | 4001 | `BFF_HOST_PORT` | Web, Playwright | Only public API. |
+| Shipping Mock | 4002 | `SHIPPING_MOCK_HOST_PORT` | Shipping worker | 3rd-party provider simulation. |
+| Web frontend (Next.js) | 4003 | — | Browser, Playwright `ui` | Runs outside Compose (`npm run dev`). |
+| Payment Mock | 4004 | `PAYMENT_MOCK_HOST_PORT` | PokéMart API, recovery worker | Stripe-style provider simulation. |
+| KYC API | 4005 | `KYC_API_HOST_PORT` | PokéMart API | Internal service with its own data. |
+| MySQL | 3306 in container | `MYSQL_HOST_PORT`, default **4306** | PokéMart API, test setup | Container keeps 3306; test env files use `MYSQL_PORT=4306`. |
+| WireMock | 8080 | `WIREMOCK_HOST_PORT` | Mocked-BFF tests | |
+| API reference (Scalar) | 8081 (container 8080) | `API_REFERENCE_HOST_PORT` | Browser | Renders `specs/openapi.yaml`. Replaces Scalar. |
+
+**Why 4xxx and not 3xxx.** On Windows, Hyper-V/WSL/Docker Desktop reserve ranges of TCP ports at boot, and binding inside one fails with `EACCES` ("An attempt was made to access a socket in a way forbidden by its access permissions") even though nothing is listening. On the reference machine `2882–3281` and `3307–3406` were reserved, which blocked every 3000-series lab port and MySQL's old host port 3307. List the reserved ranges with:
+
+```powershell
+netsh interface ipv4 show excludedportrange protocol=tcp
 ```
 
-Run Playwright on the host initially to simplify debugging. Containerizing the test runner is a later enhancement.
+If a lab port falls inside a reserved range, either override its host port through the env variable above (and the matching `*_BASE_URL` in `.env` / `tests/configs/.env.*`), or, from an elevated shell, run `net stop winnat` then `net start winnat` to release the ranges. Keep every lab port out of reserved ranges; do not assume the ranges are stable between reboots.
+
+Inside Compose services use service names (`http://payment-mock:4004`, `http://kyc-api:4005`). Host-run tests use host ports. No two entries may share a host port.
 
 ## 12. Observability and performance-test readiness
 
@@ -75,12 +74,17 @@ Performance testing is a later phase, but the system must support it:
 Use `.env.example` without real secrets:
 
 ```dotenv
-BFF_BASE_URL=http://localhost:3001
-POKEMART_API_BASE_URL=http://localhost:3000
+BFF_BASE_URL=http://localhost:4001
+POKEMART_API_BASE_URL=http://localhost:4000
 WIREMOCK_BASE_URL=http://localhost:8080
-SWAGGER_UI_URL=http://localhost:8081
+API_REFERENCE_URL=http://localhost:8081
 MYSQL_HOST=localhost
-MYSQL_PORT=3306
+MYSQL_PORT=4306
+MYSQL_HOST_PORT=4306
+PAYMENT_BASE_URL=http://localhost:4004
+KYC_BASE_URL=http://localhost:4005
+KYC_API_KEY=local-only-kyc-key
+KYC_REQUEST_TIMEOUT_MS=2000
 MYSQL_DATABASE=pokemart_lab
 MYSQL_USER=pokemart_user
 MYSQL_PASSWORD=change_me_for_local_development
@@ -102,7 +106,7 @@ The Makefile is the documented entry point for common local workflows. It wraps 
 | `make down` | Stop the core stack without deleting named volumes |
 | `make ps` | Show container status |
 | `make logs` | Follow core application and service logs |
-| `make swagger` | Print the Swagger UI URL and confirm it responds |
+| `make swagger` | Print the Scalar URL and confirm it responds |
 | `make test` | Run the default functional suite chosen by project configuration |
 | `make test-mocked` | Run contract tests against the WireMock BFF |
 | `make test-api` | Run endpoint-level API validation tests against the selected real target |

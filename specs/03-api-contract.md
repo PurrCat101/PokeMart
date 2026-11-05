@@ -83,8 +83,11 @@ Validation and business rules, checked in this order:
 3. A committed purchase with the same `purchaseId` already exists → `409 PURCHASE_DUPLICATE`.
 4. Pokémon exists in the catalog → otherwise `404 POKEMON_NOT_FOUND`.
 5. Pokémon has an active shop listing → otherwise `409 POKEMON_NOT_FOR_SALE`.
-6. Stock ≥ quantity → otherwise `409 INSUFFICIENT_STOCK`.
-7. Wallet balance ≥ unit price × quantity → otherwise `422 INSUFFICIENT_FUNDS`.
+6. The caller's KYC level satisfies the listing's `required_kyc_level` (always 0 for Pokémon, so this passes without calling the KYC service) → otherwise `403 KYC_LEVEL_REQUIRED`. See [`12-kyc.md`](12-kyc.md) §6.
+7. Stock ≥ quantity → otherwise `409 INSUFFICIENT_STOCK`.
+8. Wallet balance ≥ unit price × quantity → otherwise `422 INSUFFICIENT_FUNDS`.
+
+`POST /api/items/purchases` (body `{ purchaseId, itemId, quantity }`) follows the same order with `ITEM_PURCHASE_DUPLICATE`, `ITEM_NOT_FOUND`, `ITEM_NOT_FOR_SALE`, and a real KYC check. It creates no shipment. Item purchases are read back with `GET /api/items/purchases/{id}`.
 
 Effects of a successful purchase, all in one database transaction:
 
