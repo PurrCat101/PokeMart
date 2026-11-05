@@ -1,0 +1,14 @@
+{
+  "source": "PokeAPI/api-data",
+  "commit": "447bd5c378bf87da964bfe4dd7487a7bf1d97cbd",
+  "generatedAt": "2026-10-23T06:38:18.152Z",
+  "pokemon": {
+    "count": 1025,
+    "maxId": 1351,
+    "sha256": "8f8333c9fdb14b2fdef9d15ca4033074b541d8616f5815b9c79b559c81cb5640"
+  },
+  "items": {
+    "count": 2222,
+    "sha256": "2b5eaf8814f6a863fa5e68a12b4fee0930c8a3867202866c2ea6215f223efda5"
+  }
+}

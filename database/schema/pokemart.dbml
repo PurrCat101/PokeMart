@@ -18,13 +18,39 @@ Table shop_listing {
   price int [not null]
   stock int [not null]
   active boolean [not null, default: true]
+  required_kyc_level "tinyint unsigned" [not null, default: 0]
 
   checks {
     `price >= 0` [name: 'chk_listing_price']
     `stock >= 0` [name: 'chk_listing_stock']
+    `required_kyc_level between 0 and 2` [name: 'chk_listing_kyc']
   }
 
   Note: 'At most one shop listing per Pokémon. Price and stock are PokéMart-owned values.'
+}
+
+Table item_reference {
+  source_id int [pk, not null]
+  name varchar(128) [not null, unique]
+  pokeapi_cost "int unsigned" [not null, default: 0]
+  category varchar(128)
+  sprite_url varchar(512)
+
+  Note: 'Seeded, canonicalized PokeAPI item snapshot.'
+}
+
+Table item_listing {
+  item_source_id int [pk, not null]
+  price int [not null]
+  stock int [not null]
+  active boolean [not null, default: true]
+  required_kyc_level "tinyint unsigned" [not null, default: 0]
+
+  checks {
+    `price >= 0` [name: 'chk_item_listing_price']
+    `stock >= 0` [name: 'chk_item_listing_stock']
+    `required_kyc_level between 0 and 2` [name: 'chk_item_listing_kyc']
+  }
 }
 
 Table users {
@@ -61,6 +87,20 @@ Table user_inventory {
   }
 }
 
+Table user_item_inventory {
+  user_id varchar(64) [not null]
+  item_source_id int [not null]
+  quantity int [not null]
+
+  indexes {
+    (user_id, item_source_id) [pk]
+  }
+
+  checks {
+    `quantity > 0` [name: 'chk_item_inventory_quantity']
+  }
+}
+
 Table purchases {
   id char(36) [pk, not null, note: 'Client-generated purchase UUID; committed IDs are unique.']
   user_id varchar(64) [not null]
@@ -81,9 +121,32 @@ Table purchases {
   Note: 'Purchase history snapshots pricing and references the Pokémon, not the shop listing.'
 }
 
+Table item_purchases {
+  id char(36) [pk, not null, note: 'Client-generated UUID; committed IDs are unique for item purchases.']
+  user_id varchar(64) [not null]
+  item_source_id int [not null]
+  quantity int [not null]
+  unit_price int [not null, note: 'Price snapshot at purchase time.']
+  total_price int [not null, note: 'Price snapshot at purchase time.']
+  created_at timestamp(3) [not null, default: `CURRENT_TIMESTAMP(3)`]
+
+  indexes {
+    (user_id, created_at, id) [name: 'idx_item_purchase_user_created', note: 'created_at and id are DESC in the MySQL schema']
+  }
+
+  checks {
+    `quantity between 1 and 99` [name: 'chk_item_purchase_quantity']
+  }
+}
+
 Ref fk_listing_pokemon: pokemon_reference.source_id - shop_listing.pokemon_source_id
+Ref fk_item_listing_reference: item_reference.source_id - item_listing.item_source_id
 Ref fk_inventory_pokemon: pokemon_reference.source_id < user_inventory.pokemon_source_id
+Ref fk_item_inventory_item: item_reference.source_id < user_item_inventory.item_source_id
 Ref fk_purchase_pokemon: pokemon_reference.source_id < purchases.pokemon_source_id
+Ref fk_item_purchase_item: item_reference.source_id < item_purchases.item_source_id
 Ref fk_wallet_user: users.user_id - user_wallet.user_id
 Ref fk_inventory_user: users.user_id < user_inventory.user_id
+Ref fk_item_inventory_user: users.user_id < user_item_inventory.user_id
 Ref fk_purchase_user: users.user_id < purchases.user_id
+Ref fk_item_purchase_user: users.user_id < item_purchases.user_id
