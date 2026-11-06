@@ -61,7 +61,43 @@ export function kycIssue(line: CartItem, kycLevel: KycLevel | null): "blocked" |
   return kycLevel < required ? "blocked" : null;
 }
 
-export const KYC_LEVEL_NAMES: Record<number, string> = { 0: "None", 1: "Basic", 2: "Full" };
+/**
+ * What a customer sees instead of "KYC level N". The tiers work like an exchange account: an unverified
+ * account can browse and buy ordinary things, and higher tiers unlock higher-value items.
+ * The numbers (0 / 1 / 2) are the API's `levelValue`; they never appear in the UI.
+ */
+const VERIFICATION_NAMES: Record<number, string> = {
+  0: "not verified",
+  1: "basic verification",
+  2: "advanced verification",
+};
+
+const VERIFICATION_NAMES_TH: Record<number, string> = {
+  0: "ยังไม่ได้ยืนยันตัวตน",
+  1: "ยืนยันตัวตนเบื้องต้น",
+  2: "ยืนยันตัวตนขั้นสูง",
+};
+
+/** e.g. "advanced verification" (lower case, for use inside a sentence). */
+export function verificationName(level: number): string {
+  return VERIFICATION_NAMES[level] ?? VERIFICATION_NAMES[2];
+}
+
+/** e.g. "Advanced verification" (for badges and headings). */
+export function verificationTitle(level: number): string {
+  const name = verificationName(level);
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+/** Thai wording for messages that are already shown in Thai. */
+export function verificationNameTh(level: number): string {
+  return VERIFICATION_NAMES_TH[level] ?? VERIFICATION_NAMES_TH[2];
+}
+
+/** "Your account is not verified yet" / "Your account has basic verification". */
+export function yourAccountSentence(level: number): string {
+  return level === 0 ? "Your account is not verified yet" : `Your account has ${verificationName(level)}`;
+}
 
 /**
  * Reads whatever is in localStorage. Older carts have no `kind`; those lines are Pokémon.

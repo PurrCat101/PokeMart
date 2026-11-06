@@ -35,7 +35,7 @@ function userMessage(code: string, fallback: string): string {
     INTERNAL_ERROR: "เกิดข้อผิดพลาดบางอย่าง กรุณาลองใหม่ภายหลัง",
     INSUFFICIENT_FUNDS: "ยอดเงินในกระเป๋าไม่เพียงพอ",
     INSUFFICIENT_STOCK: "สินค้าในสต็อกไม่เพียงพอ",
-    KYC_LEVEL_REQUIRED: "ระดับ KYC ของคุณยังไม่เพียงพอสำหรับสินค้านี้",
+    KYC_LEVEL_REQUIRED: "ต้องยืนยันตัวตนเพิ่มเติมก่อนจึงจะซื้อสินค้านี้ได้",
     UNAUTHORIZED: "กรุณาเข้าสู่ระบบก่อนดำเนินการ",
     INVALID_CREDENTIALS: "อีเมลหรือรหัสผ่านไม่ถูกต้อง",
   };

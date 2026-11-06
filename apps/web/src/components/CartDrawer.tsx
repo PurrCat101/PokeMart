@@ -5,7 +5,8 @@ import { TrashIcon, CartIcon, PokeballIcon, BackpackIcon, UserIcon } from "./ico
 import { QuantityStepper } from "./QuantityStepper";
 import { Alert, Button, IconButton, Modal, ModalHeader, formatPokemonId, money, titleCase } from "./ui";
 import {
-  KYC_LEVEL_NAMES,
+  verificationName,
+  yourAccountSentence,
   type KycLevel,
   cartTestId,
   kycIssue,
@@ -39,9 +40,9 @@ function KycNote({ line, user, kycLevel }: { line: CartItem; user: AuthUser | nu
   if (required === 0) return null;
   const issue = user ? kycIssue(line, kycLevel) : null;
   const tone = issue === "blocked" ? "text-danger" : "text-warn";
-  let text = `Needs KYC level ${required} (${KYC_LEVEL_NAMES[required]})`;
-  if (issue === "blocked") text = `Needs KYC level ${required}; yours is ${kycLevel}. Can't be purchased yet.`;
-  else if (issue === "unknown") text = `Needs KYC level ${required}. We couldn't check yours right now.`;
+  let text = `Needs ${verificationName(required)}`;
+  if (issue === "blocked") text = `Needs ${verificationName(required)}. ${yourAccountSentence(kycLevel ?? 0)}, so this can't be bought yet.`;
+  else if (issue === "unknown") text = `Needs ${verificationName(required)}. We couldn't check your account's verification right now.`;
   return (
     <p data-testid={cartTestId(line, "kyc")} className={`mt-1 flex items-start gap-1.5 text-xs ${tone}`}>
       <UserIcon className="mt-0.5 h-3 w-3 shrink-0" />
@@ -218,13 +219,13 @@ export function CartDrawer({
             </Alert>
           )}
           {blockedLines.length > 0 && (
-            <Alert tone="danger" title="Identity verification needed" data-testid="cart-kyc-warning">
-              Remove {blockedLines.map(lineName).join(", ")} or raise your KYC level to continue.
+            <Alert tone="danger" title="More verification needed" data-testid="cart-kyc-warning">
+              Remove {blockedLines.map(lineName).join(", ")} from your bag, or complete more verification to buy {blockedLines.length === 1 ? "it" : "them"}.
             </Alert>
           )}
           {blockedLines.length === 0 && unknownLines.length > 0 && (
-            <Alert tone="warn" title="Couldn't check your KYC level" data-testid="cart-kyc-warning">
-              Some items need verification. You can still try; the order is rejected if your level is too low.
+            <Alert tone="warn" title="Couldn't check your verification" data-testid="cart-kyc-warning">
+              Some items need extra verification. You can still try; the order is rejected if your account isn&apos;t verified enough.
             </Alert>
           )}
 
