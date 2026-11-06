@@ -6,6 +6,7 @@
   "scripts": {
     "build": "npm run build --workspace=@pokemart/bff --workspace=@pokemart/api --workspace=@pokemart/payment-mock --workspace=@pokemart/kyc-api",
     "build:web": "npm run build --workspace=@pokemart/web",
+    "lint:web": "npm run lint --workspace=@pokemart/web",
     "dev": "npm run dev --workspace=@pokemart/web",
     "start:web": "npm run start --workspace=@pokemart/web",
     "start:bff": "npm run start --workspace=@pokemart/bff",
