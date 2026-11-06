@@ -1,4 +1,4 @@
-.PHONY: help install build lint up down ps logs docs swagger test test-all test-mocked test-api test-pokeapi test-purchase-retry test-e2e db-seed db-migrate db-status db-adopt db-reset fresh
+.PHONY: help install build lint up down ps logs docs swagger test test-all test-observability test-mocked test-api test-pokeapi test-purchase-retry test-e2e db-seed db-migrate db-status db-adopt db-reset fresh observe
 
 help: ## Show available local-lab commands (db-reset deletes local data)
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-20s %s\n", $$1, $$2}'
@@ -17,11 +17,17 @@ up: ## Start the core stack and wait for it to become ready
 	docker compose up -d --build --wait --remove-orphans
 	docker compose exec -T bff curl -s http://localhost:4001/ready
 
-down: ## Stop the core stack without deleting volumes
-	docker compose down
+observe: ## Start everything plus Grafana, Loki and Prometheus (profile observability)
+	docker compose --profile observability up -d --build --wait --remove-orphans
+	docker compose exec -T bff curl -s http://localhost:4001/ready
+	@echo ""
+	@echo "Grafana: http://localhost:4300 (change with GRAFANA_HOST_PORT)"
+
+down: ## Stop everything, including Grafana/Loki/Prometheus, without deleting volumes
+	docker compose --profile '*' down
 
 fresh: ## DESTRUCTIVE: wipe all local data, then start everything clean (down -v + up)
-	docker compose down -v
+	docker compose --profile '*' down -v
 	$(MAKE) up
 
 ps: ## Show container status
@@ -42,6 +48,9 @@ test-all: ## Lint, build, start the stack, run the whole Playwright suite, then 
 	$(MAKE) lint
 	$(MAKE) up
 	@npm test; status=$$?; $(MAKE) down; exit $$status
+
+test-observability: ## Metrics tests; log and Grafana tests run only if `make observe` is up
+	npm run test:observability
 
 test-mocked: ## Run contract tests against WireMock
 	npm run test:mocked

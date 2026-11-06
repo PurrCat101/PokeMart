@@ -19,6 +19,7 @@
 | Shipping Worker | Background process / Docker | Worker อ่านคิวงาน `shipments` จาก MySQL ยิง provider HTTP และ sync delivery status |
 | WireMock | `http://localhost:8080` | จำลอง public API สำหรับ contract tests |
 | Scalar API reference | `http://localhost:8081` | เลือกดู OpenAPI ของ BFF, internal API, KYC, Payment และ Shipping mock |
+| Grafana (ทางเลือก) | `http://localhost:4300` | เปิดด้วย `make observe` ดู metric, log และค้น request ID ข้ามชั้น (BFF → API) เปิดเฉพาะ `127.0.0.1` |
 | MySQL | `localhost:4306` (container 3306) | เก็บ catalog, wallet, inventory, purchases และ shipments |
 
 ## 1. Prerequisites

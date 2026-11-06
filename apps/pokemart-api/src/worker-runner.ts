@@ -1,8 +1,10 @@
 import { ShippingWorker } from './shipping-worker.js';
 import { PaymentRecoveryWorker } from './payment-recovery-worker.js';
+import { startMetricsServer } from './worker-metrics.js';
 
 const worker = new ShippingWorker();
 const paymentWorker = new PaymentRecoveryWorker();
+const metricsServer = startMetricsServer(worker);
 
 console.log('[shipping-worker-process] Starting shipping worker process...');
 worker.start().catch((err) => {
@@ -18,6 +20,7 @@ const gracefulShutdown = async () => {
   console.log('[shipping-worker-process] Shutting down worker...');
   await worker.stop();
   await paymentWorker.stop();
+  metricsServer.close();
   process.exit(0);
 };
 

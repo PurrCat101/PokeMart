@@ -54,5 +54,11 @@ export default defineConfig({
       dependencies: ['real-state-setup'],
       use: { baseURL: testConfig.bffBaseUrl },
     },
+    {
+      // Metrics tests need only the services. Log and Grafana tests skip themselves unless `make observe` is running.
+      name: 'observability',
+      testMatch: ['observability/**/*.spec.ts'],
+      use: { baseURL: testConfig.bffBaseUrl },
+    },
   ],
 });

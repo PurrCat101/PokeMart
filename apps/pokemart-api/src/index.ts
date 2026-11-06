@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import express, { NextFunction, Request, Response } from 'express';
+import { registry, observeRequest } from './metrics.js';
 import mysql from 'mysql2/promise';
 
 type Row = Record<string, any>;
@@ -187,7 +188,10 @@ function asTopUp(row: Row) { return { topUpId: row.top_up_id, amount: Number(row
 app.use((req, res, next) => {
   const id = requestId(req); res.locals.requestId = id; res.setHeader('X-Request-Id', id);
   const start = Date.now();
-  res.on('finish', () => log({ severity: 'info', requestId: id, method: req.method, route: req.route?.path ?? req.path, statusCode: res.statusCode, durationMs: Date.now() - start }));
+  res.on('finish', () => {
+    observeRequest(req.method, req.route?.path, res.statusCode, (Date.now() - start) / 1000);
+    if (req.route?.path !== '/metrics') log({ severity: 'info', requestId: id, method: req.method, route: req.route?.path ?? req.path, statusCode: res.statusCode, durationMs: Date.now() - start });
+  });
   next();
 });
 app.use((req, res, next) => {
@@ -209,6 +213,11 @@ app.use((req, _res, next) => {
 app.use(express.json({ strict: false }));
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+// Operational endpoint for Prometheus; intentionally not part of the OpenAPI contract.
+app.get('/metrics', async (_req, res) => {
+  res.set('Content-Type', registry.contentType);
+  res.send(await registry.metrics());
+});
 app.get('/ready', async (_req, res) => {
   try {
     await pool.query('SELECT 1');
