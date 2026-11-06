@@ -396,6 +396,31 @@ paths:
           content: { application/json: { schema: { $ref: '#/components/schemas/KycStatus' } } }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '503': { $ref: '#/components/responses/Error' }
+  /api/kyc/submissions:
+    post:
+      tags: [Account]
+      summary: Submit identity details for verification
+      description: Moves the account to `PENDING_REVIEW` at its current level. While under review, every purchase is rejected with `403 KYC_PENDING_REVIEW`. There is no automatic approval; the decision is made out of band (test-only in the lab).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdRequest'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/KycSubmissionRequest' }
+      responses:
+        '202':
+          description: Submission accepted; the account is now under review
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content: { application/json: { schema: { $ref: '#/components/schemas/KycStatus' } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
   /api/wallet/top-ups:
     post:
       tags: [Wallet]
@@ -532,12 +557,21 @@ components:
   schemas:
     KycStatus:
       type: object
-      required: [level, levelValue, status, updatedAt]
+      required: [level, status, updatedAt]
       properties:
-        level: { type: string, enum: [NONE, BASIC, FULL] }
-        levelValue: { type: integer, enum: [0, 1, 2] }
+        level: { type: integer, enum: [0, 1, 2], description: '0 = not verified, 1 = basic, 2 = advanced.' }
         status: { type: string, enum: [ACTIVE, PENDING_REVIEW, REJECTED] }
         updatedAt: { type: string, format: date-time }
+    KycSubmissionRequest:
+      type: object
+      additionalProperties: false
+      required: [fullName, nationalId, dateOfBirth, phone, address]
+      properties:
+        fullName: { type: string, minLength: 2, maxLength: 100 }
+        nationalId: { type: string, pattern: '^[0-9]{13}$', description: 'Thai national ID; the last digit must be the correct check digit.' }
+        dateOfBirth: { type: string, format: date, description: 'The applicant must be at least 18 years old.' }
+        phone: { type: string, pattern: '^0[0-9]{9}$' }
+        address: { type: string, minLength: 10, maxLength: 300 }
     ItemPage:
       type: object
       required: [totalCount, page, items]
@@ -846,6 +880,9 @@ components:
                 - PURCHASE_DUPLICATE
                 - ITEM_PURCHASE_DUPLICATE
                 - KYC_LEVEL_REQUIRED
+                - KYC_PENDING_REVIEW
+                - KYC_ALREADY_PENDING
+                - KYC_ALREADY_VERIFIED
                 - DEPENDENCY_UNAVAILABLE
                 - INTERNAL_ERROR
             message:

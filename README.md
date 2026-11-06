@@ -13,7 +13,7 @@
 | Web frontend | `http://localhost:4003` | Next.js UI (เริ่มแยกด้วย `npm run dev`) สำหรับ catalog, cart/checkout, wallet, inventory และ purchase history |
 | BFF | `http://localhost:4001` | Public API สำหรับ client และแปลง response เป็น DTO ฝั่ง public |
 | PokéMart API | `http://localhost:4000` | Internal service สำหรับ business rules และการเข้าถึงข้อมูล |
-| KYC API | `http://localhost:4005` (Docker) | Internal service ระดับ KYC 3 ระดับ (NONE/BASIC/FULL) ที่ PokéMart API เรียกก่อนขายสินค้าที่ต้องยืนยันตัวตน; มี test-only routes สำหรับตั้งระดับและจำลองความล้มเหลว |
+| KYC API | `http://localhost:4005` (Docker) | Internal service ระดับ KYC 3 ระดับ (`level` 0/1/2) ที่ PokéMart API เรียกก่อนขายสินค้าที่ต้องยืนยันตัวตน; มี test-only routes สำหรับตั้งระดับและจำลองความล้มเหลว |
 | Payment Mock | `http://localhost:4004` (Docker) | Stripe-style PaymentIntent mock สำหรับ wallet top-up (idempotency + recovery) |
 | Shipping Mock | `http://localhost:4002` (Docker) | Express Mock จำลองระบบจัดส่งบุคคลที่สาม (3rd-party shipping provider) |
 | Shipping Worker | Background process / Docker | Worker อ่านคิวงาน `shipments` จาก MySQL ยิง provider HTTP และ sync delivery status |

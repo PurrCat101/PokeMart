@@ -22,7 +22,36 @@ paths:
           description: KYC record
           content: { application/json: { schema: { $ref: '#/components/schemas/KycRecord' } } }
         '401': { description: Missing or wrong bearer key }
-        '404': { description: Unknown user; PokéMart treats this as NONE/ACTIVE }
+        '404': { description: Unknown user; PokéMart treats this as level 0 / ACTIVE }
+        '500': { description: Provider error (also produced by the `http_500` test fault) }
+  /kyc/v1/users/{userId}/submissions:
+    post:
+      tags: [KYC]
+      summary: Submit identity details; the user becomes PENDING_REVIEW at their current level
+      security: [{ labKey: [] }]
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [fullName, nationalId, dateOfBirth, phone, address]
+              properties:
+                fullName: { type: string, minLength: 2, maxLength: 100 }
+                nationalId: { type: string, pattern: '^[0-9]{13}$', description: 'Validated with the Thai check digit and then discarded; only the last 4 digits are stored.' }
+                dateOfBirth: { type: string, format: date }
+                phone: { type: string, pattern: '^0[0-9]{9}$' }
+                address: { type: string, minLength: 10, maxLength: 300 }
+      responses:
+        '202':
+          description: Accepted; record is now PENDING_REVIEW
+          content: { application/json: { schema: { $ref: '#/components/schemas/KycRecord' } } }
+        '400': { description: 'Validation failed. Body: { error: { code: validation_error, details: [{ field, message }] } }' }
+        '401': { description: Missing or wrong bearer key }
+        '409': { description: 'Body: { error: { code: already_pending | already_verified } }' }
         '500': { description: Provider error (also produced by the `http_500` test fault) }
   /health:
     get:
@@ -38,7 +67,7 @@ paths:
         - { name: userId, in: path, required: true, schema: { type: string } }
       requestBody:
         required: true
-        content: { application/json: { schema: { type: object, required: [level], properties: { level: { type: string, enum: [NONE, BASIC, FULL] }, status: { type: string, enum: [ACTIVE, PENDING_REVIEW, REJECTED] } } } } }
+        content: { application/json: { schema: { type: object, required: [level], properties: { level: { type: integer, enum: [0, 1, 2] }, status: { type: string, enum: [ACTIVE, PENDING_REVIEW, REJECTED] } } } } }
       responses:
         '200': { description: Updated record, content: { application/json: { schema: { $ref: '#/components/schemas/KycRecord' } } } }
         '400': { description: Invalid level or status }
@@ -63,10 +92,9 @@ components:
   schemas:
     KycRecord:
       type: object
-      required: [userId, level, levelValue, status, updatedAt]
+      required: [userId, level, status, updatedAt]
       properties:
         userId: { type: string }
-        level: { type: string, enum: [NONE, BASIC, FULL] }
-        levelValue: { type: integer, enum: [0, 1, 2] }
+        level: { type: integer, enum: [0, 1, 2], description: '0 = not verified, 1 = basic, 2 = full.' }
         status: { type: string, enum: [ACTIVE, PENDING_REVIEW, REJECTED] }
         updatedAt: { type: string, format: date-time }

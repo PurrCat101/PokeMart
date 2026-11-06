@@ -154,18 +154,18 @@ function isDuplicateEntry(error: unknown): boolean {
 }
 function asPokemon(row: Row) { return { id: row.id, name: row.name, types: typeof row.types === 'string' ? JSON.parse(row.types) : row.types, spriteUrl: row.spriteUrl, price: row.price, stock: row.stock }; }
 function asPurchase(row: Row) { return { id: row.id, pokemonId: row.pokemonId, pokemonName: row.pokemonName, quantity: row.quantity, unitPrice: row.unitPrice, totalPrice: row.totalPrice, createdAt: new Date(row.createdAt).toISOString() }; }
-function levelValue(level: string): number { return level === 'FULL' ? 2 : level === 'BASIC' ? 1 : 0; }
-type Kyc = { level: string; levelValue: number; status: string; updatedAt: string };
+// level: 0 = not verified, 1 = basic, 2 = full
+type Kyc = { level: number; status: string; updatedAt: string };
 // KYC is an internal HTTP service with its own data. Never call it inside a database transaction.
 async function fetchKyc(userId: string): Promise<Kyc> {
   const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), kycTimeoutMs);
   try {
     const response = await fetch(`${kycBaseUrl}/kyc/v1/users/${encodeURIComponent(userId)}`, { signal: controller.signal, headers: { Authorization: `Bearer ${kycApiKey}` } });
-    if (response.status === 404) return { level: 'NONE', levelValue: 0, status: 'ACTIVE', updatedAt: new Date().toISOString() };
+    if (response.status === 404) return { level: 0, status: 'ACTIVE', updatedAt: new Date().toISOString() };
     if (!response.ok) throw new Error(`kyc status ${response.status}`);
     const body = await response.json() as Row;
-    if (typeof body.level !== 'string' || typeof body.status !== 'string') throw new Error('kyc invalid body');
-    return { level: body.level, levelValue: levelValue(body.level), status: body.status, updatedAt: String(body.updatedAt ?? new Date().toISOString()) };
+    if (![0, 1, 2].includes(body.level as number) || typeof body.status !== 'string') throw new Error('kyc invalid body');
+    return { level: body.level as number, status: body.status, updatedAt: String(body.updatedAt ?? new Date().toISOString()) };
   } catch (error) {
     log({ severity: 'warn', message: 'KYC service call failed', reason: (error as Error).message });
     throw new AppError(503, 'DEPENDENCY_UNAVAILABLE', 'KYC service is temporarily unavailable');
@@ -176,12 +176,32 @@ async function fetchKyc(userId: string): Promise<Kyc> {
 // keep their documented order; call the returned function at the KYC step inside the transaction.
 async function prefetchKyc(listingSql: string, listingId: number, userId: string): Promise<() => Kyc | null> {
   const [rows] = await pool.query(listingSql, [listingId]);
-  if (Number((rows as Row[])[0]?.required ?? 0) === 0) return () => null;
-  try { const kyc = await fetchKyc(userId); return () => kyc; } catch (error) { return () => { throw error; }; }
+  const required = Number((rows as Row[])[0]?.required ?? 0);
+  // Every purchase looks the account up, because an account under review cannot buy anything. Level-0 listings
+  // still fail open when KYC is down (nothing to enforce); listings above 0 fail closed. Errors are deferred so
+  // earlier checks (duplicate, 404, not-for-sale) keep their documented order.
+  try { const kyc = await fetchKyc(userId); return () => kyc; } catch (error) { return required === 0 ? () => null : () => { throw error; }; }
 }
 function assertKyc(kyc: Kyc | null, required: number, label: string) {
+  if (kyc?.status === 'PENDING_REVIEW') throw new AppError(403, 'KYC_PENDING_REVIEW', 'Your identity verification is under review. Purchases are unavailable until it is approved.');
   if (required === 0) return;
-  if (!kyc || kyc.status !== 'ACTIVE' || kyc.levelValue < required) throw new AppError(403, 'KYC_LEVEL_REQUIRED', `This ${label} requires a higher verification level`, [{ required, current: kyc?.levelValue ?? 0 }]);
+  if (!kyc || kyc.status !== 'ACTIVE' || kyc.level < required) throw new AppError(403, 'KYC_LEVEL_REQUIRED', `This ${label} requires a higher verification level`, [{ required, current: kyc?.level ?? 0 }]);
+}
+async function submitKyc(userId: string, body: unknown): Promise<Kyc> {
+  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), kycTimeoutMs);
+  try {
+    const response = await fetch(`${kycBaseUrl}/kyc/v1/users/${encodeURIComponent(userId)}/submissions`, { method: 'POST', signal: controller.signal, headers: { Authorization: `Bearer ${kycApiKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const payload = await response.json().catch(() => ({})) as Row;
+    if (response.status === 400 && payload.error?.code === 'validation_error') throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', Array.isArray(payload.error.details) ? payload.error.details : []);
+    if (response.status === 409 && payload.error?.code === 'already_pending') throw new AppError(409, 'KYC_ALREADY_PENDING', 'A verification request is already under review');
+    if (response.status === 409 && payload.error?.code === 'already_verified') throw new AppError(409, 'KYC_ALREADY_VERIFIED', 'This account is already verified');
+    if (response.status !== 202 || ![0, 1, 2].includes(payload.level) || typeof payload.status !== 'string') throw new Error(`kyc submission ${response.status}`);
+    return { level: payload.level as number, status: payload.status, updatedAt: String(payload.updatedAt ?? new Date().toISOString()) };
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    log({ severity: 'warn', message: 'KYC submission failed', reason: (error as Error).message });
+    throw new AppError(503, 'DEPENDENCY_UNAVAILABLE', 'KYC service is temporarily unavailable');
+  } finally { clearTimeout(timer); }
 }
 function asTopUp(row: Row) { return { topUpId: row.top_up_id, amount: Number(row.amount_baht), status: row.status, providerPaymentId: row.provider_payment_id ?? null, createdAt: new Date(row.created_at).toISOString(), updatedAt: new Date(row.updated_at).toISOString() }; }
 
@@ -207,7 +227,7 @@ app.use((req, res, next) => {
   next();
 });
 app.use((req, _res, next) => {
-  if (req.method === 'POST' && ['/pokemart/v1/auth/login', '/pokemart/v1/purchases', '/pokemart/v1/items/purchases', '/pokemart/v1/wallet/top-ups'].includes(req.path) && !req.is('application/json')) return next(new AppError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Content-Type must be application/json'));
+  if (req.method === 'POST' && ['/pokemart/v1/auth/login', '/pokemart/v1/purchases', '/pokemart/v1/items/purchases', '/pokemart/v1/wallet/top-ups', '/pokemart/v1/kyc/submissions'].includes(req.path) && !req.is('application/json')) return next(new AppError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Content-Type must be application/json'));
   next();
 });
 app.use(express.json({ strict: false }));
@@ -323,6 +343,9 @@ app.get('/pokemart/v1/kyc/status', authenticate, async (_req, res, next) => {
   try {
     res.json(await fetchKyc(userId(res)));
   } catch (error) { next(error); }
+});
+app.post('/pokemart/v1/kyc/submissions', authenticate, async (req, res, next) => {
+  try { res.status(202).json(await submitKyc(userId(res), req.body)); } catch (error) { next(error); }
 });
 app.get('/pokemart/v1/inventory', authenticate, async (req, res, next) => {
   try { const id = userId(res); const [rows] = await pool.query(`SELECT i.pokemon_source_id AS pokemonId, r.name, i.quantity FROM user_inventory i JOIN pokemon_reference r ON r.source_id=i.pokemon_source_id WHERE i.user_id=? ORDER BY i.pokemon_source_id`, [id]); const results = (rows as Row[]).map((row) => ({ ...row, quantity: Number(row.quantity) })); res.json({ count: results.length, results }); } catch (error) { next(error); }

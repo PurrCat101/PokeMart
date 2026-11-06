@@ -6,6 +6,7 @@ import {
   CatalogItem,
   ItemCatalogItem,
   AuthUser,
+  KycStatus,
   WalletData,
   InventoryItem,
   PurchaseItem,
@@ -13,18 +14,22 @@ import {
   CheckoutReceipt,
   CheckoutFailure,
 } from "../types/api";
-import { type KycLevel, lineKey, lineMaxQuantity, normalizeCart, verificationNameTh } from "../lib/cart";
+import { lineKey, lineMaxQuantity, lineRequiredKyc, normalizeCart, verificationNameTh } from "../lib/cart";
 import { Header } from "../components/Header";
 import { PokemonCard } from "../components/PokemonCard";
 import { ItemCard } from "../components/ItemCard";
 import { CartDrawer } from "../components/CartDrawer";
 import { CheckoutModal } from "../components/CheckoutModal";
+import { KycBanner } from "../components/KycBanner";
+import { KycPromptModal } from "../components/KycPromptModal";
+import { KycVerificationView } from "../components/KycVerificationView";
 import { LoginModal } from "../components/LoginModal";
 import { InventoryView } from "../components/InventoryView";
 import { PurchasesView } from "../components/PurchasesView";
 import { Toast, ToastMessage } from "../components/Toast";
 import { SearchIcon, ChevronLeftIcon, ChevronRightIcon, RefreshIcon, FilterIcon, XIcon } from "../components/icons";
-import { Alert, Button, EmptyState, IconButton, Skeleton, cx, inputClass } from "../components/ui";
+import { ErrorPage } from "../components/ErrorPage";
+import { Button, EmptyState, IconButton, Skeleton, cx, inputClass } from "../components/ui";
 
 const POKEMON_TYPES = [
   "all",
@@ -62,8 +67,13 @@ export default function PokeMartApp() {
   // null = checkout closed. Holds the whole bag, or one line for "Buy now".
   const [checkoutLines, setCheckoutLines] = useState<CartItem[] | null>(null);
   const [buyNowAfterLogin, setBuyNowAfterLogin] = useState<CartItem | null>(null);
-  // null = unknown (signed out, or the KYC service is unavailable).
-  const [kycLevel, setKycLevel] = useState<KycLevel | null>(null);
+  // null = unknown (signed out, or the KYC service is unavailable). Status matters as much as level: see kycIssue().
+  const [kyc, setKyc] = useState<KycStatus | null>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
+  // Which account dismissed the "verify your identity" popup this session.
+  const [kycPromptDismissedFor, setKycPromptDismissedFor] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : sessionStorage.getItem("pokemart_kyc_prompt_dismissed"),
+  );
 
   // Current catalog page only: never download the full product snapshot to browse.
   const [allCatalog, setAllCatalog] = useState<CatalogItem[]>([]);
@@ -92,7 +102,7 @@ export default function PokeMartApp() {
 
   // Feedback & Diagnostics
   const [toast, setToast] = useState<ToastMessage | null>(null);
-  const [bffStatusError, setBffStatusError] = useState<string | null>(null);
+  const [catalogError, setCatalogError] = useState<{ message: string; status?: number; code?: string; requestId?: string } | null>(null);
 
   // 1. Load cart from localStorage
   useEffect(() => {
@@ -118,24 +128,28 @@ export default function PokeMartApp() {
     }
   };
 
+  const applyKyc = useCallback((next: KycStatus | null) => {
+    setKyc(next);
+  }, []);
+
   // 2. Check existing session
   const syncSession = useCallback(async () => {
     try {
       const account = await api.getAccountInfo();
       setUser(account.user);
       setWallet(account.wallet);
-      setKycLevel(account.kyc?.levelValue ?? null);
+      applyKyc(account.kyc);
     } catch {
       setUser(null);
       setWallet(null);
-      setKycLevel(null);
+      applyKyc(null);
     }
-  }, []);
+  }, [applyKyc]);
 
   // 3. Fetch just the current server-filtered catalog page.
   const fetchFullCatalog = useCallback(async () => {
     setIsCatalogLoading(true);
-    setBffStatusError(null);
+    setCatalogError(null);
     try {
       const offset = (currentPage - 1) * ITEMS_PER_PAGE;
       if (catalogKind === "pokemon") {
@@ -148,11 +162,16 @@ export default function PokeMartApp() {
         setCatalogTotal(page.count);
       }
     } catch (err) {
-      setBffStatusError(
-        err instanceof ApiError && err.code === "DEPENDENCY_UNAVAILABLE"
-          ? "BFF service or upstream PokéMart API is currently offline. Ensure docker containers or bff/api are running."
-          : (err instanceof Error && err.message) || "Failed to load shop catalog."
-      );
+      const apiErr = err instanceof ApiError ? err : null;
+      setCatalogError({
+        message:
+          apiErr?.code === "DEPENDENCY_UNAVAILABLE"
+            ? "BFF service or upstream PokéMart API is currently offline. Ensure docker containers or bff/api are running."
+            : (err instanceof Error && err.message) || "Failed to load shop catalog.",
+        status: apiErr?.status,
+        code: apiErr?.code,
+        requestId: apiErr?.requestId,
+      });
     } finally {
       setIsCatalogLoading(false);
     }
@@ -259,7 +278,7 @@ export default function PokeMartApp() {
     setUser(res.user);
     const account = await api.getAccountInfo();
     setWallet(account.wallet);
-    setKycLevel(account.kyc?.levelValue ?? null);
+    applyKyc(account.kyc);
     if (buyNowAfterLogin) {
       setCheckoutLines([buyNowAfterLogin]);
       setBuyNowAfterLogin(null);
@@ -278,7 +297,7 @@ export default function PokeMartApp() {
     api.logout();
     setUser(null);
     setWallet(null);
-    setKycLevel(null);
+    applyKyc(null);
     setInventoryItems([]);
     setPurchaseHistory([]);
     setToast({
@@ -332,8 +351,8 @@ export default function PokeMartApp() {
         }
       } catch (err) {
         const message =
-          err instanceof ApiError && err.code === "KYC_LEVEL_REQUIRED" && line.kind === "item"
-            ? `ต้อง${verificationNameTh(line.item.requiredKycLevel)}ก่อนจึงจะซื้อได้`
+          err instanceof ApiError && err.code === "KYC_LEVEL_REQUIRED"
+            ? `ต้อง${verificationNameTh(lineRequiredKyc(line))}ก่อนจึงจะซื้อได้`
             : err instanceof Error && err.message
               ? err.message
               : "Purchase rejected by server.";
@@ -345,7 +364,7 @@ export default function PokeMartApp() {
     try {
       const account = await api.getAccountInfo();
       setWallet(account.wallet);
-      setKycLevel(account.kyc?.levelValue ?? null);
+      applyKyc(account.kyc);
       await Promise.all([fetchInventory(), fetchFullCatalog()]);
     } catch {
       // ignore
@@ -445,6 +464,19 @@ export default function PokeMartApp() {
 
   const hasActiveFilters = searchQuery !== "" || selectedType !== "all" || selectedItemCategory !== "all" || stockOnly || sortBy !== "id-asc";
 
+  const view = isVerifying && user ? "verify" : activeTab;
+  const needsVerificationPrompt =
+    !!user && kyc?.status === "ACTIVE" && kyc.level === 0 && kycPromptDismissedFor !== user.userId && !isVerifying && !isLoginOpen && checkoutLines === null;
+  const dismissKycPrompt = () => {
+    if (!user) return;
+    setKycPromptDismissedFor(user.userId);
+    try {
+      sessionStorage.setItem("pokemart_kyc_prompt_dismissed", user.userId);
+    } catch {
+      // ignore storage errors
+    }
+  };
+
   const kindLabel = catalogKind === "pokemon" ? "Pokémon" : "items";
 
   const pageNumbers = Array.from({ length: totalPages }, (_, idx) => idx + 1).filter(
@@ -455,7 +487,10 @@ export default function PokeMartApp() {
     <div data-testid="app-shell" className="flex min-h-dvh flex-col">
       <Header
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={(tab) => {
+          setIsVerifying(false);
+          setActiveTab(tab);
+        }}
         user={user}
         wallet={wallet}
         inventoryCount={inventoryItems.reduce((acc, i) => acc + i.quantity, 0)}
@@ -467,23 +502,38 @@ export default function PokeMartApp() {
 
       {/* pb-24 clears the fixed mobile tab bar */}
       <main id="main" tabIndex={-1} data-testid="app-main" className="mx-auto w-full max-w-7xl flex-1 px-4 pb-24 pt-6 outline-none sm:px-6 md:pb-10 lg:px-8">
-        {bffStatusError && (
-          <Alert
-            tone="danger"
-            title="Catalog unavailable"
-            data-testid="catalog-service-error"
-            className="mb-6"
-            action={
-              <Button variant="secondary" size="sm" onClick={fetchFullCatalog} data-testid="catalog-retry">
-                Try again
-              </Button>
-            }
-          >
-            {bffStatusError}
-          </Alert>
+        {user && view !== "verify" && <KycBanner kyc={kyc} onRetry={() => setIsVerifying(true)} />}
+
+        {view === "verify" && (
+          <KycVerificationView
+            onBack={() => setIsVerifying(false)}
+            onSubmitted={(next) => {
+              applyKyc(next);
+              setIsVerifying(false);
+              setToast({
+                id: crypto.randomUUID(),
+                type: "info",
+                title: "Verification sent",
+                message: "We are reviewing your details.",
+              });
+            }}
+          />
         )}
 
-        {activeTab === "catalog" && (
+        {view === "catalog" && catalogError && !isCatalogLoading && (
+          <ErrorPage
+            title="Catalog unavailable"
+            message={catalogError.message}
+            status={catalogError.status}
+            code={catalogError.code}
+            requestId={catalogError.requestId}
+            onRetry={fetchFullCatalog}
+            retryTestId="catalog-retry"
+            testId="catalog-service-error"
+          />
+        )}
+
+        {view === "catalog" && !(catalogError && !isCatalogLoading) && (
           <section aria-labelledby="catalog-heading" className="space-y-6">
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div>
@@ -745,7 +795,7 @@ export default function PokeMartApp() {
           </section>
         )}
 
-        {activeTab === "inventory" && (
+        {view === "inventory" && (
           <InventoryView
             items={inventoryItems}
             isLoading={isInventoryLoading}
@@ -756,7 +806,7 @@ export default function PokeMartApp() {
           />
         )}
 
-        {activeTab === "purchases" && (
+        {view === "purchases" && (
           <PurchasesView
             items={purchaseHistory}
             totalCount={purchasesTotal}
@@ -777,7 +827,7 @@ export default function PokeMartApp() {
         cart={cart}
         wallet={wallet}
         user={user}
-        kycLevel={kycLevel}
+        kyc={kyc}
         onUpdateQuantity={handleUpdateCartQuantity}
         onRemoveItem={handleRemoveFromCart}
         onClearCart={handleClearCart}
@@ -796,7 +846,7 @@ export default function PokeMartApp() {
         onClose={() => setCheckoutLines(null)}
         lines={checkoutLines ?? []}
         wallet={wallet}
-        kycLevel={kycLevel}
+        kyc={kyc}
         onExecuteCheckout={handleExecuteCheckout}
         onCheckoutSuccess={(completed) => {
           // Only Pokémon land in the inventory view.
@@ -808,6 +858,17 @@ export default function PokeMartApp() {
               setIsLoginOpen(false);
               setBuyNowAfterLogin(null);
             }} onLoginSuccess={handleLogin} />}
+
+      {needsVerificationPrompt && (
+        <KycPromptModal
+          onLater={dismissKycPrompt}
+          onVerifyNow={() => {
+            dismissKycPrompt();
+            setIsCartOpen(false);
+            setIsVerifying(true);
+          }}
+        />
+      )}
 
       <Toast toast={toast} onClose={() => setToast(null)} />
     </div>

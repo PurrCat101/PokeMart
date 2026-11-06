@@ -11,6 +11,7 @@
     "test:purchase-retry": "playwright test --project=e2e --grep @purchase-flow",
     "test:e2e": "playwright test --project=e2e",
     "test:ui": "playwright test --project=ui",
+    "test:kyc": "playwright test --project=kyc --project=kyc-ui",
     "test:shipping": "playwright test --project=shipping",
     "test:observability": "playwright test --project=observability"
   },

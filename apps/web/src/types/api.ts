@@ -76,10 +76,19 @@ export interface WalletData {
 }
 
 export interface KycStatus {
-  level: "NONE" | "BASIC" | "FULL";
-  levelValue: 0 | 1 | 2;
+  /** 0 = not verified, 1 = basic, 2 = advanced. */
+  level: 0 | 1 | 2;
   status: "ACTIVE" | "PENDING_REVIEW" | "REJECTED";
   updatedAt: string;
+}
+
+export interface KycSubmission {
+  fullName: string;
+  nationalId: string;
+  /** YYYY-MM-DD */
+  dateOfBirth: string;
+  phone: string;
+  address: string;
 }
 
 export interface AccountInfo {
