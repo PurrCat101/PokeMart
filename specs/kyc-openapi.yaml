@@ -6,7 +6,7 @@ info:
 servers:
   - url: http://localhost:4005
 tags:
-  - { name: KYC, description: Look up the KYC level of a user. Requires the lab API key. }
+  - { name: KYC, description: 'Look up a user''s KYC level (0 buys nothing, 1 ordinary listings, 2 Master tier) and review status, or submit identity details (the user becomes PENDING_REVIEW). Requires the lab API key.' }
   - { name: Test Controls, description: Test-only routes for seeding users and injecting faults. }
   - { name: Health, description: Liveness probe. }
 paths:

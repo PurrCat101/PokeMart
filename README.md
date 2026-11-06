@@ -4,7 +4,7 @@
 
 ## สถาปัตยกรรม
 
-![PokéMart API test architecture flow](specs/images/pokemart-api-test-architecture-flow.png)
+![PokéMart API test architecture flow](specs/images/PokMart-System-Architecture.png)
 
 ![PokéMart API test workflow from requirements to reports](specs/images/pokemart-test-workflow.svg)
 
@@ -294,7 +294,7 @@ Client สร้าง UUID `purchaseId` ก่อนเริ่มซื้อ
 
 ทุกเส้นใน ERD คือ foreign key ที่ประกาศใน MySQL รวมถึง `users.user_id` ที่เชื่อมกับ wallet, inventory และ purchases คัดลอก DBML ไปใช้ใน dbdiagram.io ได้จาก [database/schema/pokemart.dbml](database/schema/pokemart.dbml); ดูรายละเอียดคอลัมน์และ constraints ที่ [database/README.md](database/README.md).
 
-ราคา Pokémon derive จาก base experience และราคา item ใช้ข้อมูลอ้างอิง PokéAPI; stock เป็น deterministic. Pokémon ทุกตัวซื้อได้ที่ KYC 0 ส่วน KYC 1/2 ใช้กับ item ระดับสูง เช่น Master Ball และยาระดับสูง Runtime/test ไม่เรียก PokéAPI และไม่ต้องมี clone `api-data`; ดู [database/README.md](database/README.md) และ seed ที่ generate ใน [database/seed](database/seed)
+ราคา Pokémon derive จาก base experience และราคา item ใช้ข้อมูลอ้างอิง PokéAPI; stock เป็น deterministic. Pokémon และ item ทั่วไปต้องมี KYC level 1, item ระดับ Master (เช่น Master Ball และยาระดับสูง) ต้อง level 2 และ level 0 ซื้ออะไรไม่ได้ ส่วนบัญชีที่รอตรวจสอบ (`PENDING_REVIEW`) ซื้อไม่ได้เช่นกัน Runtime/test ไม่เรียก PokéAPI และไม่ต้องมี clone `api-data`; ดู [database/README.md](database/README.md) และ seed ที่ generate ใน [database/seed](database/seed)
 
 ที่มาข้อมูล: [PokeAPI REST API](https://pokeapi.co/) โปรดตรวจสอบ license/attribution ก่อนนำ snapshot ไปเผยแพร่ต่อ
 

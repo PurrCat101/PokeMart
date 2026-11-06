@@ -7,7 +7,7 @@ servers:
   - url: http://localhost:4001
 tags:
   - { name: Authentication, description: Sign in and identify the current user. }
-  - { name: Account, description: Profile and KYC level of the authenticated user. }
+  - { name: Account, description: 'Profile, wallet and identity verification (KYC) of the authenticated user: level 0 buys nothing, level 1 buys Pokémon and ordinary items, level 2 also buys the Master tier. An account under review (`PENDING_REVIEW`) buys nothing.' }
   - { name: Pokémon Catalog, description: Browse Pokémon listings. Public. }
   - { name: Item Catalog, description: Browse item listings and categories. Public. }
   - { name: Inventory, description: Pokémon owned by the authenticated user. }
@@ -204,10 +204,12 @@ paths:
       security:
         - bearerAuth: []
       description: |
-        Errors: 400 `VALIDATION_ERROR` or `INVALID_JSON`; 404 `POKEMON_NOT_FOUND`;
+        Every Pokémon needs verification level 1. Errors: 400 `VALIDATION_ERROR` or `INVALID_JSON`;
+        403 `KYC_PENDING_REVIEW` (account under review) or `KYC_LEVEL_REQUIRED` (level 0, `details` has `required`/`current`);
+        404 `POKEMON_NOT_FOUND`;
         409 `PURCHASE_DUPLICATE`, `POKEMON_NOT_FOR_SALE`, or `INSUFFICIENT_STOCK`;
         415 `UNSUPPORTED_MEDIA_TYPE`; 422 `INSUFFICIENT_FUNDS`;
-        500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE`.
+        500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE` (also when the KYC service is down).
       parameters:
         - $ref: '#/components/parameters/XRequestIdRequest'
       requestBody:
@@ -233,6 +235,8 @@ paths:
           $ref: '#/components/responses/Error'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Error'
         '404':
           $ref: '#/components/responses/Error'
         '409':
@@ -341,7 +345,7 @@ paths:
       tags: [Item Purchases]
       summary: Purchase one item listing
       security: [{ bearerAuth: [] }]
-      description: The server enforces the item listing's KYC level, stock, and wallet balance atomically.
+      description: The server enforces the account's verification, the item listing's KYC level (1 for ordinary items, 2 for the Master tier), stock, and wallet balance atomically. `403 KYC_PENDING_REVIEW` while the account is under review; `403 KYC_LEVEL_REQUIRED` when the level is too low (`details` has `required` and `current`).
       requestBody:
         required: true
         content:
@@ -388,7 +392,8 @@ paths:
   /api/kyc/status:
     get:
       tags: [Account]
-      summary: Get the caller's KYC level
+      summary: Get the caller's KYC level and review status
+      description: "Returns `level` (0, 1 or 2) and `status` (`ACTIVE`, `PENDING_REVIEW`, `REJECTED`). Only an `ACTIVE` record grants its level. 503 when the KYC service is down (`/api/account-info` returns `kyc` as null instead)."
       security: [{ bearerAuth: [] }]
       responses:
         '200':
@@ -557,6 +562,7 @@ components:
   schemas:
     KycStatus:
       type: object
+      description: One account's verification record. `level` is the only level field (no separate name or `levelValue`).
       required: [level, status, updatedAt]
       properties:
         level: { type: integer, enum: [0, 1, 2], description: '0 = not verified, 1 = basic, 2 = advanced.' }
@@ -585,7 +591,7 @@ components:
             required: [item, listing]
             properties:
               item: { type: object, required: [id, name, category, spriteUrl], properties: { id: { type: integer }, name: { type: string }, category: { type: string, nullable: true }, spriteUrl: { type: string, nullable: true } } }
-              listing: { type: object, required: [price, availableStock, requiredKycLevel], properties: { price: { type: integer }, availableStock: { type: integer }, requiredKycLevel: { type: integer, enum: [0, 1, 2] } } }
+              listing: { type: object, required: [price, availableStock, requiredKycLevel], properties: { price: { type: integer }, availableStock: { type: integer }, requiredKycLevel: { type: integer, enum: [0, 1, 2], description: 'Level needed to buy: 1 for ordinary items, 2 for the Master tier.' } } }
     ItemPurchase:
       type: object
       required: [purchaseId, item, quantity, pricing, createdAt]
@@ -893,12 +899,22 @@ components:
               type: array
               items:
                 type: object
-                required: [field, message]
+                description: |
+                  Validation errors carry `field` and `message`. `KYC_LEVEL_REQUIRED` carries
+                  `required` and `current` (verification levels) instead.
                 properties:
                   field:
                     type: string
                   message:
                     type: string
+                  required:
+                    type: integer
+                    enum: [1, 2]
+                    description: Level the listing needs (`KYC_LEVEL_REQUIRED` only).
+                  current:
+                    type: integer
+                    enum: [0, 1, 2]
+                    description: Level the account has (`KYC_LEVEL_REQUIRED` only).
   responses:
     Pokemon:
       description: Pokémon with its shop listing
