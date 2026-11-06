@@ -1,6 +1,6 @@
 # Database
 
-MySQL initializes `schema/` and `seed/` only on a fresh Docker volume. The deterministic baseline contains 1,025 main National Pokédex Pokémon and 2,222 canonical PokeAPI item names. The checked-in SQL seed is the runtime source of truth; normal startup and tests do not require an `api-data` checkout or call PokéAPI. A duplicate Roseli Berry resource in the source is intentionally canonicalized to its lowest source ID.
+Liquibase applies the schema and seed data (see [Schema migrations](#schema-migrations-liquibase) below); MySQL itself no longer runs the SQL files. The deterministic baseline contains 1,025 main National Pokédex Pokémon and 2,222 canonical PokeAPI item names. The checked-in SQL seed is the runtime source of truth; normal startup and tests do not require an `api-data` checkout or call PokéAPI. A duplicate Roseli Berry resource in the source is intentionally canonicalized to its lowest source ID.
 
 ## Schema and relationships
 
@@ -71,12 +71,30 @@ The generated reference seed is pinned at PokeAPI/api-data commit `447bd5c378bf8
 
 PokeAPI data: [PokeAPI REST API](https://pokeapi.co/) and [PokeAPI project](https://github.com/PokeAPI/pokeapi). Review the applicable license and attribution terms before redistributing or publishing the snapshot.
 
-Existing volumes created before the user-identity rename must have `database/migrations/001_rename_player_identity.sql` applied once. A fresh volume uses the updated schema and does not need this migration.
+## Schema migrations (Liquibase)
 
-Existing volumes that contain the retired `idempotency_keys` table must also apply `database/migrations/002_drop_idempotency_keys.sql` once. New volumes do not create that table.
+`database/liquibase/db.changelog-master.yaml` is the single list of database changes. A one-shot `liquibase` service in `docker-compose.yml` applies it after MySQL is healthy, and the API, BFF and shipping worker only start once it has finished successfully, so nothing ever runs against an empty database. Liquibase records what it applied in the `DATABASECHANGELOG` table, so running it again does nothing.
 
-Existing volumes must apply `database/migrations/003_add_users_and_foreign_keys.sql` once. It creates user profiles for existing wallet, inventory, and purchase IDs, then adds the user foreign keys. Existing IDs receive placeholder `.invalid` email addresses except for the lab demo user; password hashes remain NULL until credentials are provisioned.
+| Command | What it does |
+|---|---|
+| `make up` | Starts everything, including the migration step |
+| `make db-migrate` | Applies pending changesets (safe to repeat) |
+| `make db-status` | Lists which changesets are applied or pending |
+| `make db-adopt` | **One time, for a volume created before Liquibase:** records the baseline as already applied without running it |
+| `make db-reset` | **Destructive.** Deletes the volume and re-applies every changeset |
 
-Existing volumes created before item catalog, KYC, or payment support must apply `database/migrations/005_add_catalog_items_payment_and_kyc.sql`. Existing volumes that need item checkout must then apply `database/migrations/006_add_item_purchases.sql`. Fresh volumes already receive all tables from `schema/001_create_shop_tables.sql`.
+The baseline changesets point at the existing files, so there is nothing to keep in sync: `001-baseline-schema` runs `schema/001_create_shop_tables.sql` (the schema with migrations 001-006 already folded in) and the `seed` changesets run `seed/*.sql`. Two contexts exist: `schema` and `seed`; set `LIQUIBASE_CONTEXTS=schema` to get an empty schema.
 
-`make db-reset` deletes the local Compose volume and is destructive. It must never be used for shared or production data.
+To change the schema, add a new numbered `changeSet` at the end of the master changelog (a `sqlFile` pointing at a new file in `database/migrations/` works well). Never edit a changeset that has already been applied; Liquibase stores a checksum of each one and will refuse to continue. Keep `schema/001_create_shop_tables.sql` and `pokemart.dbml` equal to the end result, because `001-baseline-schema` is the starting point for a new database.
+
+The numbered files `migrations/001`-`006` are history. They are already part of the baseline, so a volume created with the current flow never needs them. A volume created before the user-identity rename, the `idempotency_keys` removal, user foreign keys, or the item/KYC/payment tables should be recreated with `make db-reset` rather than patched by hand; the notes below describe what each of those files did.
+
+Existing volumes created before the user-identity rename needed `database/migrations/001_rename_player_identity.sql` applied once.
+
+Existing volumes that contain the retired `idempotency_keys` table needed `database/migrations/002_drop_idempotency_keys.sql` once. New volumes do not create that table.
+
+Existing volumes needed `database/migrations/003_add_users_and_foreign_keys.sql` once. It creates user profiles for existing wallet, inventory, and purchase IDs, then adds the user foreign keys. Existing IDs receive placeholder `.invalid` email addresses except for the lab demo user; password hashes remain NULL until credentials are provisioned.
+
+Existing volumes created before item catalog, KYC, or payment support needed `database/migrations/005_add_catalog_items_payment_and_kyc.sql`, and `database/migrations/006_add_item_purchases.sql` for item checkout. The baseline schema already contains all of these tables.
+
+`make db-reset` deletes the local Compose volume, then re-applies every Liquibase changeset, and is destructive. It must never be used for shared or production data.
