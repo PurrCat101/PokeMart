@@ -1,0 +1,19 @@
+# Prometheus scrapes GET /metrics from the services that expose it.
+# Targets use compose service names, so this only works inside the compose network.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: bff
+    static_configs:
+      - targets: ["bff:4001"]
+
+  - job_name: pokemart-api
+    static_configs:
+      - targets: ["pokemart-api:4000"]
+
+  # The worker has no API; it opens a small port that serves /metrics only.
+  - job_name: shipping-worker
+    static_configs:
+      - targets: ["shipping-worker:4010"]

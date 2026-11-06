@@ -24,6 +24,7 @@
     "test:purchase-retry": "npm run test:purchase-retry --workspace=@pokemart/tests",
     "test:e2e": "npm run test:e2e --workspace=@pokemart/tests",
     "test:shipping": "npm run test:shipping --workspace=@pokemart/tests",
+    "test:observability": "npm run test:observability --workspace=@pokemart/tests",
     "sync-shipment": "tsx scripts/sync-shipment-to-db.ts"
   },
   "devDependencies": {

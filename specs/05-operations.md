@@ -19,6 +19,8 @@ Every other document refers to this table. Change a port here first. Inside Comp
 | MySQL | 3306 in container | `MYSQL_HOST_PORT`, default **4306** | PokéMart API, test setup | Container keeps 3306; test env files use `MYSQL_PORT=4306`. |
 | WireMock | 8080 | `WIREMOCK_HOST_PORT` | Mocked-BFF tests | |
 | API reference (Scalar) | 8081 (container 8080) | `API_REFERENCE_HOST_PORT` | Browser | Renders `specs/openapi.yaml`. Replaces Scalar. |
+| Shipping worker metrics | 4010 | — | Prometheus | Inside Compose only (no host port). Serves `GET /metrics` and nothing else. |
+| Grafana | 4300 (container 3000) | `GRAFANA_HOST_PORT` | Browser, Playwright `observability` | Optional profile `observability`. Bound to `127.0.0.1` only. Loki and Prometheus have no host port; reach them through Grafana. |
 
 **Why 4xxx and not 3xxx.** On Windows, Hyper-V/WSL/Docker Desktop reserve ranges of TCP ports at boot, and binding inside one fails with `EACCES` ("An attempt was made to access a socket in a way forbidden by its access permissions") even though nothing is listening. On the reference machine `2882–3281` and `3307–3406` were reserved, which blocked every 3000-series lab port and MySQL's old host port 3307. List the reserved ranges with:
 
@@ -47,11 +49,30 @@ Observability is introduced incrementally. The first application version must be
 - Metrics (when the observability phase is implemented): request count, request duration histogram, error count, in-flight requests, and dependency or database pool metrics where feasible. A purchase outcome counter may use a bounded `outcome` label.
 - Keep metric labels low-cardinality. Do not use user IDs, Pokémon IDs, purchase IDs, raw URLs, or request IDs as labels.
 
-### Observability stack roadmap
+### Observability phase A (implemented)
 
-- **First observability phase:** Prometheus and Grafana for API, application, and container metrics.
-- **Optional log-search phase:** Elasticsearch and Kibana, enabled through a dedicated Compose profile or overlay so routine API tests do not need the heavier stack.
+Start it with `make observe` (a Compose profile named `observability`, off by default so a normal `make up` stays light), then open **http://localhost:4300**. Stop everything with `make down`; the profile is included. Data is not persisted, so `down` clears it.
+
+| Piece | Role |
+|---|---|
+| Grafana | One provisioned dashboard, *PokéMart overview*, plus Explore. Anonymous admin access is enabled, which is why the port is bound to `127.0.0.1` only. |
+| Prometheus | Scrapes `GET /metrics` from the BFF (4001), PokéMart API (4000) and shipping worker (4010) every 15 s. |
+| Loki + Alloy | Alloy reads every container's stdout through the Docker socket (mounted read-only) and ships it to Loki. `severity` becomes the label `level`. |
+
+**Metrics.** BFF and API record `http_request_duration_seconds` (method, route, status). `route` is the Express route pattern, for example `/api/pokemon/:id`, never the raw URL, and unmatched paths collapse into `unmatched`, so the number of time series stays bounded. The BFF also records `upstream_request_duration_seconds` and `upstream_request_failures_total` for its calls to the API. The worker has no API, so it reads the database at scrape time and reports `shipments_by_processing_status`, `shipments_by_delivery_status`, `top_ups_by_status`, a heartbeat, and `shipping_worker_metrics_db_up` (0 means the counts are stale because MySQL is unreachable). `/metrics` is an operational endpoint, not part of the OpenAPI contract, and is not logged.
+
+**Logs.** Every Node service writes one JSON object per line. Search by request ID in the dashboard (the *Request ID* box) or in Explore: `{service=~".+"} |= "<id>"`. The `X-Request-Id` response header of any call is the value to use; it appears in the BFF line, the BFF-to-API line and the API line, so one ID follows a request across layers. Never put a request ID, user or other per-request value in a Loki label: it would create one stream per request.
+
+**Practice ideas.** Make `payment-mock` fail (`/__test/faults`), buy something, then find that request ID in Grafana. Stop `pokemart-api` and watch *Upstream failures* and the BFF 503s. Stop MySQL and watch `shipping_worker_metrics_db_up`.
+
+**Tests.** `make test-observability` (or `npm run test:observability`). The `OBS-MET-*` tests read `/metrics` directly and need only the services. The `OBS-STK-*` and `OBS-LOG-*` tests query Prometheus and Loki through Grafana and are **skipped automatically** when Grafana is not reachable, so a plain `npm test` stays green without the profile. Log tests poll, because lines reach Loki a few seconds after the request. One test proves that signing in never writes the password or the token to any log.
+
+**Known limits.** Alloy needs the Docker socket, which gives it a view of every container on the machine: local lab only. Alloy keeps only this lab's service names because the Compose project name depends on the folder name. There is no alerting, no traces and no MySQL or container metrics yet.
+
+### Observability roadmap
+
 - **Later tracing phase:** OpenTelemetry traces across BFF and PokéMart API, after the core flow and logs are stable.
+- **Possible additions:** MySQL metrics (`mysqld_exporter`), alerts, and nginx access logs once nginx is in front.
 - Docker Compose logs remain the simplest fallback for early development.
 
 The full observability stack must not be a prerequisite for basic functional tests. Document the resource cost and start/stop commands for optional services.

@@ -1,0 +1,63 @@
+// Alloy reads the stdout/stderr of every container in this compose project and ships it to Loki.
+// It talks to Docker through the socket, mounted read-only in docker-compose.yml.
+
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+
+  // Compose containers only. The next step keeps just this lab's services, because the project
+  // name depends on the folder name and so cannot be hard-coded here.
+  filter {
+    name   = "label"
+    values = ["com.docker.compose.service"]
+  }
+}
+
+// Turn Docker metadata into a few low-cardinality Loki labels.
+// Never add requestId (or any per-request value) as a label: it would create one stream per request.
+discovery.relabel "containers" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    regex         = "bff|pokemart-api|shipping-worker|kyc-api|payment-mock|shipping-mock|mysql|liquibase|wiremock|api-reference|web|nginx"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+}
+
+loki.source.docker "containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.containers.output
+  forward_to = [loki.process.json_logs.receiver]
+}
+
+// The Node services log one JSON object per line. Promote `severity` to the label `level`
+// (info / warn / error) so you can filter by it; everything else stays in the log line and is
+// searched with `|= "text"` or `| json | requestId="..."`. Lines that are not JSON pass through.
+loki.process "json_logs" {
+  stage.json {
+    expressions = { level = "severity" }
+  }
+
+  stage.labels {
+    values = { level = "" }
+  }
+
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

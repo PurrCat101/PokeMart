@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import express, { NextFunction, Request, Response as ExpressResponse } from 'express';
+import { registry, observeRequest, observeUpstream, countUpstreamFailure } from './metrics.js';
 
 class AppError extends Error {
   constructor(public status: number, public code: string, message: string, public details: unknown[] = []) { super(message); }
@@ -208,8 +209,9 @@ async function callUpstream(req: Request, path: string, method = 'GET', body?: u
     const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), timeout); const started = Date.now();
     try {
       const response = await fetch(`${upstreamBase}${path}`, { method, signal: controller.signal, headers: { 'X-Request-Id': resRequestId(req), ...(req.header('authorization') ? { Authorization: req.header('authorization') as string } : {}), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+      observeUpstream(response.status, (Date.now() - started) / 1000);
       log({ severity: 'info', requestId: resRequestId(req), upstreamStatus: response.status, upstreamDurationMs: Date.now() - started }); clearTimeout(timer); return response;
-    } catch (error) { clearTimeout(timer); failure = error; }
+    } catch (error) { clearTimeout(timer); failure = error; countUpstreamFailure(); }
   }
   throw new AppError(503, 'DEPENDENCY_UNAVAILABLE', 'Catalog service is temporarily unavailable');
 }
@@ -256,12 +258,21 @@ app.use((req, res, next) => {
 app.use((req, res, next) => {
   (req as any).requestId = validRequestId.test(req.header('x-request-id') ?? '') ? req.header('x-request-id') : crypto.randomUUID();
   res.setHeader('X-Request-Id', resRequestId(req)); const start = Date.now();
-  res.on('finish', () => log({ severity: 'info', requestId: resRequestId(req), method: req.method, route: req.route?.path ?? req.path, statusCode: res.statusCode, durationMs: Date.now() - start })); next();
+  res.on('finish', () => {
+    observeRequest(req.method, req.route?.path, res.statusCode, (Date.now() - start) / 1000);
+    if (req.route?.path !== '/metrics') log({ severity: 'info', requestId: resRequestId(req), method: req.method, route: req.route?.path ?? req.path, statusCode: res.statusCode, durationMs: Date.now() - start });
+  });
+  next();
 });
 app.use((req, _res, next) => req.method === 'POST' && ['/api/auth/login', '/api/purchases', '/api/items/purchases', '/api/wallet/top-ups'].includes(req.path) && !req.is('application/json') ? next(new AppError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Content-Type must be application/json')) : next());
 app.use(express.json({ strict: false }));
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+// Operational endpoint for Prometheus; intentionally not part of the public OpenAPI contract.
+app.get('/metrics', async (_req, res) => {
+  res.set('Content-Type', registry.contentType);
+  res.send(await registry.metrics());
+});
 app.get('/ready', async (req, res, next) => {
   try { const result = await callUpstream(req, '/ready'); if (result.status !== 200) return res.status(503).json({ status: 'not_ready', checks: { pokemartApi: 'unavailable' } }); return res.json({ status: 'ready', checks: { pokemartApi: 'ok' } }); } catch (error) { next(error); }
 });
