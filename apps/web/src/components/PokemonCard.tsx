@@ -12,9 +12,11 @@ interface PokemonCardProps {
   onBuyNow: (item: CatalogItem, quantity: number) => void;
   inCartQuantity?: number;
   disabled?: boolean;
+  /** Load the sprite eagerly; set for above-the-fold cards (LCP candidates). */
+  eager?: boolean;
 }
 
-export function PokemonCard({ item, onAddToCart, onBuyNow, inCartQuantity = 0, disabled = false }: PokemonCardProps) {
+export function PokemonCard({ item, onAddToCart, onBuyNow, inCartQuantity = 0, disabled = false, eager = false }: PokemonCardProps) {
   const { pokemon, listing } = item;
   const [wanted, setWanted] = useState(1);
   const [justAdded, setJustAdded] = useState(false);
@@ -62,6 +64,7 @@ export function PokemonCard({ item, onAddToCart, onBuyNow, inCartQuantity = 0, d
             alt=""
             width={112}
             height={112}
+            loading={eager ? "eager" : "lazy"}
             unoptimized
             className="sprite h-28 w-28 object-contain transition-transform duration-200 group-hover:scale-105"
           />
