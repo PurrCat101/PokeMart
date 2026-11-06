@@ -13,7 +13,7 @@ import {
   CheckoutReceipt,
   CheckoutFailure,
 } from "../types/api";
-import { type KycLevel, lineKey, lineMaxQuantity, normalizeCart } from "../lib/cart";
+import { type KycLevel, lineKey, lineMaxQuantity, normalizeCart, verificationNameTh } from "../lib/cart";
 import { Header } from "../components/Header";
 import { PokemonCard } from "../components/PokemonCard";
 import { ItemCard } from "../components/ItemCard";
@@ -333,7 +333,7 @@ export default function PokeMartApp() {
       } catch (err) {
         const message =
           err instanceof ApiError && err.code === "KYC_LEVEL_REQUIRED" && line.kind === "item"
-            ? `ต้องใช้ KYC ระดับ ${line.item.requiredKycLevel}`
+            ? `ต้อง${verificationNameTh(line.item.requiredKycLevel)}ก่อนจึงจะซื้อได้`
             : err instanceof Error && err.message
               ? err.message
               : "Purchase rejected by server.";
@@ -491,7 +491,7 @@ export default function PokeMartApp() {
                   Catalog
                 </h1>
                 <p className="mt-1 text-sm text-fg-muted">
-                  {catalogKind === "pokemon" ? "Choose a Pokémon, set a quantity, and add it to your bag." : "Items for your trainer. Some need identity verification."}
+                  {catalogKind === "pokemon" ? "Choose a Pokémon, set a quantity, and add it to your bag." : "Items for your trainer. Some need extra verification."}
                 </p>
               </div>
 

@@ -4,6 +4,7 @@ import { ItemCatalogItem } from "../types/api";
 import { BackpackIcon, CartIcon, CheckIcon, UserIcon } from "./icons";
 import { QuantityStepper } from "./QuantityStepper";
 import { Button, cx, money, titleCase } from "./ui";
+import { verificationTitle } from "../lib/cart";
 
 interface ItemCardProps {
   item: ItemCatalogItem;
@@ -54,7 +55,7 @@ export function ItemCard({ item, onAddToCart, onBuyNow, inCartQuantity = 0 }: It
               className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full border border-warn/40 bg-warn-soft px-2 py-0.5 text-xs font-medium text-warn"
             >
               <UserIcon className="h-3 w-3" />
-              KYC level {item.requiredKycLevel}
+              {verificationTitle(item.requiredKycLevel)}
             </span>
           )
         )}
@@ -92,7 +93,7 @@ export function ItemCard({ item, onAddToCart, onBuyNow, inCartQuantity = 0 }: It
               {outOfStock ? "Out of stock" : `${item.stock} in stock`}
             </span>
           </p>
-          {needsKyc && inCartQuantity > 0 && <span className="text-xs text-warn">KYC level {item.requiredKycLevel}</span>}
+          {needsKyc && inCartQuantity > 0 && <span className="text-xs text-warn">{verificationTitle(item.requiredKycLevel)}</span>}
         </div>
 
         <div className="mt-auto space-y-3 border-t border-line pt-3">

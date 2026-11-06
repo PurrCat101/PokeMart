@@ -3,7 +3,7 @@ import Image from "next/image";
 import { CartItem, CheckoutFailure, CheckoutReceipt, WalletData } from "../types/api";
 import { BackpackIcon, PokeballIcon } from "./icons";
 import { Alert, Button, Modal, ModalHeader, money, titleCase } from "./ui";
-import { KYC_LEVEL_NAMES, type KycLevel, kycIssue, lineKey, lineName, lineRequiredKyc, lineSprite, lineTotal, lineUnitPrice } from "../lib/cart";
+import { type KycLevel, kycIssue, lineKey, lineName, lineRequiredKyc, lineSprite, lineTotal, lineUnitPrice, verificationName } from "../lib/cart";
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -153,7 +153,7 @@ export function CheckoutModal({ isOpen, onClose, lines, wallet, kycLevel, onExec
                       <p className="truncate font-semibold capitalize">{line.kind === "item" ? titleCase(line.item.name) : lineName(line)}</p>
                       <p className="font-mono text-xs tabular-nums text-fg-subtle">
                         {money(lineUnitPrice(line))} × {line.quantity}
-                        {required > 0 && <span className="font-sans"> · KYC {KYC_LEVEL_NAMES[required]}</span>}
+                        {required > 0 && <span className="font-sans"> · needs {verificationName(required)}</span>}
                       </p>
                     </div>
                     <p className="font-mono text-sm font-semibold tabular-nums">{money(lineTotal(line))}</p>
@@ -185,8 +185,8 @@ export function CheckoutModal({ isOpen, onClose, lines, wallet, kycLevel, onExec
               </Alert>
             )}
             {blockedLines.length > 0 && (
-              <Alert tone="danger" title="Identity verification needed" data-testid="checkout-kyc-warning">
-                {blockedLines.map(lineName).join(", ")} needs a higher KYC level than your account has.
+              <Alert tone="danger" title="More verification needed" data-testid="checkout-kyc-warning">
+                {blockedLines.map(lineName).join(", ")} needs more verification than your account has.
               </Alert>
             )}
           </>
