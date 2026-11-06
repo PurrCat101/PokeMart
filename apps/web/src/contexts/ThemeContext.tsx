@@ -16,6 +16,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the stored theme lives in localStorage, which only exists in the browser; it is applied after mount
     setMounted(true);
     const stored = localStorage.getItem("pokemart_theme") as Theme | null;
     if (stored) {

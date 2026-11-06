@@ -112,8 +112,14 @@ The Makefile is the documented entry point for common local workflows. It wraps 
 | `make test-api` | Run endpoint-level API validation tests against the selected real target |
 | `make test-purchase-retry` | Verify purchase ID retry and duplicate behavior against the real BFF |
 | `make test-e2e` | Run end-to-end business flows against the real BFF and services |
-| `make db-seed` | Apply or verify baseline data using a documented safe strategy |
-| `make db-reset` | Destructively recreate local lab data; warning required in help and docs |
+| `make db-seed` | Confirm baseline data is present |
+| `make db-migrate` | Apply pending Liquibase changesets (safe to repeat) |
+| `make db-status` | Show applied and pending Liquibase changesets |
+| `make db-adopt` | One time, for a pre-Liquibase volume: record the baseline as applied |
+| `make db-reset` | Destructively recreate local lab data and re-apply every changeset; warning required in help and docs |
+| `make fresh` | Destructively wipe local data and start everything clean (`down -v` then `up`); use it to begin a practice or test session from a known state |
+| `make lint` | ESLint for the web app and type-check every service |
+| `make test-all` | Lint, build, start the stack, run the whole Playwright suite, then always stop the stack |
 | `make obs-up` / `make obs-down` | Start or stop optional observability services |
 | `make perf-smoke` | Run a small k6 smoke workload once k6 scripts exist |
 | `make perf-load` | Run a defined k6 load profile once the performance phase is implemented |

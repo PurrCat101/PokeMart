@@ -10,7 +10,6 @@ import {
   CreatePurchaseRequest,
   ApiErrorResponse,
   ShipmentItem,
-  ItemCatalogItem,
   ItemCatalogResponse,
   CreateItemPurchaseRequest,
   ItemPurchase,

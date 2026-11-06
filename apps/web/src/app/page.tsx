@@ -100,6 +100,7 @@ export default function PokeMartApp() {
       const stored = localStorage.getItem("pokemart_cart");
       if (stored) {
         // Bags saved before items existed have no `kind`; normalizeCart treats those as Pokemon.
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage only exists in the browser, so the bag is read after mount to keep server and client markup identical
         setCart(normalizeCart(JSON.parse(stored)));
       }
     } catch {
@@ -146,11 +147,11 @@ export default function PokeMartApp() {
         setAllItems(page.results);
         setCatalogTotal(page.count);
       }
-    } catch (err: any) {
+    } catch (err) {
       setBffStatusError(
         err instanceof ApiError && err.code === "DEPENDENCY_UNAVAILABLE"
           ? "BFF service or upstream PokéMart API is currently offline. Ensure docker containers or bff/api are running."
-          : err.message || "Failed to load shop catalog."
+          : (err instanceof Error && err.message) || "Failed to load shop catalog."
       );
     } finally {
       setIsCatalogLoading(false);
@@ -193,12 +194,14 @@ export default function PokeMartApp() {
 
   // Initial load
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- data fetching on mount and whenever a filter changes; the fetch sets its own loading flag first
     syncSession();
     fetchFullCatalog();
   }, [syncSession, fetchFullCatalog]);
 
   // Tab change handlers
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load the tab's data when it is opened; each fetch sets its own loading flag first
     if (activeTab === "inventory" && user) fetchInventory();
     if (activeTab === "purchases" && user) fetchPurchases(0);
   }, [activeTab, user, fetchInventory, fetchPurchases]);
