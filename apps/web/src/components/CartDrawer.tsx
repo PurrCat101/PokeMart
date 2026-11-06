@@ -1,13 +1,12 @@
 import React from "react";
 import Image from "next/image";
-import { CartItem, WalletData, AuthUser } from "../types/api";
+import { CartItem, WalletData, AuthUser, KycStatus } from "../types/api";
 import { TrashIcon, CartIcon, PokeballIcon, BackpackIcon, UserIcon } from "./icons";
 import { QuantityStepper } from "./QuantityStepper";
 import { Alert, Button, IconButton, Modal, ModalHeader, formatPokemonId, money, titleCase } from "./ui";
 import {
   verificationName,
   yourAccountSentence,
-  type KycLevel,
   cartTestId,
   kycIssue,
   lineId,
@@ -27,7 +26,7 @@ interface CartDrawerProps {
   wallet: WalletData | null;
   user: AuthUser | null;
   /** null = unknown (signed out, or the KYC service is unavailable). */
-  kycLevel: KycLevel | null;
+  kyc: KycStatus | null;
   onUpdateQuantity: (line: CartItem, quantity: number) => void;
   onRemoveItem: (line: CartItem) => void;
   onClearCart: () => void;
@@ -35,13 +34,13 @@ interface CartDrawerProps {
   onOpenLogin: () => void;
 }
 
-function KycNote({ line, user, kycLevel }: { line: CartItem; user: AuthUser | null; kycLevel: KycLevel | null }) {
+function KycNote({ line, user, kyc }: { line: CartItem; user: AuthUser | null; kyc: KycStatus | null }) {
   const required = lineRequiredKyc(line);
   if (required === 0) return null;
-  const issue = user ? kycIssue(line, kycLevel) : null;
+  const issue = user ? kycIssue(line, kyc) : null;
   const tone = issue === "blocked" ? "text-danger" : "text-warn";
   let text = `Needs ${verificationName(required)}`;
-  if (issue === "blocked") text = `Needs ${verificationName(required)}. ${yourAccountSentence(kycLevel ?? 0)}, so this can't be bought yet.`;
+  if (issue === "blocked") text = `Needs ${verificationName(required)}. ${yourAccountSentence(kyc)}`;
   else if (issue === "unknown") text = `Needs ${verificationName(required)}. We couldn't check your account's verification right now.`;
   return (
     <p data-testid={cartTestId(line, "kyc")} className={`mt-1 flex items-start gap-1.5 text-xs ${tone}`}>
@@ -54,19 +53,19 @@ function KycNote({ line, user, kycLevel }: { line: CartItem; user: AuthUser | nu
 function CartItemRow({
   line,
   user,
-  kycLevel,
+  kyc,
   onUpdateQuantity,
   onRemoveItem,
 }: {
   line: CartItem;
   user: AuthUser | null;
-  kycLevel: KycLevel | null;
+  kyc: KycStatus | null;
   onUpdateQuantity: (line: CartItem, quantity: number) => void;
   onRemoveItem: (line: CartItem) => void;
 }) {
   const sprite = lineSprite(line);
   const name = lineName(line);
-  const issue = user ? kycIssue(line, kycLevel) : null;
+  const issue = user ? kycIssue(line, kyc) : null;
   const KindIcon = line.kind === "pokemon" ? PokeballIcon : BackpackIcon;
 
   return (
@@ -100,7 +99,7 @@ function CartItemRow({
           </IconButton>
         </div>
 
-        <KycNote line={line} user={user} kycLevel={kycLevel} />
+        <KycNote line={line} user={user} kyc={kyc} />
 
         <div className="mt-2 flex items-center justify-between gap-2">
           <QuantityStepper
@@ -126,7 +125,7 @@ export function CartDrawer({
   cart,
   wallet,
   user,
-  kycLevel,
+  kyc,
   onUpdateQuantity,
   onRemoveItem,
   onClearCart,
@@ -140,8 +139,9 @@ export function CartDrawer({
   const currentBalance = wallet ? wallet.balance : 0;
   const remainingBalance = currentBalance - subtotal;
   const hasInsufficientFunds = user !== null && wallet !== null && remainingBalance < 0;
-  const blockedLines = user ? cart.filter((line) => kycIssue(line, kycLevel) === "blocked") : [];
-  const unknownLines = user ? cart.filter((line) => kycIssue(line, kycLevel) === "unknown") : [];
+  const isPendingReview = user !== null && kyc?.status === "PENDING_REVIEW";
+  const blockedLines = user ? cart.filter((line) => kycIssue(line, kyc) === "blocked") : [];
+  const unknownLines = user ? cart.filter((line) => kycIssue(line, kyc) === "unknown") : [];
 
   return (
     <Modal variant="drawer" onClose={onClose} labelledBy="cart-title" testId="cart-drawer">
@@ -180,7 +180,7 @@ export function CartDrawer({
                   key={lineKey(line)}
                   line={line}
                   user={user}
-                  kycLevel={kycLevel}
+                  kyc={kyc}
                   onUpdateQuantity={onUpdateQuantity}
                   onRemoveItem={onRemoveItem}
                 />
@@ -218,12 +218,17 @@ export function CartDrawer({
               Your wallet can&apos;t cover this order. Remove an item or reduce a quantity.
             </Alert>
           )}
-          {blockedLines.length > 0 && (
+          {isPendingReview && (
+            <Alert tone="info" title="Verification under review" data-testid="cart-kyc-pending">
+              Purchases are paused until your account is approved. Your bag is saved.
+            </Alert>
+          )}
+          {!isPendingReview && blockedLines.length > 0 && (
             <Alert tone="danger" title="More verification needed" data-testid="cart-kyc-warning">
               Remove {blockedLines.map(lineName).join(", ")} from your bag, or complete more verification to buy {blockedLines.length === 1 ? "it" : "them"}.
             </Alert>
           )}
-          {blockedLines.length === 0 && unknownLines.length > 0 && (
+          {!isPendingReview && blockedLines.length === 0 && unknownLines.length > 0 && (
             <Alert tone="warn" title="Couldn't check your verification" data-testid="cart-kyc-warning">
               Some items need extra verification. You can still try; the order is rejected if your account isn&apos;t verified enough.
             </Alert>
@@ -237,7 +242,7 @@ export function CartDrawer({
             <Button
               variant="primary"
               onClick={onProceedToCheckout}
-              disabled={hasInsufficientFunds || blockedLines.length > 0}
+              disabled={hasInsufficientFunds || blockedLines.length > 0 || isPendingReview}
               data-testid="cart-proceed-to-checkout"
               className="w-full"
             >

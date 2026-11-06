@@ -1,4 +1,4 @@
-.PHONY: help install build lint up down ps logs docs swagger test test-all test-observability test-mocked test-api test-pokeapi test-purchase-retry test-e2e db-seed db-migrate db-status db-adopt db-reset fresh observe
+.PHONY: help install build lint up down ps logs docs swagger test test-all test-kyc test-observability test-mocked test-api test-pokeapi test-purchase-retry test-e2e db-seed db-migrate db-status db-adopt db-reset fresh observe
 
 help: ## Show available local-lab commands (db-reset deletes local data)
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-20s %s\n", $$1, $$2}'
@@ -66,6 +66,9 @@ test-purchase-retry: ## Verify purchase ID retries and duplicate detection
 
 test-e2e: ## Run real BFF-to-MySQL journeys
 	npm run test:e2e
+
+test-kyc: ## KYC levels, review status and verification form (one account per test case)
+	npm run test:kyc
 
 db-seed: ## Confirm baseline data is present in the local lab
 	docker compose exec -T mysql sh -c 'mysql -u"$$MYSQL_USER" -p"$$MYSQL_PASSWORD" "$$MYSQL_DATABASE" -e "SELECT COUNT(*) AS catalog_records FROM shop_listing;"'

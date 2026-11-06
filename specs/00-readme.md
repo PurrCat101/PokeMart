@@ -60,7 +60,7 @@ Invoke-RestMethod http://localhost:4000/ready
 Public API:
 
 - `GET /api/pokemon` และ `GET /api/pokemon/{id}`
-- `GET /api/wallet`, `POST /api/wallet/top-ups`, `GET /api/wallet/top-ups/{topUpId}` และ `GET /api/kyc/status`
+- `GET /api/wallet`, `POST /api/wallet/top-ups`, `GET /api/wallet/top-ups/{topUpId}`, `GET /api/kyc/status` และ `POST /api/kyc/submissions`
 - `GET /api/inventory`
 - `GET /api/purchases` และ `GET /api/purchases/{id}`
 - `GET /api/purchases/{id}/shipment`
@@ -93,7 +93,7 @@ npm run test:e2e
 
 ฐานข้อมูลเริ่มต้นจาก SQL ใน `database/schema/` และ `database/seed/` ซึ่ง Liquibase นำไปใช้ให้ (รันซ้ำได้ปลอดภัย) seed มี Pokémon 1,025 ตัวและ item 2,222 รายการจาก PokeAPI snapshot ที่ pin commit แล้ว พร้อมราคา/stock/KYC จำลองของ PokéMart
 
-ราคา Pokémon ใช้ base experience คำนวณแล้วปัดทีละ 50 และราคา item ใช้ PokéAPI cost เป็นฐาน; Pokémon ทุกตัวเป็น KYC 0 ขณะที่ KYC 1/2 สงวนไว้สำหรับ item ระดับสูง เช่น Master Ball และยาระดับสูง ข้อมูลที่ generate อยู่ใน `010_reference_pokemon.sql`, `011_reference_items.sql` และ `012_seed_catalog.sql`; runtime/test ไม่เรียก PokéAPI
+ราคา Pokémon ใช้ base experience คำนวณแล้วปัดทีละ 50 และราคา item ใช้ PokéAPI cost เป็นฐาน; Pokémon และ item ทั่วไปต้องมี KYC level 1 ส่วน item ระดับ Master (เช่น Master Ball และยาระดับสูง) ต้อง level 2 และ level 0 ซื้ออะไรไม่ได้เลย ข้อมูลที่ generate อยู่ใน `010_reference_pokemon.sql`, `011_reference_items.sql` และ `012_seed_catalog.sql`; runtime/test ไม่เรียก PokéAPI
 
 ที่มาข้อมูล: [PokeAPI REST API](https://pokeapi.co/). ตรวจสอบ license/attribution ก่อนนำ snapshot ไปแจกจ่ายต่อ
 
@@ -115,7 +115,7 @@ npm run test:e2e
 ### Reference-data seed
 
 - มี Pokémon 1,025 ตัวและ item ชื่อไม่ซ้ำ 2,222 รายการจาก snapshot ที่ generate และ commit แล้ว; ไม่ต้องเก็บ clone `api-data` ไว้ในโปรเจ็กต์
-- ราคา/stock เป็นข้อมูลจำลองของร้าน; Pokémon ทุกตัว KYC 0 และ KYC ระดับสูงใช้กับ items ตามกติกาใน [database/README.md](database/README.md)
+- ราคา/stock เป็นข้อมูลจำลองของร้าน; Pokémon และ item ทั่วไปต้อง KYC level 1, item ระดับ Master ต้อง level 2 ตามกติกาใน [database/README.md](database/README.md)
 
 ### BFF DTO
 

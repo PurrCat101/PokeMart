@@ -166,4 +166,4 @@ The BFF does not retry `POST /api/wallet/top-ups` automatically, same as purchas
 ## 10. Open points
 
 - Whether the mock should support `requires_action` (3-D Secure) in a later iteration.
-- Top-up is not gated by KYC (decided; KYC gates item purchases only, see `12-kyc.md`).
+- Top-up is not gated by KYC (decided; KYC gates Pokémon and item purchases, not wallet top-ups, see `12-kyc.md`).

@@ -72,3 +72,27 @@ databaseChangeLog:
             relativeToChangelogFile: true
             splitStatements: true
             endDelimiter: ;
+
+  - changeSet:
+      id: 006-kyc-catalog-levels
+      author: pokemart
+      context: seed
+      comment: Level 0 buys nothing, level 1 buys ordinary listings, level 2 also buys the Master tier
+      changes:
+        - sqlFile:
+            path: ../seed/013_kyc_catalog_levels.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            endDelimiter: ;
+
+  - changeSet:
+      id: 007-seed-kyc-test-users
+      author: pokemart
+      context: seed
+      comment: One test account per KYC scenario, each with its own wallet (local lab only)
+      changes:
+        - sqlFile:
+            path: ../seed/014_seed_kyc_test_users.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            endDelimiter: ;

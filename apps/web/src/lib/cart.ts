@@ -1,4 +1,4 @@
-import type { CartItem } from "../types/api";
+import type { CartItem, KycStatus } from "../types/api";
 
 export type KycLevel = 0 | 1 | 2;
 
@@ -31,8 +31,11 @@ export function lineTotal(line: CartItem): number {
   return lineUnitPrice(line) * line.quantity;
 }
 
+/** Every Pokémon listing needs level 1; the catalog API does not return a level for them. */
+export const POKEMON_REQUIRED_KYC_LEVEL: KycLevel = 1;
+
 export function lineRequiredKyc(line: CartItem): KycLevel {
-  return line.kind === "item" ? line.item.requiredKycLevel : 0;
+  return line.kind === "item" ? line.item.requiredKycLevel : POKEMON_REQUIRED_KYC_LEVEL;
 }
 
 /** Highest quantity a single line may hold. */
@@ -54,17 +57,20 @@ export function cartTestId(line: CartItem, part?: "quantity" | "remove" | "kyc")
  * "unknown": the listing needs KYC but the level could not be loaded (KYC service down).
  * The API stays the source of truth; this only warns early.
  */
-export function kycIssue(line: CartItem, kycLevel: KycLevel | null): "blocked" | "unknown" | null {
+export function kycIssue(line: CartItem, kyc: KycStatus | null): "pending" | "blocked" | "unknown" | null {
+  // An account under review cannot buy anything, whatever the listing needs (the API enforces the same rule).
+  if (kyc?.status === "PENDING_REVIEW") return "pending";
   const required = lineRequiredKyc(line);
   if (required === 0) return null;
-  if (kycLevel === null) return "unknown";
-  return kycLevel < required ? "blocked" : null;
+  if (kyc === null) return "unknown";
+  // Only an ACTIVE record grants its level; REJECTED never does.
+  return kyc.status !== "ACTIVE" || kyc.level < required ? "blocked" : null;
 }
 
 /**
  * What a customer sees instead of "KYC level N". The tiers work like an exchange account: an unverified
  * account can browse and buy ordinary things, and higher tiers unlock higher-value items.
- * The numbers (0 / 1 / 2) are the API's `levelValue`; they never appear in the UI.
+ * The numbers (0 / 1 / 2) are the API's `level`; they never appear in the UI.
  */
 const VERIFICATION_NAMES: Record<number, string> = {
   0: "not verified",
@@ -94,8 +100,10 @@ export function verificationNameTh(level: number): string {
   return VERIFICATION_NAMES_TH[level] ?? VERIFICATION_NAMES_TH[2];
 }
 
-/** "Your account is not verified yet" / "Your account has basic verification". */
-export function yourAccountSentence(level: number): string {
+/** "Your account is not verified yet" / "Your account has basic verification" / "Your verification was declined". */
+export function yourAccountSentence(kyc: KycStatus | null): string {
+  if (kyc?.status === "REJECTED") return "Your verification was declined";
+  const level = kyc?.level ?? 0;
   return level === 0 ? "Your account is not verified yet" : `Your account has ${verificationName(level)}`;
 }
 

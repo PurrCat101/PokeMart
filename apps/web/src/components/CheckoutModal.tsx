@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import Image from "next/image";
-import { CartItem, CheckoutFailure, CheckoutReceipt, WalletData } from "../types/api";
+import { CartItem, CheckoutFailure, CheckoutReceipt, WalletData, KycStatus } from "../types/api";
 import { BackpackIcon, PokeballIcon } from "./icons";
 import { Alert, Button, Modal, ModalHeader, money, titleCase } from "./ui";
-import { type KycLevel, kycIssue, lineKey, lineName, lineRequiredKyc, lineSprite, lineTotal, lineUnitPrice, verificationName } from "../lib/cart";
+import { kycIssue, lineKey, lineName, lineRequiredKyc, lineSprite, lineTotal, lineUnitPrice, verificationName } from "../lib/cart";
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -11,7 +11,7 @@ interface CheckoutModalProps {
   /** The lines being paid for: the whole bag, or a single "Buy now" line. */
   lines: CartItem[];
   wallet: WalletData | null;
-  kycLevel: KycLevel | null;
+  kyc: KycStatus | null;
   onExecuteCheckout: (
     lines: CartItem[],
     onProgress: (current: number, total: number, itemName: string) => void,
@@ -19,7 +19,7 @@ interface CheckoutModalProps {
   onCheckoutSuccess: (completed: CheckoutReceipt[]) => void;
 }
 
-export function CheckoutModal({ isOpen, onClose, lines, wallet, kycLevel, onExecuteCheckout, onCheckoutSuccess }: CheckoutModalProps) {
+export function CheckoutModal({ isOpen, onClose, lines, wallet, kyc, onExecuteCheckout, onCheckoutSuccess }: CheckoutModalProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number; name: string } | null>(null);
   const [completed, setCompleted] = useState<CheckoutReceipt[]>([]);
@@ -32,8 +32,9 @@ export function CheckoutModal({ isOpen, onClose, lines, wallet, kycLevel, onExec
   const totalCost = lines.reduce((acc, line) => acc + lineTotal(line), 0);
   const currentBalance = wallet ? wallet.balance : 0;
   const remainingBalance = currentBalance - totalCost;
-  const blockedLines = lines.filter((line) => kycIssue(line, kycLevel) === "blocked");
-  const cannotPay = remainingBalance < 0 || blockedLines.length > 0;
+  const blockedLines = lines.filter((line) => kycIssue(line, kyc) === "blocked");
+  const isPendingReview = kyc?.status === "PENDING_REVIEW";
+  const cannotPay = remainingBalance < 0 || blockedLines.length > 0 || isPendingReview;
 
   const handleStartCheckout = async () => {
     setIsProcessing(true);
@@ -184,7 +185,12 @@ export function CheckoutModal({ isOpen, onClose, lines, wallet, kycLevel, onExec
                 Go back and remove an item to continue.
               </Alert>
             )}
-            {blockedLines.length > 0 && (
+            {isPendingReview && (
+              <Alert tone="info" title="Verification under review" data-testid="checkout-kyc-pending">
+                Purchases are paused until your account is approved.
+              </Alert>
+            )}
+            {!isPendingReview && blockedLines.length > 0 && (
               <Alert tone="danger" title="More verification needed" data-testid="checkout-kyc-warning">
                 {blockedLines.map(lineName).join(", ")} needs more verification than your account has.
               </Alert>

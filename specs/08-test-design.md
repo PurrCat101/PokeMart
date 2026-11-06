@@ -192,3 +192,32 @@ The project uses one worker. Mutating cases snapshot and restore wallet/stock/in
 2. Exercise the BFF's real upstream mapping for connection refusal, timeout, upstream 5xx, and malformed upstream response separately from WireMock's configured fixtures.
 3. Add a service-to-service identity and production-grade token lifecycle controls before exposing the internal API beyond its trusted Compose network.
 4. Keep public BFF, internal API, and WireMock reports separate; passing one layer is not evidence for another layer's behavior.
+
+## 10. KYC coverage
+
+KYC rules (levels, review status, submission, outage) are covered by their own Playwright projects, `kyc` (API through the BFF) and `kyc-ui` (browser), run with `make test-kyc`. See [`12-kyc.md`](12-kyc.md) section 11 for the data model.
+
+**Data isolation:** one test case owns one `lab-kyc-<scenario>` account (list in `tests/support/data/kycUsers.ts`, seeded by `database/seed/014_seed_kyc_test_users.sql`). Before each test the fixture sets that account's KYC record through the KYC service test route, resets its wallet and holdings, and resets the catalog rows it buys from. Cases never share an account.
+
+| ID | Scenario (account) | Expected |
+|---|---|---|
+| KYC-BUY-001 / 002 | level 0 buys a Pokémon / an ordinary item | `403 KYC_LEVEL_REQUIRED`, `details` `{ required: 1, current: 0 }`, no state change |
+| KYC-BUY-003 / 004 | level 1 buys a Pokémon / an ordinary item | `201`, wallet, stock and inventory updated |
+| KYC-BUY-005 | level 1 buys a Master item | `403 KYC_LEVEL_REQUIRED`, `{ required: 2, current: 1 }` |
+| KYC-BUY-006 | level 2 buys a Master item | `201` |
+| KYC-BUY-007 / 008 | account under review buys a Pokémon / an item | `403 KYC_PENDING_REVIEW` |
+| KYC-BUY-009 | level 1 account under review buys a Pokémon | `403 KYC_PENDING_REVIEW` (review beats level) |
+| KYC-BUY-010 | rejected level 0 account buys a Pokémon | `403 KYC_LEVEL_REQUIRED` |
+| KYC-STATUS-001..005 | `GET /api/kyc/status` and `/api/account-info` for level 0, 1, 2, pending, rejected | `200`, matching `level` and `status` |
+| KYC-SUB-001 | valid submission | `202`, `PENDING_REVIEW`, then purchases blocked |
+| KYC-SUB-002 / 008 | invalid fields / unknown fields or wrong types | `400 VALIDATION_ERROR` with per-field `details` |
+| KYC-SUB-003 / 004 | submit while pending / when already verified | `409 KYC_ALREADY_PENDING` / `KYC_ALREADY_VERIFIED` |
+| KYC-SUB-005 | rejected account submits again | `202`, back to `PENDING_REVIEW` |
+| KYC-SUB-006 | reviewer approves a pending account | purchase succeeds at the new level |
+| KYC-SUB-007 | submission without a token | `401 UNAUTHORIZED` |
+| KYC-DOWN-001 | KYC outage during a purchase | `503 DEPENDENCY_UNAVAILABLE`, `retryable: true`, no state change |
+| KYC-DOWN-002 | KYC outage on account info and status | `account-info` `200` with `kyc: null`; `kyc/status` `503` |
+| KYC-UI-001..005 | popup and Maybe later, Verify now and submit, form validation, under-review banner and blocked checkout, rejected banner and Send again | per `09-frontend.md` |
+
+Not yet covered: the KYC `timeout` fault (only `http_500` is exercised) and the existing Pokémon purchase suites were not re-run after the tier change.
+

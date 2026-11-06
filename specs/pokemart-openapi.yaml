@@ -215,10 +215,13 @@ paths:
         that same purchase attempt. The purchase ID, stock change, wallet change, and inventory change
         are committed in one transaction. Failed transactions do not reserve the purchaseId, so a retry
         with the same ID can succeed. Reusing an ID that was already committed returns 409 PURCHASE_DUPLICATE.
-        Errors: 400 `VALIDATION_ERROR` or `INVALID_JSON`; 404 `POKEMON_NOT_FOUND`;
+        Every Pokémon needs verification level 1. The service asks the KYC API on every purchase.
+        Errors: 400 `VALIDATION_ERROR` or `INVALID_JSON`;
+        403 `KYC_PENDING_REVIEW` (account under review) or `KYC_LEVEL_REQUIRED` (`details` has `required`/`current`);
+        404 `POKEMON_NOT_FOUND`;
         409 `PURCHASE_DUPLICATE`, `POKEMON_NOT_FOR_SALE`, or `INSUFFICIENT_STOCK`;
         415 `UNSUPPORTED_MEDIA_TYPE`; 422 `INSUFFICIENT_FUNDS`;
-        500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE`.
+        500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE` (also when the KYC API is down).
       parameters:
         - $ref: '#/components/parameters/XRequestIdRequest'
       requestBody:
@@ -244,6 +247,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Error'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
@@ -382,6 +387,7 @@ paths:
     post:
       tags: [Purchases]
       summary: Purchase an item and add it to the authenticated user's item inventory
+      description: Ordinary items need verification level 1, the Master tier level 2. `403 KYC_PENDING_REVIEW` while the account is under review; `403 KYC_LEVEL_REQUIRED` when the level is too low; `503 DEPENDENCY_UNAVAILABLE` when the KYC API is down.
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -403,11 +409,34 @@ paths:
   /pokemart/v1/kyc/status:
     get:
       tags: [Account]
-      summary: Get the authenticated user's KYC level
+      summary: Get the authenticated user's KYC level and review status
       security: [{ bearerAuth: [] }]
       responses:
-        '200': { description: KYC status }
+        '200':
+          description: KYC status
+          content: { application/json: { schema: { $ref: '#/components/schemas/KycStatus' } } }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/Error' }
+  /pokemart/v1/kyc/submissions:
+    post:
+      tags: [Account]
+      summary: Submit identity details for verification
+      description: Forwards the form to the KYC API. The account becomes `PENDING_REVIEW` at its current level; there is no automatic approval. While under review every purchase is rejected with `403 KYC_PENDING_REVIEW`.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/KycSubmissionRequest' }
+      responses:
+        '202':
+          description: Accepted; the account is now under review
+          content: { application/json: { schema: { $ref: '#/components/schemas/KycStatus' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '503': { $ref: '#/components/responses/Error' }
   /pokemart/v1/wallet/top-ups:
     post:
       tags: [Wallet]
@@ -535,6 +564,24 @@ components:
         format: uuid
 
   schemas:
+    KycStatus:
+      type: object
+      description: One account's verification record. `level` is the only level field.
+      required: [level, status, updatedAt]
+      properties:
+        level: { type: integer, enum: [0, 1, 2], description: '0 = not verified, 1 = basic, 2 = advanced.' }
+        status: { type: string, enum: [ACTIVE, PENDING_REVIEW, REJECTED] }
+        updatedAt: { type: string, format: date-time }
+    KycSubmissionRequest:
+      type: object
+      additionalProperties: false
+      required: [fullName, nationalId, dateOfBirth, phone, address]
+      properties:
+        fullName: { type: string, minLength: 2, maxLength: 100 }
+        nationalId: { type: string, pattern: '^[0-9]{13}$', description: 'Thai national ID; the last digit must be the correct check digit.' }
+        dateOfBirth: { type: string, format: date, description: 'The applicant must be at least 18 years old.' }
+        phone: { type: string, pattern: '^0[0-9]{9}$' }
+        address: { type: string, minLength: 10, maxLength: 300 }
     LoginRequest:
       type: object
       required: [email, password]
@@ -811,6 +858,10 @@ components:
                 - INSUFFICIENT_STOCK
                 - INSUFFICIENT_FUNDS
                 - PURCHASE_DUPLICATE
+                - KYC_LEVEL_REQUIRED
+                - KYC_PENDING_REVIEW
+                - KYC_ALREADY_PENDING
+                - KYC_ALREADY_VERIFIED
                 - DEPENDENCY_UNAVAILABLE
                 - INTERNAL_ERROR
             message:
@@ -821,16 +872,35 @@ components:
               type: array
               items:
                 type: object
-                required: [field, message]
+                description: |
+                  Validation errors carry `field` and `message`. `KYC_LEVEL_REQUIRED` carries
+                  `required` and `current` (verification levels) instead.
                 properties:
                   field:
                     type: string
                   message:
                     type: string
+                  required:
+                    type: integer
+                    enum: [1, 2]
+                    description: Level the listing needs (`KYC_LEVEL_REQUIRED` only).
+                  current:
+                    type: integer
+                    enum: [0, 1, 2]
+                    description: Level the account has (`KYC_LEVEL_REQUIRED` only).
 
   responses:
     BadRequest:
       description: Invalid input
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Error:
+      description: Error envelope (see the error code on the response body)
       headers:
         X-Request-Id:
           $ref: '#/components/headers/XRequestId'

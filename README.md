@@ -4,7 +4,7 @@
 
 ## สถาปัตยกรรม
 
-![PokéMart API test architecture flow](specs/images/pokemart-api-test-architecture-flow.png)
+![PokéMart API test architecture flow](specs/images/PokMart-System-Architecture.png)
 
 ![PokéMart API test workflow from requirements to reports](specs/images/pokemart-test-workflow.svg)
 
@@ -13,7 +13,7 @@
 | Web frontend | `http://localhost:4003` | Next.js UI (เริ่มแยกด้วย `npm run dev`) สำหรับ catalog, cart/checkout, wallet, inventory และ purchase history |
 | BFF | `http://localhost:4001` | Public API สำหรับ client และแปลง response เป็น DTO ฝั่ง public |
 | PokéMart API | `http://localhost:4000` | Internal service สำหรับ business rules และการเข้าถึงข้อมูล |
-| KYC API | `http://localhost:4005` (Docker) | Internal service ระดับ KYC 3 ระดับ (NONE/BASIC/FULL) ที่ PokéMart API เรียกก่อนขายสินค้าที่ต้องยืนยันตัวตน; มี test-only routes สำหรับตั้งระดับและจำลองความล้มเหลว |
+| KYC API | `http://localhost:4005` (Docker) | Internal service ระดับ KYC 3 ระดับ (`level` 0/1/2) ที่ PokéMart API เรียกก่อนขายสินค้าที่ต้องยืนยันตัวตน; มี test-only routes สำหรับตั้งระดับและจำลองความล้มเหลว |
 | Payment Mock | `http://localhost:4004` (Docker) | Stripe-style PaymentIntent mock สำหรับ wallet top-up (idempotency + recovery) |
 | Shipping Mock | `http://localhost:4002` (Docker) | Express Mock จำลองระบบจัดส่งบุคคลที่สาม (3rd-party shipping provider) |
 | Shipping Worker | Background process / Docker | Worker อ่านคิวงาน `shipments` จาก MySQL ยิง provider HTTP และ sync delivery status |
@@ -294,7 +294,7 @@ Client สร้าง UUID `purchaseId` ก่อนเริ่มซื้อ
 
 ทุกเส้นใน ERD คือ foreign key ที่ประกาศใน MySQL รวมถึง `users.user_id` ที่เชื่อมกับ wallet, inventory และ purchases คัดลอก DBML ไปใช้ใน dbdiagram.io ได้จาก [database/schema/pokemart.dbml](database/schema/pokemart.dbml); ดูรายละเอียดคอลัมน์และ constraints ที่ [database/README.md](database/README.md).
 
-ราคา Pokémon derive จาก base experience และราคา item ใช้ข้อมูลอ้างอิง PokéAPI; stock เป็น deterministic. Pokémon ทุกตัวซื้อได้ที่ KYC 0 ส่วน KYC 1/2 ใช้กับ item ระดับสูง เช่น Master Ball และยาระดับสูง Runtime/test ไม่เรียก PokéAPI และไม่ต้องมี clone `api-data`; ดู [database/README.md](database/README.md) และ seed ที่ generate ใน [database/seed](database/seed)
+ราคา Pokémon derive จาก base experience และราคา item ใช้ข้อมูลอ้างอิง PokéAPI; stock เป็น deterministic. Pokémon และ item ทั่วไปต้องมี KYC level 1, item ระดับ Master (เช่น Master Ball และยาระดับสูง) ต้อง level 2 และ level 0 ซื้ออะไรไม่ได้ ส่วนบัญชีที่รอตรวจสอบ (`PENDING_REVIEW`) ซื้อไม่ได้เช่นกัน Runtime/test ไม่เรียก PokéAPI และไม่ต้องมี clone `api-data`; ดู [database/README.md](database/README.md) และ seed ที่ generate ใน [database/seed](database/seed)
 
 ที่มาข้อมูล: [PokeAPI REST API](https://pokeapi.co/) โปรดตรวจสอบ license/attribution ก่อนนำ snapshot ไปเผยแพร่ต่อ
 

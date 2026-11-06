@@ -43,6 +43,19 @@ export default defineConfig({
       use: { baseURL: process.env.WEB_BASE_URL ?? 'http://localhost:4003' },
     },
     {
+      // KYC scenarios: every test owns one lab-kyc-* account whose level/status it sets itself.
+      name: 'kyc',
+      testMatch: ['kyc/**/*.spec.ts'],
+      dependencies: ['real-state-setup'],
+      use: { baseURL: testConfig.bffBaseUrl },
+    },
+    {
+      name: 'kyc-ui',
+      testMatch: ['ui-kyc/**/*.spec.ts'],
+      dependencies: ['real-state-setup'],
+      use: { baseURL: process.env.WEB_BASE_URL ?? 'http://localhost:4003' },
+    },
+    {
       name: 'pokeapi',
       testMatch: ['PokeAPI/**/*.spec.ts'],
       dependencies: ['real-state-setup'],

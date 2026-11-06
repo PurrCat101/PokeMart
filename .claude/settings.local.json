@@ -1,5 +1,11 @@
 {
-  "description": "Impeccable design detector: immediate-tier checks after Edit/Write on UI files, full-rule deep pass on Stop.",
+  "permissions": {
+    "allow": [
+      "Bash(xargs cat)",
+      "Bash(git add *)",
+      "Bash(git commit -m 'test\\(kyc-ui\\): fix init script clearing token on page reload *)"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
@@ -38,5 +44,6 @@
         ]
       }
     ]
-  }
+  },
+  "description": "Impeccable design detector: immediate-tier checks after Edit/Write on UI files, full-rule deep pass on Stop."
 }

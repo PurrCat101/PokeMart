@@ -26,7 +26,7 @@ Learning goals:
 - MySQL for shop-owned business data and durable shipment work/status.
 - A Node.js + Express Shipping Mock and a separate worker process for asynchronous third-party shipping integration.
 - A Stripe-style Payment Mock for wallet top-ups with idempotency and recovery of uncertain charges ([`11-payment-integration.md`](11-payment-integration.md)). No real money moves.
-- An internal KYC API service with three verification levels that gates purchases of some items ([`12-kyc.md`](12-kyc.md)).
+- An internal KYC API service with three verification levels (0, 1, 2) that gates every purchase, an identity-verification submission flow with a review status, and per-case test accounts ([`12-kyc.md`](12-kyc.md)).
 - Versioned Pokémon reference data based on https://github.com/PokeAPI/api-data.
 - WireMock for mocked-BFF contract tests and selected external dependencies.
 - Docker Compose, schema/seed scripts, OpenAPI specifications, and the Scalar API reference for browsing them.
@@ -67,7 +67,7 @@ Real API validation and E2E cases live in their own suites and run against the c
 
 `PokéMart API -> Payment Mock (HTTP, Idempotency-Key = topUpId)` and `PokéMart API -> KYC API (HTTP, level check)`.
 
-Both are called outside database transactions. The payment recovery sweep runs in the worker process. A KYC outage blocks only listings that need KYC; a payment outage leaves the top-up `UNKNOWN` until recovery. Ports are listed in [`05-operations.md`](05-operations.md) §11.1.
+Both are called outside database transactions. The payment recovery sweep runs in the worker process. A KYC outage fails every purchase closed (`503`) because every seeded listing needs level 1 or 2, while sign-in and account info keep working with `kyc: null`; a payment outage leaves the top-up `UNKNOWN` until recovery. Ports are listed in [`05-operations.md`](05-operations.md) §11.1.
 
 ### Shipping integration track
 

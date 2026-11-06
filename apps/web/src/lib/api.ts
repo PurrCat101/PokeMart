@@ -14,6 +14,8 @@ import {
   CreateItemPurchaseRequest,
   ItemPurchase,
   AccountInfo,
+  KycStatus,
+  KycSubmission,
 } from "../types/api";
 
 export class ApiError extends Error {
@@ -31,13 +33,16 @@ export class ApiError extends Error {
 
 function userMessage(code: string, fallback: string): string {
   const messages: Record<string, string> = {
-    DEPENDENCY_UNAVAILABLE: "บริการชั่วคราวไม่พร้อมใช้งาน กรุณาลองใหม่ภายหลัง",
-    INTERNAL_ERROR: "เกิดข้อผิดพลาดบางอย่าง กรุณาลองใหม่ภายหลัง",
-    INSUFFICIENT_FUNDS: "ยอดเงินในกระเป๋าไม่เพียงพอ",
-    INSUFFICIENT_STOCK: "สินค้าในสต็อกไม่เพียงพอ",
-    KYC_LEVEL_REQUIRED: "ต้องยืนยันตัวตนเพิ่มเติมก่อนจึงจะซื้อสินค้านี้ได้",
-    UNAUTHORIZED: "กรุณาเข้าสู่ระบบก่อนดำเนินการ",
-    INVALID_CREDENTIALS: "อีเมลหรือรหัสผ่านไม่ถูกต้อง",
+    DEPENDENCY_UNAVAILABLE: "Service is temporarily unavailable. Please try again later.",
+    INTERNAL_ERROR: "Something went wrong. Please try again later.",
+    INSUFFICIENT_FUNDS: "Your wallet balance is insufficient.",
+    INSUFFICIENT_STOCK: "Not enough stock available.",
+    KYC_LEVEL_REQUIRED: "Additional account verification is required to buy this item.",
+    KYC_PENDING_REVIEW: "Your verification is under review, so you can't buy this item right now.",
+    KYC_ALREADY_PENDING: "Your verification request is already under review.",
+    KYC_ALREADY_VERIFIED: "This account is already verified.",
+    UNAUTHORIZED: "Please sign in to continue.",
+    INVALID_CREDENTIALS: "Incorrect email or password.",
   };
   return messages[code] ?? fallback;
 }
@@ -129,6 +134,10 @@ export const api = {
 
   async getAccountInfo(): Promise<AccountInfo> {
     return request<AccountInfo>("/api/account-info");
+  },
+
+  async submitKyc(submission: KycSubmission): Promise<KycStatus> {
+    return request<KycStatus>("/api/kyc/submissions", { method: "POST", body: JSON.stringify(submission) });
   },
 
   logout(): void {

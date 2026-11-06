@@ -5,7 +5,7 @@ type PublicError = {
   code: string;
   message: string;
   requestId: string;
-  details: Array<{ field: string; message: string }>;
+  details: Array<Record<string, unknown>>;
   retryable?: boolean;
 };
 
