@@ -2,7 +2,7 @@
 
 ## 11. Docker Compose requirements
 
-Compose defines `mysql`, `wiremock`, `pokemart-api`, `shipping-worker` (also runs the payment recovery sweep), `shipping-mock`, `payment-mock`, `kyc-api`, `bff`, and `api-reference` (Scalar).
+Compose defines `mysql`, `liquibase` (one-shot: applies the schema and seed data, then exits; the API, BFF and worker start only after it succeeds), `wiremock`, `pokemart-api`, `shipping-worker` (also runs the payment recovery sweep and serves `/metrics`), `shipping-mock`, `payment-mock`, `kyc-api`, `bff`, and `api-reference` (Scalar). The optional profile `observability` adds `loki`, `alloy`, `prometheus` and `grafana`. `docker compose down` does not stop profile services; use `make down` (it passes `--profile '*'`).
 
 ## 11.1 Service ports (single source of truth)
 
@@ -124,7 +124,7 @@ The Makefile is the documented entry point for common local workflows. It wraps 
 |---|---|
 | `make help` | Show available commands and descriptions |
 | `make up` | Start the core stack and wait for required services to become ready |
-| `make down` | Stop the core stack without deleting named volumes |
+| `make down` | Stop everything, including the optional observability services, without deleting named volumes |
 | `make ps` | Show container status |
 | `make logs` | Follow core application and service logs |
 | `make swagger` | Print the Scalar URL and confirm it responds |
@@ -141,7 +141,8 @@ The Makefile is the documented entry point for common local workflows. It wraps 
 | `make fresh` | Destructively wipe local data and start everything clean (`down -v` then `up`); use it to begin a practice or test session from a known state |
 | `make lint` | ESLint for the web app and type-check every service |
 | `make test-all` | Lint, build, start the stack, run the whole Playwright suite, then always stop the stack |
-| `make obs-up` / `make obs-down` | Start or stop optional observability services |
+| `make observe` | Start everything plus Grafana, Loki and Prometheus (stop with `make down`) |
+| `make test-observability` | Metrics tests; log and Grafana tests run only when `make observe` is up |
 | `make perf-smoke` | Run a small k6 smoke workload once k6 scripts exist |
 | `make perf-load` | Run a defined k6 load profile once the performance phase is implemented |
 
@@ -159,13 +160,31 @@ make logs
 make down
 ```
 
-Performance and observability workflows are added later:
+One command for the whole check (lint, build, start, every test, then stop):
 
 ```bash
-make obs-up
+make test-all
+```
+
+Observability, to look at metrics and follow a request ID through the logs:
+
+```bash
+make observe              # then open http://localhost:4300
+make test-observability
+make down                 # also stops Grafana, Loki and Prometheus
+```
+
+Start from a known clean state (deletes all local data):
+
+```bash
+make fresh
+```
+
+Performance workflows are added later:
+
+```bash
 make perf-smoke
 make perf-load
-make obs-down
 ```
 
 `make db-reset` is destructive and must be used only when local lab data can be discarded. A performance run must not overlap with a reset or unrelated test run against the same dataset.
