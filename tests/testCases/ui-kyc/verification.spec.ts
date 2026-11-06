@@ -6,7 +6,11 @@ import { testConfig } from '../../index';
 // Each test signs in as its own lab-kyc-ui-* account; kycAccount sets that account's KYC record first.
 
 async function signIn(page: Page, scenario: KycScenario): Promise<void> {
+  // Init scripts run on every page load, reloads included. Clear the previous session only once per
+  // tab (sessionStorage survives a reload), otherwise a reload would wipe the token we just signed in with.
   await page.addInitScript(() => {
+    if (sessionStorage.getItem('e2e_storage_cleared')) return;
+    sessionStorage.setItem('e2e_storage_cleared', '1');
     localStorage.removeItem('pokemart_cart');
     localStorage.removeItem('pokemart_token');
   });
