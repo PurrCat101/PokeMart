@@ -9,17 +9,36 @@ services:
     ports: ["${MYSQL_HOST_PORT:-4306}:3306"]
     volumes:
       - mysql-data:/var/lib/mysql
-      - ./database/schema/001_create_shop_tables.sql:/docker-entrypoint-initdb.d/001_create_shop_tables.sql:ro
-      - ./database/seed/001_seed_shop_data.sql:/docker-entrypoint-initdb.d/001_seed_shop_data.sql:ro
-      - ./database/seed/010_reference_pokemon.sql:/docker-entrypoint-initdb.d/010_reference_pokemon.sql:ro
-      - ./database/seed/011_reference_items.sql:/docker-entrypoint-initdb.d/011_reference_items.sql:ro
-      - ./database/seed/012_seed_catalog.sql:/docker-entrypoint-initdb.d/012_seed_catalog.sql:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-pchange_me_root_local"]
+      # Ping over TCP (127.0.0.1), not the socket. During first-time init MySQL runs a temporary
+      # server with networking off; a socket ping passes then, and dependants hit "connection refused".
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
       interval: 5s
       timeout: 5s
       retries: 20
       start_period: 20s
+
+  # Applies database/liquibase/db.changelog-master.yaml, then exits. Services that need the
+  # schema wait for it with `service_completed_successfully`, so nothing starts on an empty DB.
+  liquibase:
+    build:
+      context: database/liquibase
+    # Settings come from the environment (not CLI flags) so `make db-status` and friends only
+    # pass a command name; absolute paths in flags get mangled by Git Bash on Windows.
+    environment:
+      LIQUIBASE_COMMAND_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-pokemart_lab}
+      LIQUIBASE_COMMAND_USERNAME: ${MYSQL_USER:-pokemart_user}
+      LIQUIBASE_COMMAND_PASSWORD: ${MYSQL_PASSWORD:-change_me_for_local_development}
+      LIQUIBASE_SEARCH_PATH: /liquibase/database/liquibase
+      LIQUIBASE_COMMAND_CHANGELOG_FILE: db.changelog-master.yaml
+      LIQUIBASE_COMMAND_CONTEXTS: ${LIQUIBASE_CONTEXTS:-schema,seed}
+    command: ["update"]
+    volumes:
+      - ./database:/liquibase/database:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: "no"
 
   pokemart-api:
     build:
@@ -47,6 +66,8 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+      liquibase:
+        condition: service_completed_successfully
       payment-mock:
         condition: service_started
       kyc-api:
@@ -135,6 +156,8 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+      liquibase:
+        condition: service_completed_successfully
       shipping-mock:
         condition: service_started
       payment-mock:

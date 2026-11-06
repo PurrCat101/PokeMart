@@ -109,7 +109,7 @@ npm run test:e2e
 
 - ใช้ `userId`, `user_id`, `users`, `user_wallet` และ `user_inventory` ให้สอดคล้องกัน
 - มี local demo login ด้วย email/password และ JWT สำหรับฝึก; ยังไม่ใช่ production-grade authentication
-- Database volume เดิมต้อง migrate หนึ่งครั้งด้วย `database/migrations/001_rename_player_identity.sql`; volume ใหม่ได้ schema ใหม่ทันที
+- Schema และ seed data ถูกจัดการด้วย Liquibase (`database/liquibase/db.changelog-master.yaml`); `make up` รัน migration ให้เองก่อนที่ API/BFF จะเริ่ม, ไฟล์ `database/migrations/001-006` เป็นประวัติที่รวมอยู่ใน baseline แล้ว
 - Volume เดิมที่มีตาราง `idempotency_keys` ให้รัน `database/migrations/002_drop_idempotency_keys.sql` หลัง migration 001
 
 ### Reference-data seed

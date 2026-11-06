@@ -18,7 +18,8 @@ Suggested files:
 
 - `database/schema/001_create_shop_tables.sql`
 - `database/seed/001_seed_shop_data.sql`
-- `database/migrations/003_add_users_and_foreign_keys.sql` (existing volumes only)
+- `database/liquibase/db.changelog-master.yaml` (applies the schema and seed files; new changes are added here)
+- `database/migrations/003_add_users_and_foreign_keys.sql` (history, already part of the baseline schema)
 - `database/README.md`
 
 The schema must support the shop listing/reference relationship, wallet, Pokémon ownership, and purchases. Keep reference fields separate from shop-owned price/stock fields where practical. Do not import every PokéAPI table unless there is a clear learning need.

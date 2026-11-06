@@ -1,0 +1,74 @@
+# Liquibase master changelog for the PokéMart lab database.
+#
+# The baseline reuses the existing SQL files as they are (no copies to keep in sync):
+#   schema/001_create_shop_tables.sql  -> the complete current schema, i.e. the result of
+#                                         database/migrations/001-006 already folded in
+#   seed/*.sql                         -> deterministic reference data (1,025 Pokémon,
+#                                         2,222 items) and the demo account
+#
+# Contexts let you apply only part of it, e.g. `--contexts=schema` for an empty schema.
+# New schema changes go below as numbered changesets; never edit a changeset that has been
+# applied, because Liquibase stores a checksum of each one.
+#
+# A database created by the old docker-entrypoint-initdb.d flow already has all of this.
+# Mark it as applied once with `make db-adopt` instead of running `update`.
+databaseChangeLog:
+  - changeSet:
+      id: 001-baseline-schema
+      author: pokemart
+      context: schema
+      comment: Complete schema (includes former migrations 001-006)
+      changes:
+        - sqlFile:
+            path: ../schema/001_create_shop_tables.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            endDelimiter: ;
+
+  - changeSet:
+      id: 002-seed-demo-account
+      author: pokemart
+      context: seed
+      comment: Demo trainer, wallet and KYC level (local lab only)
+      changes:
+        - sqlFile:
+            path: ../seed/001_seed_shop_data.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            endDelimiter: ;
+
+  - changeSet:
+      id: 003-seed-reference-pokemon
+      author: pokemart
+      context: seed
+      comment: 1,025 main National Pokédex Pokémon (pinned PokeAPI api-data commit)
+      changes:
+        - sqlFile:
+            path: ../seed/010_reference_pokemon.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            endDelimiter: ;
+
+  - changeSet:
+      id: 004-seed-reference-items
+      author: pokemart
+      context: seed
+      comment: 2,222 canonical PokeAPI item names
+      changes:
+        - sqlFile:
+            path: ../seed/011_reference_items.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            endDelimiter: ;
+
+  - changeSet:
+      id: 005-seed-catalog
+      author: pokemart
+      context: seed
+      comment: Shop listings, prices, stock and KYC levels
+      changes:
+        - sqlFile:
+            path: ../seed/012_seed_catalog.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            endDelimiter: ;
