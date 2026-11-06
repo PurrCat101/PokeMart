@@ -5,7 +5,7 @@
 ### Reference data
 - The data source, selected generation, and snapshot retrieval date are documented.
 - Tests do not need a live network call to PokéAPI.
-- Pokémon IDs and names match the 1,025-record pinned snapshot, and item IDs/names match its 2,223 item resources.
+- Pokémon IDs and names match the 1,025-record pinned snapshot, and item IDs/names match its item resources (2,222 canonical names: the source lists 2,223, one of which is a duplicate Roseli Berry kept once).
 - Shop price and stock are clearly identified as lab-owned data.
 
 ### API contract
@@ -50,7 +50,10 @@
 ### Observability and performance readiness
 - Services expose documented health and readiness endpoints.
 - Structured logs contain request IDs and request duration without leaking secrets.
-- The architecture documents metrics to expose and can add Prometheus and Grafana without redesigning application APIs.
+- The BFF, PokéMart API and shipping worker expose `GET /metrics`. Route labels are route patterns, never raw URLs, so cardinality stays bounded; scrapes are neither measured nor logged.
+- `make observe` adds Grafana, Loki and Prometheus (Compose profile) without changing any application API, and Grafana is reachable only from `127.0.0.1`.
+- One request ID can be followed from the BFF into the PokéMart API in the logs, and signing in never writes the password or the token to a log (covered by `make test-observability`).
+- The schema and seed data are applied by Liquibase before any service that needs them starts; running it again changes nothing.
 - Optional observability services do not block ordinary functional tests.
 - A future k6 workload can use a prebuilt, versioned dataset and record the environment and workload configuration.
 - Makefile commands are documented, implemented only when ready, and distinguish safe stop commands from destructive reset commands.

@@ -117,6 +117,8 @@ pokemart-api-lab/
 ├── database/
 │   ├── schema/
 │   ├── seed/
+│   ├── migrations/              # history: already part of the baseline schema
+│   ├── liquibase/               # master changelog + Dockerfile adding the MySQL driver
 │   └── README.md
 ├── data/
 │   └── pokeapi/                 # pinned static snapshot or selected subset
@@ -132,13 +134,12 @@ pokemart-api-lab/
 │   └── test-data/               # deterministic setup/reset helpers as needed
 ├── performance/
 │   └── k6/                      # later phase
-├── observability/
-│   ├── prometheus/              # added in observability phase
-│   ├── grafana/                 # added in that phase
-│   └── elasticsearch-kibana/    # optional logs stack, enabled by Compose profile
+├── observability/               # optional Compose profile `observability`
+│   ├── prometheus/              # scrape config
+│   ├── alloy/                   # reads container logs and ships them to Loki
+│   └── grafana/                 # provisioned datasources and the overview dashboard
 ├── tests/                       # adapt to team conventions
-├── docker-compose.yml
-├── docker-compose.observability.yml  # optional overlay, or use Compose profiles
+├── docker-compose.yml           # observability services live here under a profile
 ├── Makefile
 ├── package.json
 ├── .env.example

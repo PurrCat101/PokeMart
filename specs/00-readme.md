@@ -91,7 +91,7 @@ npm run test:e2e
 
 ## ฐานข้อมูลและข้อมูลอ้างอิง PokéAPI
 
-ฐานข้อมูลเริ่มต้นจาก SQL ใน `database/schema/` และ `database/seed/` เมื่อสร้าง MySQL volume ใหม่เท่านั้น seed มี Pokémon 1,025 ตัวและ item 2,223 รายการจาก PokeAPI snapshot ที่ pin commit แล้ว พร้อมราคา/stock/KYC จำลองของ PokéMart
+ฐานข้อมูลเริ่มต้นจาก SQL ใน `database/schema/` และ `database/seed/` ซึ่ง Liquibase นำไปใช้ให้ (รันซ้ำได้ปลอดภัย) seed มี Pokémon 1,025 ตัวและ item 2,222 รายการจาก PokeAPI snapshot ที่ pin commit แล้ว พร้อมราคา/stock/KYC จำลองของ PokéMart
 
 ราคา Pokémon ใช้ base experience คำนวณแล้วปัดทีละ 50 และราคา item ใช้ PokéAPI cost เป็นฐาน; Pokémon ทุกตัวเป็น KYC 0 ขณะที่ KYC 1/2 สงวนไว้สำหรับ item ระดับสูง เช่น Master Ball และยาระดับสูง ข้อมูลที่ generate อยู่ใน `010_reference_pokemon.sql`, `011_reference_items.sql` และ `012_seed_catalog.sql`; runtime/test ไม่เรียก PokéAPI
 

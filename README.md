@@ -95,7 +95,7 @@ docker compose version
    curl --fail --silent --show-error http://localhost:4000/ready
    ```
 
-MySQL จะสร้าง schema และ seed data เมื่อเริ่มด้วย volume ใหม่ เปิด Scalar API reference ที่ `http://localhost:8081` แล้วเลือก **BFF Public API** หรือ **PokéMart Internal API** ได้เลย
+service `liquibase` จะสร้าง schema และ seed data ให้เองก่อนที่ API จะเริ่ม (รันซ้ำได้ปลอดภัย: Liquibase จดว่าอะไรรันไปแล้ว) เปิด Scalar API reference ที่ `http://localhost:8081` แล้วเลือก **BFF Public API** หรือ **PokéMart Internal API** ได้เลย
 
 > ค่าใน `.env.example` เป็น local-development values เท่านั้น ห้ามใช้กับ shared/production environment หรือ commit `.env` และ credentials จริง
 
@@ -156,6 +156,7 @@ Login returns a one-hour JWT. A frontend should send it as `Authorization: Beare
 | 4 | `npm run test:purchase-retry` | Retry ด้วย `purchaseId` เดิมและ duplicate หลัง commit | ระบบจริง + MySQL |
 | 5 | `npm run test:e2e` | User journeys และผลกระทบต่อข้อมูล | BFF + PokéMart API + MySQL |
 | 6 | `npm run test:shipping` | Shipping integration, resilience, batch workers, idempotency และ delivery lifecycle | BFF + PokéMart API + Shipping Mock + MySQL |
+| 7 | `npm run test:observability` | `/metrics` ใช้รูปแบบ route ไม่ใช่ URL จริง, ค้น request ID ข้าม BFF → API ใน Loki, และ log ไม่มี token/รหัสผ่านหลุด | ส่วน metrics ใช้แค่ service; ส่วน log ต้อง `make observe` (ถ้าไม่เปิด จะถูกข้าม ไม่ล้ม) |
 | ทั้งหมด | `npm test` | ทุก Playwright project | ต้อง start Compose |
 
 รันตามลำดับตัวอย่าง:
@@ -218,7 +219,21 @@ docker compose down
 
 - `docker compose logs -f` แสดง logs ต่อเนื่อง กด `Ctrl+C` เพื่อหยุดการติดตาม logs (ไม่ได้หยุด containers)
 - `docker compose down` หยุด containers โดยไม่ลบ database volume
-- GNU Make ยังคงใช้ได้เป็นทางเลือก: `make help` แสดง targets ทั้งหมด และ `make db-reset` **ลบ Compose volumes และข้อมูล local ทั้งหมด** ห้ามใช้กับ SIT, shared หรือ production data
+- `docker compose down` **ไม่หยุด** service ของ profile `observability` (Grafana, Loki, Prometheus, Alloy) ถ้าเปิดไว้ ให้ใช้ `make down` หรือ `docker compose --profile '*' down`
+- GNU Make ยังคงใช้ได้เป็นทางเลือก: `make help` แสดง targets ทั้งหมด คำสั่งที่ใช้บ่อย:
+
+  | คำสั่ง | ทำอะไร |
+  |---|---|
+  | `make up` / `make down` | เปิด / ปิดทุกอย่าง (`down` ไม่ลบข้อมูล และปิด Grafana ด้วยถ้าเปิดอยู่) |
+  | `make observe` | เปิดทุกอย่างพร้อม Grafana ที่ `http://localhost:4300` |
+  | `make test-all` | lint + build + เปิดระบบ + รันทดสอบทั้งชุด + ปิดระบบ (ปิดเสมอแม้ test ล้ม) |
+  | `make test-observability` | ทดสอบ metrics (และ log ถ้า Grafana เปิดอยู่) |
+  | `make db-migrate` / `make db-status` | รัน / ดู Liquibase changeset ที่ค้างอยู่ |
+  | `make fresh` | **ลบข้อมูล local ทั้งหมด** แล้วเริ่มใหม่สะอาด (`down -v` + `up`) |
+  | `make db-reset` | **ลบข้อมูลฐานข้อมูล** แล้วสร้างใหม่ด้วย Liquibase |
+
+  `make fresh` และ `make db-reset` ห้ามใช้กับ SIT, shared หรือ production data
+- ถ้าไดร์ C: เต็ม Docker จะเขียนไม่ได้และพัง (`input/output error`) ย้ายที่เก็บของ Docker ได้ที่ Docker Desktop → Settings → Resources → Advanced → **Disk image location** แล้วกด Apply & restart ตัวนี้ไม่คืนพื้นที่ที่ Docker ใช้ไปแล้ว
 
 ## แบบฝึกหัด: สร้าง WireMock และ tests เอง
 
@@ -271,7 +286,7 @@ Client สร้าง UUID `purchaseId` ก่อนเริ่มซื้อ
 
 ## ฐานข้อมูลและ Pokémon seed
 
-ฐานข้อมูลใช้ SQL ใน `database/schema/` และ `database/seed/`; การ initialize อัตโนมัติทำงานเมื่อสร้าง MySQL volume ใหม่เท่านั้น Seed ปัจจุบันมี Pokémon 1,025 ตัวและ item 2,223 รายการจาก PokeAPI snapshot ที่ pin ไว้ พร้อมราคา, stock และ KYC requirement จำลองของ PokéMart
+ฐานข้อมูลใช้ SQL ใน `database/schema/` และ `database/seed/` ซึ่ง Liquibase เป็นผู้นำไปใช้ผ่าน `database/liquibase/db.changelog-master.yaml` (ดูวิธีเพิ่มการเปลี่ยนแปลงและคำสั่ง `make db-*` ใน `database/README.md`) Seed ปัจจุบันมี Pokémon 1,025 ตัวและ item 2,222 รายการจาก PokeAPI snapshot ที่ pin ไว้ พร้อมราคา, stock และ KYC requirement จำลองของ PokéMart
 
 ### ERD: ตารางและความสัมพันธ์
 
