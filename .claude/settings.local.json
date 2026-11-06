@@ -3,7 +3,14 @@
     "allow": [
       "Bash(xargs cat)",
       "Bash(git add *)",
-      "Bash(git commit -m 'test\\(kyc-ui\\): fix init script clearing token on page reload *)"
+      "Bash(git commit -m 'test\\(kyc-ui\\): fix init script clearing token on page reload *)",
+      "Bash(git push *)",
+      "Bash(git rm *)",
+      "Bash(git commit -m 'docs: replace system architecture diagram with updated version *)",
+      "Bash(git checkout *)",
+      "Bash(git pull *)",
+      "Bash(git merge --no-ff feat/kyc-tiers-and-verification -m 'Merge feat/kyc-tiers-and-verification into main *)",
+      "Bash(git stash *)"
     ]
   },
   "hooks": {
