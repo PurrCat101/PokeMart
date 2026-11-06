@@ -711,19 +711,21 @@ export default function PokeMartApp() {
             ) : (
               <div data-testid="catalog-grid" className="grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {catalogKind === "pokemon"
-                  ? (paginatedCatalog as CatalogItem[]).map((item) => (
+                  ? (paginatedCatalog as CatalogItem[]).map((item, index) => (
                       <PokemonCard
                         key={item.pokemon.id}
                         item={item}
+                        eager={index < 4}
                         onAddToCart={(it, quantity) => handleAddLine({ kind: "pokemon", item: it, quantity })}
                         onBuyNow={(it, quantity) => handleBuyNow({ kind: "pokemon", item: it, quantity })}
                         inCartQuantity={cartQuantityMap.get(`pokemon-${item.pokemon.id}`) || 0}
                       />
                     ))
-                  : (paginatedCatalog as ItemCatalogItem[]).map((item) => (
+                  : (paginatedCatalog as ItemCatalogItem[]).map((item, index) => (
                       <ItemCard
                         key={item.id}
                         item={item}
+                        eager={index < 4}
                         onAddToCart={(it, quantity) => handleAddLine({ kind: "item", item: it, quantity })}
                         onBuyNow={(it, quantity) => handleBuyNow({ kind: "item", item: it, quantity })}
                         inCartQuantity={cartQuantityMap.get(`item-${item.id}`) || 0}

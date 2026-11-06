@@ -40,7 +40,7 @@ function KycNote({ line, user, kyc }: { line: CartItem; user: AuthUser | null; k
   const issue = user ? kycIssue(line, kyc) : null;
   const tone = issue === "blocked" ? "text-danger" : "text-warn";
   let text = `Needs ${verificationName(required)}`;
-  if (issue === "blocked") text = `Needs ${verificationName(required)}. ${yourAccountSentence(kyc)}, so this can't be bought yet.`;
+  if (issue === "blocked") text = `Needs ${verificationName(required)}. ${yourAccountSentence(kyc)}`;
   else if (issue === "unknown") text = `Needs ${verificationName(required)}. We couldn't check your account's verification right now.`;
   return (
     <p data-testid={cartTestId(line, "kyc")} className={`mt-1 flex items-start gap-1.5 text-xs ${tone}`}>

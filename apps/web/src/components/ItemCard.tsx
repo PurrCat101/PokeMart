@@ -11,9 +11,11 @@ interface ItemCardProps {
   onAddToCart: (item: ItemCatalogItem, quantity: number) => void;
   onBuyNow: (item: ItemCatalogItem, quantity: number) => void;
   inCartQuantity?: number;
+  /** Load the sprite eagerly; set for above-the-fold cards (LCP candidates). */
+  eager?: boolean;
 }
 
-export function ItemCard({ item, onAddToCart, onBuyNow, inCartQuantity = 0 }: ItemCardProps) {
+export function ItemCard({ item, onAddToCart, onBuyNow, inCartQuantity = 0, eager = false }: ItemCardProps) {
   const [wanted, setWanted] = useState(1);
   const [justAdded, setJustAdded] = useState(false);
 
@@ -65,6 +67,7 @@ export function ItemCard({ item, onAddToCart, onBuyNow, inCartQuantity = 0 }: It
             alt=""
             width={96}
             height={96}
+            loading={eager ? "eager" : "lazy"}
             unoptimized
             className="sprite h-24 w-24 object-contain transition-transform duration-200 group-hover:scale-105"
           />
