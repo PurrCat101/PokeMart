@@ -18,7 +18,7 @@
 ### Purchase ID and retry behavior
 - A missing or malformed `purchaseId` returns `400`.
 - A failed, uncommitted purchase does not reserve its ID; retrying with the same ID can succeed.
-- A committed ID sent again returns `409 PURCHASE_DUPLICATE` (`ITEM_PURCHASE_DUPLICATE` on the item endpoint), including when the first purchase was of the other kind, and wallet/stock/inventory do not change again.
+- A committed ID sent again returns `409 PURCHASE_DUPLICATE` including when the first purchase was of the other kind (one endpoint, one code), and wallet/stock/inventory do not change again.
 - Concurrent requests with the same ID create at most one purchase.
 - A 5xx or dependency failure where no purchase committed allows retry with the same ID; an uncertain outcome can be checked using `GET /api/purchases/{purchaseId}`.
 
@@ -63,7 +63,7 @@
 ### Decided
 
 - **Purchase retry:** the client generates a UUID `purchaseId` in the JSON body. Failed, uncommitted requests may reuse the ID; committed IDs return `409 PURCHASE_DUPLICATE`. There is no `Idempotency-Key` header or replay response.
-- **One table per concept, not per product type:** Pokémon and item orders, shipments, inventory and listings share `purchases`, `shipments`, `user_inventory` and `listings` (migrations `008`/`009`). A `purchaseId` is therefore unique across both kinds. Reference tables stay separate (different columns). Trade-offs: surrogate keys on `user_inventory` and `listings`, and a `kind` filter on history queries.
+- **One table per concept, not per product type:** Pokémon and item orders, shipments, inventory and listings share `purchases`, `shipments`, `user_inventory` and `listings` (migrations `008`/`009`). A `purchaseId` is therefore unique across both kinds, and both are bought, listed, read and shipped through one endpoint family (`/api/purchases`, with a `kind` field and an optional `kind` list filter) instead of parallel `/api/items/purchases` routes. Reference tables stay separate (different columns). Trade-offs: surrogate keys on `user_inventory` and `listings`, and a `kind` filter on history queries.
 - **Order identifier:** client-generated UUID `purchaseId`. Human-readable order numbers are out of scope.
 - **Authentication:** local demo login uses email/password, scrypt password hashes, and one-hour HS256 bearer tokens. The local seeded account is `lab-user-001@example.test`; there is no public registration, password reset, refresh token, or production-grade rate limiting.
 - **Error body format:** `{ error: { code, message, requestId, details } }`.

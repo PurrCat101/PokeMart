@@ -155,8 +155,18 @@ function isDuplicateEntry(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ER_DUP_ENTRY';
 }
 function asPokemon(row: Row) { return { id: row.id, name: row.name, types: typeof row.types === 'string' ? JSON.parse(row.types) : row.types, spriteUrl: row.spriteUrl, price: row.price, stock: row.stock }; }
-function asItemPurchase(row: Row) { return { purchaseId: row.purchaseId, itemId: row.itemId, itemName: row.itemName, quantity: Number(row.quantity), unitPrice: Number(row.unitPrice), totalPrice: Number(row.totalPrice), createdAt: new Date(row.createdAt).toISOString() }; }
-function asPurchase(row: Row) { return { id: row.id, pokemonId: row.pokemonId, pokemonName: row.pokemonName, quantity: row.quantity, unitPrice: row.unitPrice, totalPrice: row.totalPrice, createdAt: new Date(row.createdAt).toISOString() }; }
+// One DTO for both kinds: `kind` says which of pokemonId/pokemonName or itemId/itemName is present.
+function asPurchase(row: Row) {
+  const common = { quantity: Number(row.quantity), unitPrice: Number(row.unitPrice), totalPrice: Number(row.totalPrice), createdAt: new Date(row.createdAt).toISOString() };
+  return row.kind === 'POKEMON'
+    ? { id: row.id, kind: row.kind, pokemonId: Number(row.pokemonId), pokemonName: row.pokemonName, ...common }
+    : { id: row.id, kind: row.kind, itemId: Number(row.itemId), itemName: row.itemName, ...common };
+}
+const PURCHASE_SELECT = `SELECT p.id, p.kind, p.pokemon_source_id AS pokemonId, pr.name AS pokemonName, p.item_source_id AS itemId, ir.name AS itemName,
+  p.quantity, p.unit_price AS unitPrice, p.total_price AS totalPrice, p.created_at AS createdAt
+  FROM purchases p
+  LEFT JOIN pokemon_reference pr ON pr.source_id = p.pokemon_source_id
+  LEFT JOIN item_reference ir ON ir.source_id = p.item_source_id`;
 // level: 0 = not verified, 1 = basic, 2 = full
 type Kyc = { level: number; status: string; updatedAt: string };
 // KYC is an internal HTTP service with its own data. Never call it inside a database transaction.
@@ -230,7 +240,7 @@ app.use((req, res, next) => {
   next();
 });
 app.use((req, _res, next) => {
-  if (req.method === 'POST' && ['/pokemart/v1/auth/login', '/pokemart/v1/purchases', '/pokemart/v1/items/purchases', '/pokemart/v1/wallet/top-ups', '/pokemart/v1/kyc/submissions'].includes(req.path) && !req.is('application/json')) return next(new AppError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Content-Type must be application/json'));
+  if (req.method === 'POST' && ['/pokemart/v1/auth/login', '/pokemart/v1/purchases', '/pokemart/v1/wallet/top-ups', '/pokemart/v1/kyc/submissions'].includes(req.path) && !req.is('application/json')) return next(new AppError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Content-Type must be application/json'));
   next();
 });
 app.use(express.json({ strict: false }));
@@ -355,97 +365,106 @@ app.get('/pokemart/v1/inventory', authenticate, async (req, res, next) => {
 });
 app.get('/pokemart/v1/purchases', authenticate, async (req, res, next) => {
   try {
-    const id = userId(res); const { limit, offset } = pageParams(req);
-    const [countRows] = await pool.query('SELECT COUNT(*) AS count FROM purchases WHERE user_id=? AND kind="POKEMON"', [id]);
-    const [rows] = await pool.query(`SELECT p.id, p.pokemon_source_id AS pokemonId, r.name AS pokemonName, p.quantity, p.unit_price AS unitPrice, p.total_price AS totalPrice, p.created_at AS createdAt FROM purchases p JOIN pokemon_reference r ON r.source_id=p.pokemon_source_id WHERE p.user_id=? AND p.kind='POKEMON' ORDER BY p.created_at DESC, p.id DESC LIMIT ? OFFSET ?`, [id, limit, offset]);
+    const id = userId(res); const { limit, offset } = pageParams(req, ['kind']);
+    const kind = req.query.kind;
+    if (kind !== undefined && kind !== 'POKEMON' && kind !== 'ITEM') throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'kind', message: 'must be POKEMON or ITEM' }]);
+    const filter = kind === undefined ? '' : ' AND p.kind=?'; const filterValues = kind === undefined ? [] : [kind];
+    const [countRows] = await pool.query(`SELECT COUNT(*) AS count FROM purchases p WHERE p.user_id=?${filter}`, [id, ...filterValues]);
+    const [rows] = await pool.query(`${PURCHASE_SELECT} WHERE p.user_id=?${filter} ORDER BY p.created_at DESC, p.id DESC LIMIT ? OFFSET ?`, [id, ...filterValues, limit, offset]);
     res.json({ count: Number((countRows as Row[])[0].count), limit, offset, results: (rows as Row[]).map(asPurchase) });
   } catch (error) { next(error); }
 });
 app.get('/pokemart/v1/purchases/:id', authenticate, async (req, res, next) => {
   try {
     const id = userId(res); const purchaseId = req.params.id;
-    if (typeof purchaseId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(purchaseId)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'id', message: 'must be a UUID' }]);
-    const [rows] = await pool.query(`SELECT p.id, p.pokemon_source_id AS pokemonId, r.name AS pokemonName, p.quantity, p.unit_price AS unitPrice, p.total_price AS totalPrice, p.created_at AS createdAt FROM purchases p JOIN pokemon_reference r ON r.source_id=p.pokemon_source_id WHERE p.user_id=? AND p.id=? AND p.kind='POKEMON'`, [id, purchaseId]);
+    if (typeof purchaseId !== 'string' || !validUuid.test(purchaseId)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'id', message: 'must be a UUID' }]);
+    const [rows] = await pool.query(`${PURCHASE_SELECT} WHERE p.user_id=? AND p.id=?`, [id, purchaseId]);
     if (!(rows as Row[]).length) throw new AppError(404, 'PURCHASE_NOT_FOUND', 'Purchase not found'); res.json(asPurchase((rows as Row[])[0]));
   } catch (error) { next(error); }
 });
-function shipmentHandler(kind: 'pokemon' | 'item') {
-  const purchaseKind = kind === 'pokemon' ? 'POKEMON' : 'ITEM';
-  return async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const id = userId(res);
-      const purchaseId = req.params.id;
-      if (typeof purchaseId !== 'string' || !validUuid.test(purchaseId)) {
-        throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'id', message: 'must be a UUID' }]);
-      }
-      const [purchaseRows] = await pool.query('SELECT id FROM purchases WHERE user_id=? AND id=? AND kind=?', [id, purchaseId, purchaseKind]);
-      if (!(purchaseRows as Row[]).length) {
-        throw new AppError(404, 'PURCHASE_NOT_FOUND', 'Purchase not found');
-      }
-      const [shipmentRows] = await pool.query('SELECT * FROM shipments WHERE purchase_id=?', [purchaseId]);
-      if (!(shipmentRows as Row[]).length) {
-        // Legacy or missing shipment row fallback
-        return res.json({
-          purchaseId,
-          orderStatus: 'ORDER_PLACED',
-          processingStatus: 'PENDING',
-          deliveryStatus: 'WAITING_FOR_SHIPMENT',
-          trackingNumber: null,
-          attemptCount: 0,
-          lastError: null,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-      }
-      const s = (shipmentRows as Row[])[0];
-      res.json({
-        purchaseId: s.purchase_id,
+app.get('/pokemart/v1/purchases/:id/shipment', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = userId(res);
+    const purchaseId = req.params.id;
+    if (typeof purchaseId !== 'string' || !validUuid.test(purchaseId)) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'id', message: 'must be a UUID' }]);
+    }
+    const [purchaseRows] = await pool.query('SELECT id FROM purchases WHERE user_id=? AND id=?', [id, purchaseId]);
+    if (!(purchaseRows as Row[]).length) {
+      throw new AppError(404, 'PURCHASE_NOT_FOUND', 'Purchase not found');
+    }
+    const [shipmentRows] = await pool.query('SELECT * FROM shipments WHERE purchase_id=?', [purchaseId]);
+    if (!(shipmentRows as Row[]).length) {
+      // Legacy or missing shipment row fallback
+      return res.json({
+        purchaseId,
         orderStatus: 'ORDER_PLACED',
-        processingStatus: s.processing_status,
-        deliveryStatus: s.delivery_status,
-        trackingNumber: s.tracking_number ?? null,
-        attemptCount: Number(s.attempt_count),
-        lastError: s.last_error_message ?? null,
-        createdAt: new Date(s.created_at).toISOString(),
-        updatedAt: new Date(s.updated_at).toISOString(),
+        processingStatus: 'PENDING',
+        deliveryStatus: 'WAITING_FOR_SHIPMENT',
+        trackingNumber: null,
+        attemptCount: 0,
+        lastError: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       });
-    } catch (error) { next(error); }
-  };
-}
-app.get('/pokemart/v1/purchases/:id/shipment', authenticate, shipmentHandler('pokemon'));
-app.get('/pokemart/v1/items/purchases/:id/shipment', authenticate, shipmentHandler('item'));
+    }
+    const s = (shipmentRows as Row[])[0];
+    res.json({
+      purchaseId: s.purchase_id,
+      orderStatus: 'ORDER_PLACED',
+      processingStatus: s.processing_status,
+      deliveryStatus: s.delivery_status,
+      trackingNumber: s.tracking_number ?? null,
+      attemptCount: Number(s.attempt_count),
+      lastError: s.last_error_message ?? null,
+      createdAt: new Date(s.created_at).toISOString(),
+      updatedAt: new Date(s.updated_at).toISOString(),
+    });
+  } catch (error) { next(error); }
+});
 
-async function createPurchase(userId: string, body: unknown): Promise<{ status: number; body: Row }> {
+// Pokémon and items are bought through the same flow. These fixed names are the only parts that differ
+// (never user input, so interpolating them into SQL is safe).
+const PRODUCTS = {
+  pokemon: { column: 'pokemon_source_id', reference: 'pokemon_reference', notFound: ['POKEMON_NOT_FOUND', 'Pokémon not found'], notForSale: ['POKEMON_NOT_FOR_SALE', 'Pokémon is not for sale'], kycLabel: 'Pokémon' },
+  item: { column: 'item_source_id', reference: 'item_reference', notFound: ['ITEM_NOT_FOUND', 'Item not found'], notForSale: ['ITEM_NOT_FOR_SALE', 'Item is not for sale'], kycLabel: 'item' },
+} as const;
+
+async function createPurchase(userId: string, body: unknown): Promise<Row> {
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'body', message: 'must be an object' }]);
   const candidate = body as Row;
-  if (Object.keys(candidate).some((field) => field !== 'purchaseId' && field !== 'pokemonId' && field !== 'quantity')) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'body', message: 'contains unknown fields' }]);
+  if (Object.keys(candidate).some((field) => field !== 'purchaseId' && field !== 'pokemonId' && field !== 'itemId' && field !== 'quantity')) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'body', message: 'contains unknown fields' }]);
   if (typeof candidate.purchaseId !== 'string' || !validUuid.test(candidate.purchaseId)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'purchaseId', message: 'must be a UUID' }]);
+  if (candidate.pokemonId !== undefined && candidate.itemId !== undefined) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'body', message: 'provide either pokemonId or itemId, not both' }]);
   const purchaseId = candidate.purchaseId as string;
-  const pokemon = positiveInt(candidate.pokemonId, 'pokemonId'); const quantity = positiveInt(candidate.quantity, 'quantity', 99);
-  const kycGate = await prefetchKyc('SELECT required_kyc_level AS required FROM listings WHERE pokemon_source_id=?', pokemon, userId);
+  const kind = candidate.itemId !== undefined ? 'item' : 'pokemon';
+  const product = PRODUCTS[kind];
+  const productId = kind === 'item' ? positiveInt(candidate.itemId, 'itemId') : positiveInt(candidate.pokemonId, 'pokemonId');
+  const quantity = positiveInt(candidate.quantity, 'quantity', 99);
+  const kycGate = await prefetchKyc(`SELECT required_kyc_level AS required FROM listings WHERE ${product.column}=?`, productId, userId); // before a pool connection is taken
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
-    const [listings] = await connection.query(`SELECT l.pokemon_source_id AS pokemonId,l.price,l.stock,l.active,l.required_kyc_level,r.name FROM listings l JOIN pokemon_reference r ON r.source_id=l.pokemon_source_id WHERE l.pokemon_source_id=? FOR UPDATE`, [pokemon]);
+    const [listings] = await connection.query(`SELECT l.price, l.stock, l.active, l.required_kyc_level, r.name FROM listings l JOIN ${product.reference} r ON r.source_id=l.${product.column} WHERE l.${product.column}=? FOR UPDATE`, [productId]);
     const listing = (listings as Row[])[0];
     const [existingPurchases] = await connection.query('SELECT id FROM purchases WHERE id=?', [purchaseId]);
     if ((existingPurchases as Row[]).length) throw new AppError(409, 'PURCHASE_DUPLICATE', 'Purchase ID has already been processed');
-    const [references] = await connection.query('SELECT source_id FROM pokemon_reference WHERE source_id=?', [pokemon]);
-    if (!(references as Row[]).length) throw new AppError(404, 'POKEMON_NOT_FOUND', 'Pokémon not found');
-    if (!listing || !listing.active) throw new AppError(409, 'POKEMON_NOT_FOR_SALE', 'Pokémon is not for sale');
-    assertKyc(kycGate(), Number(listing.required_kyc_level ?? 0), 'Pokémon');
+    const [references] = await connection.query(`SELECT source_id FROM ${product.reference} WHERE source_id=?`, [productId]);
+    if (!(references as Row[]).length) throw new AppError(404, product.notFound[0], product.notFound[1]);
+    if (!listing || !listing.active) throw new AppError(409, product.notForSale[0], product.notForSale[1]);
+    assertKyc(kycGate(), Number(listing.required_kyc_level ?? 0), product.kycLabel);
     if (Number(listing.stock) < quantity) throw new AppError(409, 'INSUFFICIENT_STOCK', 'Insufficient stock');
     const [wallets] = await connection.query('SELECT balance FROM user_wallet WHERE user_id=? FOR UPDATE', [userId]);
     const wallet = (wallets as Row[])[0]; const total = Number(listing.price) * quantity;
     if (!wallet || Number(wallet.balance) < total) throw new AppError(422, 'INSUFFICIENT_FUNDS', 'Insufficient funds');
     const createdAt = new Date();
-    await connection.query('INSERT INTO purchases (id,user_id,pokemon_source_id,quantity,unit_price,total_price,created_at) VALUES (?, ?, ?, ?, ?, ?, ?)', [purchaseId, userId, pokemon, quantity, listing.price, total, createdAt]);
+    await connection.query(`INSERT INTO purchases (id,user_id,${product.column},quantity,unit_price,total_price,created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`, [purchaseId, userId, productId, quantity, listing.price, total, createdAt]);
     await connection.query('INSERT INTO shipments (purchase_id, processing_status, delivery_status, attempt_count, next_attempt_at, created_at, updated_at) VALUES (?, "PENDING", "WAITING_FOR_SHIPMENT", 0, ?, ?, ?)', [purchaseId, createdAt, createdAt, createdAt]);
-    await connection.query('UPDATE listings SET stock=stock-? WHERE pokemon_source_id=?', [quantity, pokemon]);
+    await connection.query(`UPDATE listings SET stock=stock-? WHERE ${product.column}=?`, [quantity, productId]);
     await connection.query('UPDATE user_wallet SET balance=balance-? WHERE user_id=?', [total, userId]);
-    await connection.query('INSERT INTO user_inventory (user_id,pokemon_source_id,quantity) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE quantity=quantity+VALUES(quantity)', [userId, pokemon, quantity]);
-    const response = { id: purchaseId, pokemonId: pokemon, pokemonName: listing.name, quantity, unitPrice: Number(listing.price), totalPrice: total, createdAt: createdAt.toISOString() };
-    await connection.commit(); return { status: 201, body: response };
+    await connection.query(`INSERT INTO user_inventory (user_id,${product.column},quantity) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE quantity=quantity+VALUES(quantity)`, [userId, productId, quantity]);
+    const response = asPurchase({ id: purchaseId, kind: kind === 'item' ? 'ITEM' : 'POKEMON', pokemonId: productId, pokemonName: listing.name, itemId: productId, itemName: listing.name, quantity, unitPrice: listing.price, totalPrice: total, createdAt });
+    await connection.commit(); return response;
   } catch (error) {
     await connection.rollback();
     if (isDuplicateEntry(error)) throw new AppError(409, 'PURCHASE_DUPLICATE', 'Purchase ID has already been processed');
@@ -454,56 +473,8 @@ async function createPurchase(userId: string, body: unknown): Promise<{ status: 
 }
 app.post('/pokemart/v1/purchases', authenticate, async (req, res, next) => {
   try {
-    const id = userId(res);
-    const result = await createPurchase(id, req.body);
-    res.setHeader('Location', `/pokemart/v1/purchases/${result.body.id}`); res.status(result.status).json(result.body);
-  } catch (error) { next(error); }
-});
-
-app.post('/pokemart/v1/items/purchases', authenticate, async (req, res, next) => {
-  let connection: mysql.PoolConnection | undefined;
-  try {
-    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'body', message: 'must be an object' }]);
-    const body = req.body as Row;
-    if (Object.keys(body).some((field) => field !== 'purchaseId' && field !== 'itemId' && field !== 'quantity')) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'body', message: 'contains unknown fields' }]);
-    if (typeof body.purchaseId !== 'string' || !validUuid.test(body.purchaseId)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'purchaseId', message: 'must be a UUID' }]);
-    const itemId = positiveInt(body.itemId, 'itemId'); const quantity = positiveInt(body.quantity, 'quantity', 99); const id = userId(res);
-    const kycGate = await prefetchKyc('SELECT required_kyc_level AS required FROM listings WHERE item_source_id=?', itemId, id);
-    connection = await pool.getConnection(); // acquired only after the KYC HTTP call
-    await connection.beginTransaction();
-    const [existing] = await connection.query('SELECT id FROM purchases WHERE id=?', [body.purchaseId]);
-    if ((existing as Row[]).length) throw new AppError(409, 'ITEM_PURCHASE_DUPLICATE', 'Purchase ID has already been processed');
-    const [references] = await connection.query('SELECT source_id FROM item_reference WHERE source_id=?', [itemId]);
-    if (!(references as Row[]).length) throw new AppError(404, 'ITEM_NOT_FOUND', 'Item not found');
-    const [listings] = await connection.query('SELECT l.item_source_id AS itemId, l.price, l.stock, l.active, l.required_kyc_level, r.name FROM listings l JOIN item_reference r ON r.source_id=l.item_source_id WHERE l.item_source_id=? FOR UPDATE', [itemId]);
-    const listing = (listings as Row[])[0];
-    if (!listing || !listing.active) throw new AppError(409, 'ITEM_NOT_FOR_SALE', 'Item is not for sale');
-    assertKyc(kycGate(), Number(listing.required_kyc_level ?? 0), 'item');
-    if (Number(listing.stock) < quantity) throw new AppError(409, 'INSUFFICIENT_STOCK', 'Insufficient stock');
-    const [wallets] = await connection.query('SELECT balance FROM user_wallet WHERE user_id=? FOR UPDATE', [id]);
-    const wallet = (wallets as Row[])[0]; const total = Number(listing.price) * quantity;
-    if (!wallet || Number(wallet.balance) < total) throw new AppError(422, 'INSUFFICIENT_FUNDS', 'Insufficient funds');
-    const createdAt = new Date();
-    await connection.query('INSERT INTO purchases (id, user_id, item_source_id, quantity, unit_price, total_price, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)', [body.purchaseId, id, itemId, quantity, listing.price, total, createdAt]);
-    await connection.query('INSERT INTO shipments (purchase_id, processing_status, delivery_status, attempt_count, next_attempt_at, created_at, updated_at) VALUES (?, "PENDING", "WAITING_FOR_SHIPMENT", 0, ?, ?, ?)', [body.purchaseId, createdAt, createdAt, createdAt]);
-    await connection.query('UPDATE listings SET stock=stock-? WHERE item_source_id=?', [quantity, itemId]);
-    await connection.query('UPDATE user_wallet SET balance=balance-? WHERE user_id=?', [total, id]);
-    await connection.query('INSERT INTO user_inventory (user_id, item_source_id, quantity) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE quantity=quantity+VALUES(quantity)', [id, itemId, quantity]);
-    await connection.commit();
-    const result = { purchaseId: body.purchaseId, itemId, itemName: listing.name, quantity, unitPrice: Number(listing.price), totalPrice: total, createdAt: createdAt.toISOString() };
-    res.setHeader('Location', `/pokemart/v1/items/purchases/${result.purchaseId}`); res.status(201).json(result);
-  } catch (error) {
-    await connection?.rollback();
-    if (isDuplicateEntry(error)) return next(new AppError(409, 'ITEM_PURCHASE_DUPLICATE', 'Purchase ID has already been processed'));
-    next(error);
-  } finally { connection?.release(); }
-});
-app.get('/pokemart/v1/items/purchases', authenticate, async (req, res, next) => {
-  try {
-    const id = userId(res); const { limit, offset } = pageParams(req);
-    const [countRows] = await pool.query('SELECT COUNT(*) AS count FROM purchases WHERE user_id=? AND kind="ITEM"', [id]);
-    const [rows] = await pool.query('SELECT p.id AS purchaseId, p.item_source_id AS itemId, r.name AS itemName, p.quantity, p.unit_price AS unitPrice, p.total_price AS totalPrice, p.created_at AS createdAt FROM purchases p JOIN item_reference r ON r.source_id=p.item_source_id WHERE p.user_id=? AND p.kind="ITEM" ORDER BY p.created_at DESC, p.id DESC LIMIT ? OFFSET ?', [id, limit, offset]);
-    res.json({ count: Number((countRows as Row[])[0].count), limit, offset, results: (rows as Row[]).map(asItemPurchase) });
+    const result = await createPurchase(userId(res), req.body);
+    res.setHeader('Location', `/pokemart/v1/purchases/${result.id}`); res.status(201).json(result);
   } catch (error) { next(error); }
 });
 app.get('/pokemart/v1/items/inventory', authenticate, async (req, res, next) => {
@@ -511,15 +482,6 @@ app.get('/pokemart/v1/items/inventory', authenticate, async (req, res, next) => 
     const [rows] = await pool.query('SELECT i.item_source_id AS itemId, r.name, i.quantity FROM user_inventory i JOIN item_reference r ON r.source_id=i.item_source_id WHERE i.user_id=? ORDER BY i.item_source_id', [userId(res)]);
     const results = (rows as Row[]).map((row) => ({ ...row, quantity: Number(row.quantity) }));
     res.json({ count: results.length, results });
-  } catch (error) { next(error); }
-});
-app.get('/pokemart/v1/items/purchases/:id', authenticate, async (req, res, next) => {
-  try {
-    if (!validUuid.test(String(req.params.id))) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'id', message: 'must be a UUID' }]);
-    const [rows] = await pool.query('SELECT p.id AS purchaseId, p.item_source_id AS itemId, r.name AS itemName, p.quantity, p.unit_price AS unitPrice, p.total_price AS totalPrice, p.created_at AS createdAt FROM purchases p JOIN item_reference r ON r.source_id=p.item_source_id WHERE p.id=? AND p.user_id=? AND p.kind="ITEM"', [req.params.id, userId(res)]);
-    const row = (rows as Row[])[0];
-    if (!row) throw new AppError(404, 'PURCHASE_NOT_FOUND', 'Purchase not found');
-    res.json(asItemPurchase(row));
   } catch (error) { next(error); }
 });
 

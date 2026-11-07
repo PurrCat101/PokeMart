@@ -105,4 +105,6 @@ The migration also stops (and the backup is the way back) if a purchase ID exist
 
 `database/migrations/009_merge_listings.sql` (Liquibase changeset `011`) folds `shop_listing` and `item_listing` into `listings` the same way, then drops them (10 → 9 tables). Column names are unchanged, so queries only change the table name. The checked-in catalog seeds (`012`, `013`) still insert into the old table names on purpose: Liquibase runs them before the merge changesets, and editing an applied changeset would break its checksum. Use the same backup steps as for 008.
 
+`database/migrations/010_purchase_history_index.sql` (Liquibase changeset `012`) adds `idx_purchase_user_created (user_id, created_at DESC, id DESC)` back: purchase history is now one list across Pokémon and items (`GET /purchases`, optional `kind` filter), and the per-kind index from 008 only serves the filtered query.
+
 `make db-reset` deletes the local Compose volume, then re-applies every Liquibase changeset, and is destructive. It must never be used for shared or production data.

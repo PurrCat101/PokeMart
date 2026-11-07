@@ -165,7 +165,7 @@ Add an authenticated, owner-scoped read endpoint to both public and internal con
 - Public: `GET /api/purchases/{purchaseId}/shipment`
 - Internal: `GET /pokemart/v1/purchases/{purchaseId}/shipment`
 
-Item purchases have the same endpoint: public `GET /api/items/purchases/{purchaseId}/shipment`, internal `GET /pokemart/v1/items/purchases/{purchaseId}/shipment` (looked up in `purchases` with `kind = 'ITEM'` and `shipments`; same response and errors).
+Pokémon and item purchases share this endpoint: the lookup is in `purchases` (either `kind`) and `shipments`, with the same response and errors for both.
 
 Return the current local shipment state, not a live proxy to the provider. Suggested public response:
 

@@ -1,4 +1,4 @@
-import type { ItemPurchase, PurchaseItem } from "../types/api";
+import type { PurchaseItem } from "../types/api";
 import { formatPokemonId, titleCase } from "../components/ui";
 
 export type OrderKind = "pokemon" | "item";
@@ -16,28 +16,13 @@ export interface OrderRow {
   totalPrice: number;
 }
 
-export function pokemonOrderRow(p: PurchaseItem): OrderRow {
-  return {
-    kind: "pokemon",
-    purchaseId: p.purchaseId,
-    createdAt: p.createdAt,
-    idLabel: formatPokemonId(p.pokemon.id),
-    name: p.pokemon.name,
-    quantity: p.quantity,
-    unitPrice: p.pricing.unitPrice,
-    totalPrice: p.pricing.totalPrice,
-  };
-}
-
-export function itemOrderRow(p: ItemPurchase): OrderRow {
-  return {
-    kind: "item",
-    purchaseId: p.purchaseId,
-    createdAt: p.createdAt,
-    idLabel: `#${String(p.itemId).padStart(4, "0")}`,
-    name: titleCase(p.itemName),
-    quantity: p.quantity,
-    unitPrice: p.unitPrice,
-    totalPrice: p.totalPrice,
-  };
+/** Flattens one purchase from the API, whichever kind it is. */
+export function orderRow(p: PurchaseItem): OrderRow {
+  const common = { purchaseId: p.purchaseId, createdAt: p.createdAt, quantity: p.quantity, unitPrice: p.pricing.unitPrice, totalPrice: p.pricing.totalPrice };
+  if (p.kind === "ITEM" && p.item) {
+    return { ...common, kind: "item", idLabel: `#${String(p.item.id).padStart(4, "0")}`, name: titleCase(p.item.name) };
+  }
+  const pokemon = p.pokemon;
+  if (!pokemon) throw new Error("Unexpected purchase: no product");
+  return { ...common, kind: "pokemon", idLabel: formatPokemonId(pokemon.id), name: pokemon.name };
 }

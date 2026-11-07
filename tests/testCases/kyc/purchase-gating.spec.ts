@@ -36,7 +36,7 @@ test.describe('level 0 cannot buy', () => {
     const stockBefore = await itemStock(database, kycCatalog.itemId);
     const requestId = 'tc-kyc-buy-002';
 
-    const response = await api.post('/api/items/purchases', {
+    const response = await api.post('/api/purchases', {
       data: { purchaseId: newPurchaseId(), itemId: kycCatalog.itemId, quantity: 1 },
       headers: { 'X-Request-Id': requestId },
     });
@@ -71,7 +71,7 @@ test.describe('level 1 buys ordinary listings', () => {
   test('KYC-BUY-004 level 1 buys an ordinary item', async ({ kycAccount }) => {
     const { api, database } = await kycAccount('basic-item');
 
-    const response = await api.post('/api/items/purchases', {
+    const response = await api.post('/api/purchases', {
       data: { purchaseId: newPurchaseId(), itemId: kycCatalog.itemId, quantity: 2 },
     });
 
@@ -85,7 +85,7 @@ test.describe('level 1 buys ordinary listings', () => {
     const { api, database } = await kycAccount('basic-master');
     const requestId = 'tc-kyc-buy-005';
 
-    const response = await api.post('/api/items/purchases', {
+    const response = await api.post('/api/purchases', {
       data: { purchaseId: newPurchaseId(), itemId: kycCatalog.masterItemId, quantity: 1 },
       headers: { 'X-Request-Id': requestId },
     });
@@ -107,7 +107,7 @@ test.describe('level 1 buys ordinary listings', () => {
 test('KYC-BUY-006 level 2 buys a Master item', async ({ kycAccount }) => {
   const { api, database } = await kycAccount('full-master');
 
-  const response = await api.post('/api/items/purchases', {
+  const response = await api.post('/api/purchases', {
     data: { purchaseId: newPurchaseId(), itemId: kycCatalog.masterItemId, quantity: 1 },
   });
 
@@ -135,7 +135,7 @@ test.describe('under review buys nothing', () => {
     const { api, database } = await kycAccount('pending-item');
     const requestId = 'tc-kyc-buy-008';
 
-    const response = await api.post('/api/items/purchases', {
+    const response = await api.post('/api/purchases', {
       data: { purchaseId: newPurchaseId(), itemId: kycCatalog.itemId, quantity: 1 },
       headers: { 'X-Request-Id': requestId },
     });

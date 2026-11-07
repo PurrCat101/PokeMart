@@ -144,3 +144,15 @@ databaseChangeLog:
             relativeToChangelogFile: true
             splitStatements: true
             endDelimiter: ;
+
+  - changeSet:
+      id: 012-purchase-history-index
+      author: pokemart
+      context: schema
+      comment: Index for the unified purchase history list across Pokémon and items (migration 010)
+      changes:
+        - sqlFile:
+            path: ../migrations/010_purchase_history_index.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            endDelimiter: ;

@@ -35,7 +35,7 @@ Additionally, accounts under review (**PENDING_REVIEW status**) cannot purchase 
 **Location:** `apps/pokemart-api/src/index.ts`
 
 - **Responsibility:** Enforce KYC checks at transaction time
-- **Entry Points:** `/pokemart/v1/purchases` and `/pokemart/v1/items/purchases`
+- **Entry Points:** `/pokemart/v1/purchases` (Pokémon and items)
 
 #### Key Functions
 

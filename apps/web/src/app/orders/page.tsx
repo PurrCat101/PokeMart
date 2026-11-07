@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { api } from "../../lib/api";
-import { itemOrderRow, pokemonOrderRow, type OrderKind, type OrderRow } from "../../lib/orders";
+import { orderRow, type OrderKind, type OrderRow } from "../../lib/orders";
 import { useApp } from "../../contexts/AppContext";
 import { OrdersView } from "../../components/OrdersView";
 import { LedgerIcon } from "../../components/icons";
@@ -34,13 +34,8 @@ export default function OrdersRoute() {
       }
       setIsLoading(true);
       try {
-        if (kind === "pokemon") {
-          const data = await api.getPurchases(PAGE_SIZE, offset);
-          setPage({ rows: data.items.map(pokemonOrderRow), totalCount: data.totalCount, offset: data.page.offset });
-        } else {
-          const data = await api.getItemPurchases(PAGE_SIZE, offset);
-          setPage({ rows: data.items.map(itemOrderRow), totalCount: data.totalCount, offset: data.offset });
-        }
+        const data = await api.getPurchases(PAGE_SIZE, offset, kind === "pokemon" ? "POKEMON" : "ITEM");
+        setPage({ rows: data.items.map(orderRow), totalCount: data.totalCount, offset: data.page.offset });
         setHasError(false);
       } catch {
         // Keep the rows already on screen; the view shows a non-blocking notice.

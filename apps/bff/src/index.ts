@@ -14,7 +14,7 @@ const serviceName = 'bff';
 installLogShipper(serviceName);
 const validRequestId = /^[A-Za-z0-9_-]{1,64}$/;
 const validUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const knownCodes = new Set(['VALIDATION_ERROR', 'UNKNOWN_QUERY_PARAMETER', 'INVALID_JSON', 'UNSUPPORTED_MEDIA_TYPE', 'UNAUTHORIZED', 'INVALID_CREDENTIALS', 'POKEMON_NOT_FOUND', 'USER_NOT_FOUND', 'PURCHASE_NOT_FOUND', 'POKEMON_NOT_FOR_SALE', 'ITEM_NOT_FOUND', 'ITEM_NOT_FOR_SALE', 'INSUFFICIENT_STOCK', 'INSUFFICIENT_FUNDS', 'PURCHASE_DUPLICATE', 'ITEM_PURCHASE_DUPLICATE', 'KYC_LEVEL_REQUIRED', 'KYC_PENDING_REVIEW', 'KYC_ALREADY_PENDING', 'KYC_ALREADY_VERIFIED', 'TOP_UP_DUPLICATE', 'TOP_UP_NOT_FOUND', 'PAYMENT_FAILED']);
+const knownCodes = new Set(['VALIDATION_ERROR', 'UNKNOWN_QUERY_PARAMETER', 'INVALID_JSON', 'UNSUPPORTED_MEDIA_TYPE', 'UNAUTHORIZED', 'INVALID_CREDENTIALS', 'POKEMON_NOT_FOUND', 'USER_NOT_FOUND', 'PURCHASE_NOT_FOUND', 'POKEMON_NOT_FOR_SALE', 'ITEM_NOT_FOUND', 'ITEM_NOT_FOR_SALE', 'INSUFFICIENT_STOCK', 'INSUFFICIENT_FUNDS', 'PURCHASE_DUPLICATE', 'KYC_LEVEL_REQUIRED', 'KYC_PENDING_REVIEW', 'KYC_ALREADY_PENDING', 'KYC_ALREADY_VERIFIED', 'TOP_UP_DUPLICATE', 'TOP_UP_NOT_FOUND', 'PAYMENT_FAILED']);
 const swaggerOrigins = new Set(['http://localhost:8081', 'http://127.0.0.1:8081']);
 
 function log(fields: Record<string, unknown>) { console.log(JSON.stringify({ timestamp: new Date().toISOString(), service: serviceName, environment: process.env.NODE_ENV ?? 'development', ...fields })); }
@@ -87,18 +87,6 @@ function mapItemCategories(value: unknown) {
   if (!Array.isArray(body.categories) || body.categories.some((c) => typeof c !== 'string')) throw new AppError(503, 'DEPENDENCY_UNAVAILABLE', 'PokéMart API returned invalid item categories');
   return { categories: body.categories };
 }
-function mapItemPurchase(value: unknown) {
-  const p = asRecord(value);
-  if (typeof p.purchaseId !== 'string' || typeof p.itemId !== 'number' || typeof p.itemName !== 'string' || typeof p.quantity !== 'number' || typeof p.unitPrice !== 'number' || typeof p.totalPrice !== 'number' || typeof p.createdAt !== 'string') throw new AppError(503, 'DEPENDENCY_UNAVAILABLE', 'PokéMart API returned an invalid item purchase');
-  return { purchaseId: p.purchaseId, item: { id: p.itemId, name: p.itemName }, quantity: p.quantity, pricing: { unitPrice: p.unitPrice, totalPrice: p.totalPrice }, createdAt: p.createdAt };
-}
-function mapItemPurchasePage(value: unknown) {
-  const page = asRecord(value);
-  if (typeof page.count !== 'number' || typeof page.limit !== 'number' || typeof page.offset !== 'number' || !Array.isArray(page.results)) {
-    throw new AppError(503, 'DEPENDENCY_UNAVAILABLE', 'PokéMart API returned an invalid item purchase page');
-  }
-  return { totalCount: page.count, page: { limit: page.limit, offset: page.offset }, items: page.results.map(mapItemPurchase) };
-}
 function mapItemInventory(value: unknown) {
   const inventory = asRecord(value);
   if (!Array.isArray(inventory.results)) throw new AppError(503, 'DEPENDENCY_UNAVAILABLE', 'PokéMart API returned an invalid item inventory');
@@ -150,16 +138,21 @@ function mapInventory(value: unknown) {
     }),
   };
 }
+// One purchase shape for both kinds. The upstream says which product it is by carrying pokemonId/pokemonName
+// or itemId/itemName; `kind` is derived from that, so an upstream without a `kind` field still maps.
 function mapPurchase(value: unknown) {
   const purchase = asRecord(value);
-  if (typeof purchase.id !== 'string' || typeof purchase.pokemonId !== 'number' || typeof purchase.pokemonName !== 'string'
+  const isPokemon = typeof purchase.pokemonId === 'number' && typeof purchase.pokemonName === 'string';
+  const isItem = typeof purchase.itemId === 'number' && typeof purchase.itemName === 'string';
+  if (typeof purchase.id !== 'string' || isPokemon === isItem
     || typeof purchase.quantity !== 'number' || typeof purchase.unitPrice !== 'number' || typeof purchase.totalPrice !== 'number'
     || typeof purchase.createdAt !== 'string') {
     throw new AppError(503, 'DEPENDENCY_UNAVAILABLE', 'PokéMart API returned an invalid purchase');
   }
   return {
     purchaseId: purchase.id,
-    pokemon: { id: purchase.pokemonId, name: purchase.pokemonName },
+    kind: isPokemon ? 'POKEMON' : 'ITEM',
+    ...(isPokemon ? { pokemon: { id: purchase.pokemonId, name: purchase.pokemonName } } : { item: { id: purchase.itemId, name: purchase.itemName } }),
     quantity: purchase.quantity,
     pricing: { unitPrice: purchase.unitPrice, totalPrice: purchase.totalPrice },
     createdAt: purchase.createdAt,
@@ -215,18 +208,12 @@ function positivePathId(value: string) {
 function validatePurchase(body: unknown) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'body', message: 'must be an object' }]);
   const value = body as Record<string, unknown>;
-  if (Object.keys(value).some((field) => field !== 'purchaseId' && field !== 'pokemonId' && field !== 'quantity')) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'body', message: 'contains unknown fields' }]);
+  if (Object.keys(value).some((field) => field !== 'purchaseId' && field !== 'pokemonId' && field !== 'itemId' && field !== 'quantity')) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'body', message: 'contains unknown fields' }]);
   if (typeof value.purchaseId !== 'string' || !validUuid.test(value.purchaseId)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'purchaseId', message: 'must be a UUID' }]);
-  for (const [field, maximum] of [['pokemonId', undefined], ['quantity', 99]] as const) {
-    if (typeof value[field] !== 'number' || !Number.isInteger(value[field]) || (value[field] as number) < 1 || (maximum && (value[field] as number) > maximum)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field, message: maximum ? `must be an integer from 1 to ${maximum}` : 'must be a positive integer' }]);
-  }
-}
-function validateItemPurchase(body: unknown) {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'body', message: 'must be an object' }]);
-  const value = body as Record<string, unknown>;
-  if (Object.keys(value).some((field) => field !== 'purchaseId' && field !== 'itemId' && field !== 'quantity')) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'body', message: 'contains unknown fields' }]);
-  if (typeof value.purchaseId !== 'string' || !validUuid.test(value.purchaseId)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'purchaseId', message: 'must be a UUID' }]);
-  for (const [field, maximum] of [['itemId', undefined], ['quantity', 99]] as const) {
+  if (value.pokemonId !== undefined && value.itemId !== undefined) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'body', message: 'provide either pokemonId or itemId, not both' }]);
+  // Exactly one product id; with neither, report the Pokémon field (the original contract).
+  const productField = value.itemId !== undefined ? 'itemId' : 'pokemonId';
+  for (const [field, maximum] of [[productField, undefined], ['quantity', 99]] as const) {
     if (typeof value[field] !== 'number' || !Number.isInteger(value[field]) || (value[field] as number) < 1 || (maximum && (value[field] as number) > maximum)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field, message: maximum ? `must be an integer from 1 to ${maximum}` : 'must be a positive integer' }]);
   }
 }
@@ -267,7 +254,7 @@ async function relay(req: Request, res: ExpressResponse, path: string, method = 
   if (location) res.setHeader('Location', location.replace(/^\/pokemart\/v1\//, '/api/')); // never expose the internal service path
   if (upstream.status < 400 && mapResponse) payload = mapResponse(payload);
   if (upstream.status === 201 && payload && typeof payload === 'object' && 'purchaseId' in payload) {
-    res.setHeader('Location', 'item' in payload ? `/api/items/purchases/${payload.purchaseId}` : `/api/purchases/${payload.purchaseId}`);
+    res.setHeader('Location', `/api/purchases/${payload.purchaseId}`);
   }
   res.status(upstream.status).send(payload);
 }
@@ -293,7 +280,7 @@ app.use((req, res, next) => {
   });
   next();
 });
-app.use((req, _res, next) => req.method === 'POST' && ['/api/auth/login', '/api/purchases', '/api/items/purchases', '/api/wallet/top-ups', '/api/kyc/submissions'].includes(req.path) && !req.is('application/json') ? next(new AppError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Content-Type must be application/json')) : next());
+app.use((req, _res, next) => req.method === 'POST' && ['/api/auth/login', '/api/purchases', '/api/wallet/top-ups', '/api/kyc/submissions'].includes(req.path) && !req.is('application/json') ? next(new AppError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Content-Type must be application/json')) : next());
 app.use(express.json({ strict: false }));
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
@@ -311,10 +298,7 @@ app.get('/api/account-info', async (req, res, next) => { try { await relay(req, 
 app.get('/api/pokemon', async (req, res, next) => { try { const { limit, offset } = pageParams(req, ['q', 'type', 'inStock']); const filters = new URLSearchParams(); for (const field of ['q', 'type', 'inStock']) if (typeof req.query[field] === 'string') filters.set(field, req.query[field] as string); await relay(req, res, `/pokemart/v1/catalog/pokemon?limit=${limit}&offset=${offset}${filters.size ? `&${filters}` : ''}`, 'GET', undefined, mapCatalog); } catch (error) { next(error); } });
 app.get('/api/items', async (req, res, next) => { try { const { limit, offset } = pageParams(req, ['q', 'category', 'inStock']); const filters = new URLSearchParams(); for (const field of ['q', 'category', 'inStock']) if (typeof req.query[field] === 'string') filters.set(field, req.query[field] as string); await relay(req, res, `/pokemart/v1/catalog/items?limit=${limit}&offset=${offset}${filters.size ? `&${filters}` : ''}`, 'GET', undefined, mapItemPage); } catch (error) { next(error); } });
 app.get('/api/item-categories', async (req, res, next) => { try { await relay(req, res, '/pokemart/v1/catalog/item-categories', 'GET', undefined, mapItemCategories); } catch (error) { next(error); } });
-app.get('/api/items/purchases', async (req, res, next) => { try { const { limit, offset } = pageParams(req); await relay(req, res, `/pokemart/v1/items/purchases?limit=${limit}&offset=${offset}`, 'GET', undefined, mapItemPurchasePage); } catch (error) { next(error); } });
 app.get('/api/items/inventory', async (req, res, next) => { try { await relay(req, res, '/pokemart/v1/items/inventory', 'GET', undefined, mapItemInventory); } catch (error) { next(error); } });
-app.get('/api/items/purchases/:id', async (req, res, next) => { try { if (!validUuid.test(req.params.id)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'id', message: 'must be a UUID' }]); await relay(req, res, `/pokemart/v1/items/purchases/${req.params.id}`, 'GET', undefined, mapItemPurchase); } catch (error) { next(error); } });
-app.post('/api/items/purchases', async (req, res, next) => { try { validateItemPurchase(req.body); await relay(req, res, '/pokemart/v1/items/purchases', 'POST', req.body, mapItemPurchase); } catch (error) { next(error); } });
 app.get('/api/pokemon/:id', async (req, res, next) => { try { positivePathId(req.params.id); await relay(req, res, `/pokemart/v1/catalog/pokemon/${req.params.id}`, 'GET', undefined, mapPokemon); } catch (error) { next(error); } });
 app.get('/api/wallet', async (req, res, next) => { try { await relay(req, res, '/pokemart/v1/wallet', 'GET', undefined, mapWallet); } catch (error) { next(error); } });
 app.get('/api/kyc/status', async (req, res, next) => { try { await relay(req, res, '/pokemart/v1/kyc/status', 'GET', undefined, mapKyc); } catch (error) { next(error); } });
@@ -322,10 +306,9 @@ app.post('/api/kyc/submissions', async (req, res, next) => { try { validateKycSu
 app.get('/api/wallet/top-ups/:id', async (req, res, next) => { try { if (!validUuid.test(req.params.id)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'id', message: 'must be a UUID' }]); await relay(req, res, `/pokemart/v1/wallet/top-ups/${req.params.id}`, 'GET', undefined, mapTopUp); } catch (error) { next(error); } });
 app.post('/api/wallet/top-ups', async (req, res, next) => { try { validateTopUp(req.body); await relay(req, res, '/pokemart/v1/wallet/top-ups', 'POST', req.body, mapTopUp); } catch (error) { next(error); } });
 app.get('/api/inventory', async (req, res, next) => { try { await relay(req, res, '/pokemart/v1/inventory', 'GET', undefined, mapInventory); } catch (error) { next(error); } });
-app.get('/api/purchases', async (req, res, next) => { try { const { limit, offset } = pageParams(req); await relay(req, res, `/pokemart/v1/purchases?limit=${limit}&offset=${offset}`, 'GET', undefined, mapPurchasePage); } catch (error) { next(error); } });
+app.get('/api/purchases', async (req, res, next) => { try { const { limit, offset } = pageParams(req, ['kind']); const kind = req.query.kind; if (kind !== undefined && kind !== 'POKEMON' && kind !== 'ITEM') throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'kind', message: 'must be POKEMON or ITEM' }]); await relay(req, res, `/pokemart/v1/purchases?limit=${limit}&offset=${offset}${kind ? `&kind=${kind}` : ''}`, 'GET', undefined, mapPurchasePage); } catch (error) { next(error); } });
 app.get('/api/purchases/:id', async (req, res, next) => { try { if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(req.params.id)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'id', message: 'must be a UUID' }]); await relay(req, res, `/pokemart/v1/purchases/${req.params.id}`, 'GET', undefined, mapPurchase); } catch (error) { next(error); } });
 app.get('/api/purchases/:id/shipment', async (req, res, next) => { try { if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(req.params.id)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'id', message: 'must be a UUID' }]); await relay(req, res, `/pokemart/v1/purchases/${req.params.id}/shipment`, 'GET', undefined, mapShipment); } catch (error) { next(error); } });
-app.get('/api/items/purchases/:id/shipment', async (req, res, next) => { try { if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(req.params.id)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'id', message: 'must be a UUID' }]); await relay(req, res, `/pokemart/v1/items/purchases/${req.params.id}/shipment`, 'GET', undefined, mapShipment); } catch (error) { next(error); } });
 app.post('/api/purchases', async (req, res, next) => { try { validatePurchase(req.body); await relay(req, res, '/pokemart/v1/purchases', 'POST', req.body, mapPurchase); } catch (error) { next(error); } });
 app.use((error: any, req: Request, res: ExpressResponse, _next: NextFunction) => {
   const appError = error instanceof AppError ? error : error?.type === 'entity.parse.failed' ? new AppError(400, 'INVALID_JSON', 'Malformed JSON request body') : new AppError(500, 'INTERNAL_ERROR', 'An unexpected error occurred');

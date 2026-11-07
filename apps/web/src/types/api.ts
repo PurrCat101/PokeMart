@@ -64,13 +64,6 @@ export interface ItemInventoryEntry {
   quantity: number;
 }
 
-export interface ItemPurchasesPage {
-  totalCount: number;
-  limit: number;
-  offset: number;
-  items: ItemPurchase[];
-}
-
 export interface AuthUser {
   userId: string;
   email: string;
@@ -124,9 +117,15 @@ export interface InventoryResponse {
   items: InventoryItem[];
 }
 
+/** One purchase, Pokémon or item. `kind` says which of `pokemon` / `item` is present. */
 export interface PurchaseItem {
   purchaseId: string;
-  pokemon: {
+  kind: "POKEMON" | "ITEM";
+  pokemon?: {
+    id: number;
+    name: string;
+  };
+  item?: {
     id: number;
     name: string;
   };

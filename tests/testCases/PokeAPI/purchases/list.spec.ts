@@ -13,6 +13,7 @@ test('INT-PURCHASE-LIST-001 GET purchase history returns paginated internal reco
   for (const purchase of body.results) {
     expect(purchase).toEqual({
       id: expect.stringMatching(/^[0-9a-f-]{36}$/i),
+      kind: 'POKEMON',
       pokemonId: expect.any(Number),
       pokemonName: expect.any(String),
       quantity: expect.any(Number),

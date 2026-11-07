@@ -41,6 +41,7 @@ test('PUR-API-READ-003 GET /api/purchases returns stable paginated public DTOs',
   for (const item of body.items) {
     expect(item).toEqual({
       purchaseId: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i),
+      kind: 'POKEMON',
       pokemon: { id: expect.any(Number), name: expect.any(String) },
       quantity: expect.any(Number),
       pricing: { unitPrice: expect.any(Number), totalPrice: expect.any(Number) },

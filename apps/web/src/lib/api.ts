@@ -14,7 +14,6 @@ import {
   CreateItemPurchaseRequest,
   ItemPurchase,
   ItemInventoryEntry,
-  ItemPurchasesPage,
   AccountInfo,
   KycStatus,
   KycSubmission,
@@ -178,11 +177,13 @@ export const api = {
   },
 
   async createItemPurchase(purchase: CreateItemPurchaseRequest): Promise<ItemPurchase> {
-    const result = await request<{ purchaseId: string; item: { id: number; name: string }; quantity: number; pricing: { unitPrice: number; totalPrice: number }; createdAt: string }>("/api/items/purchases", {
+    const result = await request<PurchaseItem>("/api/purchases", {
       method: "POST",
       body: JSON.stringify(purchase),
     });
-    return { purchaseId: result.purchaseId, itemId: result.item.id, itemName: result.item.name, quantity: result.quantity, unitPrice: result.pricing.unitPrice, totalPrice: result.pricing.totalPrice, createdAt: result.createdAt };
+    const item = result.item;
+    if (!item) throw new Error("Unexpected purchase response: missing item");
+    return { purchaseId: result.purchaseId, itemId: item.id, itemName: item.name, quantity: result.quantity, unitPrice: result.pricing.unitPrice, totalPrice: result.pricing.totalPrice, createdAt: result.createdAt };
   },
 
   // Wallet
@@ -196,8 +197,9 @@ export const api = {
   },
 
   // Purchases
-  async getPurchases(limit = 10, offset = 0): Promise<PurchasesPageResponse> {
-    return request<PurchasesPageResponse>(`/api/purchases?limit=${limit}&offset=${offset}`);
+  // One history for both kinds; `kind` narrows it to Pokémon or item orders.
+  async getPurchases(limit = 10, offset = 0, kind?: "POKEMON" | "ITEM"): Promise<PurchasesPageResponse> {
+    return request<PurchasesPageResponse>(`/api/purchases?limit=${limit}&offset=${offset}${kind ? `&kind=${kind}` : ""}`);
   },
 
   async createPurchase(purchase: CreatePurchaseRequest): Promise<PurchaseItem> {
@@ -207,31 +209,13 @@ export const api = {
     });
   },
 
-  // Items have their own inventory and order history; item orders ship just like Pokémon orders.
+  // Items have their own inventory; their orders live in the same purchase history and ship like Pokémon orders.
   async getItemInventory(): Promise<ItemInventoryEntry[]> {
     const result = await request<{ items: Array<{ item: { id: number; name: string }; quantity: number }> }>("/api/items/inventory");
     return result.items.map(({ item, quantity }) => ({ itemId: item.id, name: item.name, quantity }));
   },
 
-  async getItemPurchases(limit = 10, offset = 0): Promise<ItemPurchasesPage> {
-    const page = await request<{
-      totalCount: number;
-      page: { limit: number; offset: number };
-      items: Array<{ purchaseId: string; item: { id: number; name: string }; quantity: number; pricing: { unitPrice: number; totalPrice: number }; createdAt: string }>;
-    }>(`/api/items/purchases?limit=${limit}&offset=${offset}`);
-    return {
-      totalCount: page.totalCount,
-      limit: page.page.limit,
-      offset: page.page.offset,
-      items: page.items.map((p) => ({ purchaseId: p.purchaseId, itemId: p.item.id, itemName: p.item.name, quantity: p.quantity, unitPrice: p.pricing.unitPrice, totalPrice: p.pricing.totalPrice, createdAt: p.createdAt })),
-    };
-  },
-
   async getShipment(purchaseId: string): Promise<ShipmentItem> {
     return request<ShipmentItem>(`/api/purchases/${purchaseId}/shipment`);
-  },
-
-  async getItemShipment(purchaseId: string): Promise<ShipmentItem> {
-    return request<ShipmentItem>(`/api/items/purchases/${purchaseId}/shipment`);
   },
 };

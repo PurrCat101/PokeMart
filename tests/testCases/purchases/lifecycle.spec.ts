@@ -39,6 +39,7 @@ test('@e2e purchase lifecycle updates catalog, wallet, inventory, history, and p
     const createdPurchase = await createResponse.json();
     expect(createdPurchase).toEqual({
       purchaseId,
+      kind: 'POKEMON',
       pokemon: { id: testEnvironment.pokemonId, name: pokemon.name },
       quantity: 1,
       pricing: { unitPrice: price, totalPrice: price },
