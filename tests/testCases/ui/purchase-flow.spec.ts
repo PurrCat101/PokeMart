@@ -1,7 +1,7 @@
 import { expect, test } from '../../support/fixtures/apiFixtures';
 import { testConfig } from '../../index';
 
-test('trainer purchases one Pokémon and sees wallet, stock, inventory, and history updated', async ({ page }) => {
+test('trainer purchases one Pokémon and sees wallet, stock, and order history updated', async ({ page }) => {
   test.setTimeout(60_000);
 
   await page.addInitScript(() => {
@@ -58,15 +58,6 @@ test('trainer purchases one Pokémon and sees wallet, stock, inventory, and hist
   const { id, name, price, stock } = selectedPokemon;
   expect(stock).toBeGreaterThan(0);
 
-  await page.getByTestId('nav-inventory').click();
-  await expect(page.getByTestId('inventory-view')).toBeVisible();
-  await expect(page.getByTestId('inventory-loading')).toBeHidden();
-  const existingInventoryItem = page.getByTestId(`inventory-item-${id}`);
-  const initialInventoryQuantity = (await existingInventoryItem.count()) > 0
-    ? parseQuantity(await existingInventoryItem.innerText())
-    : 0;
-
-  await page.getByTestId('nav-catalog').click();
   await expect(page.getByTestId(`pokemon-add-to-cart-${id}`)).toBeEnabled();
   await page.getByTestId(`pokemon-add-to-cart-${id}`).click();
   await page.getByTestId('open-cart').click();
@@ -87,9 +78,10 @@ test('trainer purchases one Pokémon and sees wallet, stock, inventory, and hist
     throw new Error(`Unexpected checkout purchase test ID: ${purchaseTestId}`);
   }
 
+  // A successful checkout takes the trainer to their orders.
   await page.getByTestId('checkout-close').click();
-  await expect(page.getByTestId('inventory-view')).toBeVisible();
-  await expect(page.getByTestId(`inventory-item-${id}`)).toContainText(`×${initialInventoryQuantity + 1}`);
+  await expect(page).toHaveURL(/\/orders$/);
+  await expect(page.getByTestId('purchases-view')).toBeVisible();
   await expect(page.getByTestId('wallet-balance')).toHaveText(`₽ ${(initialBalance - price).toLocaleString()}`);
 
   await page.getByTestId('nav-catalog').click();
@@ -98,21 +90,17 @@ test('trainer purchases one Pokémon and sees wallet, stock, inventory, and hist
     expectedStock === 0 ? 'Out of Stock' : `${expectedStock} in stock`
   );
 
-  await page.getByTestId('nav-purchases').click();
+  await page.getByTestId('nav-orders').click();
+  await expect(page).toHaveURL(/\/orders$/);
   const purchaseRow = page.getByTestId(`purchase-row-${purchaseId}`);
   await expect(purchaseRow).toBeVisible();
   await expect(page.getByTestId(`purchase-item-${purchaseId}`)).toContainText(new RegExp(name, 'i'));
   await expect(page.getByTestId(`purchase-quantity-${purchaseId}`)).toHaveText('1');
+  await expect(page.getByTestId(`purchase-delivery-status-${purchaseId}`)).toBeVisible();
 });
 
 function parseDisplayedNumber(text: string): number {
   const value = Number(text.replace(/[^\d-]/g, ''));
   if (!Number.isFinite(value)) throw new Error(`Could not parse displayed number: ${text}`);
   return value;
-}
-
-function parseQuantity(text: string): number {
-  const match = text.match(/×(\d+)/);
-  if (!match) throw new Error(`Could not parse inventory quantity: ${text}`);
-  return Number(match[1]);
 }

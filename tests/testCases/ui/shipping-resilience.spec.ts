@@ -58,7 +58,7 @@ test('UI shows "Preparing shipment" while the shipping provider is down, then th
     await page.getByTestId('login-submit').click();
     await expect(page.getByTestId('login-dialog')).toBeHidden();
 
-    await page.getByTestId('nav-purchases').click();
+    await page.getByTestId('nav-orders').click();
     await expect(page.getByTestId(`purchase-row-${purchaseId}`)).toBeVisible();
     await expect(page.getByTestId(`purchase-delivery-status-${purchaseId}`)).toHaveText('Preparing shipment');
     await expect(page.getByTestId(`purchase-tracking-number-${purchaseId}`)).toHaveCount(0);

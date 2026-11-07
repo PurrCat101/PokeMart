@@ -1,385 +1,172 @@
 # PokéMart API Automation Lab
 
-โปรเจ็กต์ PokéMart สำหรับฝึก API testing ด้วย Playwright และ TypeScript พร้อมเว็บแอป Next.js ประกอบด้วย public BFF, internal PokéMart API, MySQL, WireMock และ OpenAPI/Swagger UI ข้อมูล Pokémon แบบ static ช่วยให้เริ่มระบบและทดสอบซ้ำได้โดยไม่ต้องเรียก PokéAPI ทุกครั้ง
+โปรเจ็กต์ฝึก API และ UI testing ด้วย Playwright + TypeScript บนร้านค้า PokéMart จำลอง: เว็บ Next.js, public BFF, internal API, MySQL, KYC, payment และ shipping mock ข้อมูล Pokémon/item เป็น snapshot ในฐานข้อมูล จึงเริ่มระบบและทดสอบซ้ำได้โดยไม่ต้องเรียก PokéAPI
 
 ## สถาปัตยกรรม
 
 ![PokéMart API test architecture flow](specs/images/PokMart-System-Architecture.png)
 
-![PokéMart API test workflow from requirements to reports](specs/images/pokemart-test-workflow.svg)
-
-| Service | URL เมื่อรัน local | หน้าที่ |
+| Service | URL (local) | หน้าที่ |
 |---|---|---|
-| Web frontend | `http://localhost:4003` | Next.js UI (เริ่มแยกด้วย `npm run dev`) สำหรับ catalog, cart/checkout, wallet, inventory และ purchase history |
-| BFF | `http://localhost:4001` | Public API สำหรับ client และแปลง response เป็น DTO ฝั่ง public |
-| PokéMart API | `http://localhost:4000` | Internal service สำหรับ business rules และการเข้าถึงข้อมูล |
-| KYC API | `http://localhost:4005` (container) | Internal service ระดับ KYC 3 ระดับ (`level` 0/1/2) ที่ PokéMart API เรียกก่อนขายสินค้าที่ต้องยืนยันตัวตน; มี test-only routes สำหรับตั้งระดับและจำลองความล้มเหลว |
-| Payment Mock | `http://localhost:4004` (container) | Stripe-style PaymentIntent mock สำหรับ wallet top-up (idempotency + recovery) |
-| Shipping Mock | `http://localhost:4002` (container) | Express Mock จำลองระบบจัดส่งบุคคลที่สาม (3rd-party shipping provider) |
-| Shipping Worker | Background process / container | Worker อ่านคิวงาน `shipments` จาก MySQL ยิง provider HTTP และ sync delivery status |
+| Web | `http://localhost:4003` | Next.js: catalog (`/`), bag/checkout, wallet, ประวัติคำสั่งซื้อและสถานะจัดส่ง (`/orders`) รันแยกด้วย `npm run dev` |
+| BFF | `http://localhost:4001` | Public API ที่ client เรียก แปลง response เป็น public DTO |
+| PokéMart API | `http://localhost:4000` | Internal API: business rules และข้อมูล |
+| KYC API | `http://localhost:4005` | ตรวจ KYC level 0/1/2 ก่อนขายสินค้า มี test-only routes |
+| Payment Mock | `http://localhost:4004` | Stripe-style PaymentIntent สำหรับ wallet top-up |
+| Shipping Mock | `http://localhost:4002` | จำลอง shipping provider ภายนอก |
+| Shipping Worker | container | อ่านคิว `shipments` / `item_shipments` ยิง provider และ sync delivery status |
 | WireMock | `http://localhost:8080` | จำลอง public API สำหรับ contract tests |
-| Scalar API reference | `http://localhost:8081` | เลือกดู OpenAPI ของ BFF, internal API, KYC, Payment และ Shipping mock |
-| Grafana (ทางเลือก) | `http://localhost:4300` | เปิดด้วย `make observe` ดู metric, log และค้น request ID ข้ามชั้น (BFF → API) เปิดเฉพาะ `127.0.0.1` |
-| MySQL | `localhost:4306` (container 3306) | เก็บ catalog, wallet, inventory, purchases และ shipments |
+| Scalar | `http://localhost:8081` | เปิดดู OpenAPI ของทุก service |
+| Grafana (ทางเลือก) | `http://localhost:4300` | `make observe`: metric, log และค้น request ID ข้าม BFF → API |
+| MySQL | `localhost:4306` | catalog, wallet, inventory, purchases, shipments |
 
-## 1. Prerequisites
+ทั้ง Pokémon และ item ที่ซื้อจะถูกจัดส่ง: ทุกคำสั่งซื้อมี shipment และแสดงสถานะ/tracking number ในหน้า Orders
 
-จำเป็นต้องมี:
+## เริ่มต้นใช้งาน
 
-1. **Node.js 22 LTS และ npm**
-2. **Podman** พร้อม `podman machine` (บน Windows ใช้ชนิด WSL) และ **podman-compose** (`python -m pip install --user podman-compose`)
-3. **GNU Make** (บน Windows ใช้ตัวของ MSYS2) เพราะการ build image ต้องผ่าน `make` (ดูหมายเหตุด้านล่าง)
-4. **Git** เฉพาะเมื่อต้อง clone repository
+**ต้องมี:** Node.js 22, Podman + `podman machine` + podman-compose (`python -m pip install --user podman-compose`) และ GNU Make
 
-โปรเจกต์นี้ใช้ Podman แทน Docker ตั้งค่าครั้งเดียวบน Windows:
+หมายเหตุสำหรับ Windows:
 
-- ตั้ง user environment variable `PODMAN_COMPOSE_PROVIDER` เป็น path เต็มของ `podman-compose.exe` เช่น `C:\Users\<ชื่อ>\AppData\Roaming\Python\Python310\Scripts\podman-compose.exe` แล้วเปิด terminal ใหม่ ถ้าไม่ตั้ง `podman compose` จะส่งต่อไปที่ `docker-compose.exe` ของ Docker Desktop ซึ่งต่อกับ Podman ไม่ได้
-- ใช้ `make` จาก **PowerShell** (หรือ terminal ของ Windows) ไม่ใช่ Git Bash: `make` ของ MSYS2 ที่ถูกเรียกจาก Git Bash จะทิ้ง environment variable ส่วนใหญ่ (เช่น `USERPROFILE`) ทำให้ `podman` หา config ไม่เจอ
-- `podman compose up --build` ใช้ไม่ได้บน Windows (podman-compose 1.6 มองว่า path แบบ `C:\...` เป็น URL แล้วข้าม `-f`) จึงต้องใช้ `make up` ซึ่ง build image ด้วย `podman build` ก่อน แล้วค่อยให้ compose เริ่ม container
-
-เปิด Podman machine ให้ทำงานก่อนเริ่ม (`podman machine start`) แล้วตรวจสอบใน terminal:
+- ตั้ง user environment variable `PODMAN_COMPOSE_PROVIDER` เป็น path ของ `podman-compose.exe` (เช่น `C:\Users\<ชื่อ>\AppData\Roaming\Python\Python310\Scripts\podman-compose.exe`) แล้วเปิด terminal ใหม่ ถ้าไม่ตั้ง `podman compose` จะไปเรียก Docker Desktop
+- เรียก `make` จาก **PowerShell** ไม่ใช่ Git Bash (Git Bash ทำให้ `podman` หา config ไม่เจอ)
+- ใช้ `make up` แทน `podman compose up --build` เพราะ build image ด้วย `podman build` ก่อน
 
 ```text
-node --version       # ควรเป็น v22.x
-npm --version
-podman --version
-podman compose version   # ต้องแสดง podman-compose ไม่ใช่ Docker Compose
-make --version
+podman machine start
+copy .env.example .env      # macOS/Linux: cp .env.example .env  (MYSQL_HOST_PORT=4306 ต้องตรงกับ tests/configs/.env.test)
+npm ci
+npm run build
+make up
 ```
 
-ใช้ **PowerShell** บน Windows หรือ **Terminal (zsh)** บน macOS แล้วเปิด terminal ที่ root ของ repository (โฟลเดอร์ที่มี `package.json` และ `docker-compose.yml`)
+`make up` build image แล้วรอจน BFF พร้อม service `liquibase` สร้าง schema และ seed ให้เอง (รันซ้ำได้) ตรวจสถานะ:
 
-## 2. Setup ครั้งแรก
+```text
+make ps
+curl http://localhost:4001/ready
+```
 
-### Windows — PowerShell
+> Image ใช้โค้ดที่ compile แล้ว (`dist`) จึงต้องรัน `npm run build` ก่อน `make up` ทุกครั้งที่แก้ BFF/API และ `make up` ไม่สร้าง container ที่รันอยู่ใหม่ ให้ใช้ `podman compose up -d --force-recreate --no-deps <service>`
 
-1. สร้าง `.env` หากยังไม่มี แล้วเปิดไฟล์และตั้ง `MYSQL_HOST_PORT=4306` ให้ตรงกับ `MYSQL_PORT=4306` ใน `tests/configs/.env.test`:
+> ค่าใน `.env.example` ใช้ใน local เท่านั้น ห้ามใช้กับ shared/production หรือ commit `.env`
 
-   ```powershell
-   if (-not (Test-Path .env)) { Copy-Item .env.example .env }
-   ```
+### เว็บแอป
 
-2. ติดตั้ง dependencies, build แอป และเริ่ม services:
+เว็บไม่อยู่ใน Compose เปิด terminal ใหม่แล้วรัน:
 
-   ```powershell
-   npm ci
-   npm run build
-   make up
-   ```
-
-3. ตรวจสถานะและ readiness ก่อนทดสอบ:
-
-   ```powershell
-   make ps
-   curl.exe -fsS http://localhost:4001/health
-   curl.exe -fsS http://localhost:4001/ready
-   curl.exe -fsS http://localhost:4000/ready
-   ```
-
-### macOS — Terminal (zsh)
-
-1. สร้าง `.env` หากยังไม่มี แล้วตั้ง `MYSQL_HOST_PORT=4306` ให้ตรงกับ `MYSQL_PORT=4306` ใน `tests/configs/.env.test`:
-
-   ```zsh
-   if [ ! -f .env ]; then cp .env.example .env; fi
-   ```
-
-2. ติดตั้ง dependencies, build แอป และเริ่ม services:
-
-   ```zsh
-   npm ci
-   npm run build
-   make up
-   ```
-
-3. ตรวจสถานะและ readiness ก่อนทดสอบ:
-
-   ```zsh
-   make ps
-   curl --fail --silent --show-error http://localhost:4001/health
-   curl --fail --silent --show-error http://localhost:4001/ready
-   curl --fail --silent --show-error http://localhost:4000/ready
-   ```
-
-service `liquibase` จะสร้าง schema และ seed data ให้เองก่อนที่ API จะเริ่ม (รันซ้ำได้ปลอดภัย: Liquibase จดว่าอะไรรันไปแล้ว) เปิด Scalar API reference ที่ `http://localhost:8081` แล้วเลือก **BFF Public API** หรือ **PokéMart Internal API** ได้เลย
-
-> ค่าใน `.env.example` เป็น local-development values เท่านั้น ห้ามใช้กับ shared/production environment หรือ commit `.env` และ credentials จริง
-
-## เริ่มเว็บแอป
-
-เว็บแอปไม่รวมอยู่ใน Compose ให้เปิด terminal อีกหน้าที่ root หลังจาก BFF พร้อม แล้วรัน:
-
-```powershell
+```text
 npm run dev
 ```
 
-เปิด `http://localhost:4003` เว็บแอปเรียก public BFF ผ่าน Next.js rewrite โดยค่าเริ่มต้นชี้ไปที่ `http://localhost:4001`; ตั้ง `NEXT_PUBLIC_BFF_URL` หรือ `BFF_INTERNAL_URL` ใน `apps/web/.env.local` เมื่อต้องการเปลี่ยนปลายทาง ดูรายละเอียด feature และขอบเขตการเชื่อมต่อที่ [specs/09-frontend.md](specs/09-frontend.md)
+เปิด `http://localhost:4003` (เรียก BFF ผ่าน Next.js rewrite ไปที่ `http://localhost:4001` เปลี่ยนด้วย `NEXT_PUBLIC_BFF_URL` หรือ `BFF_INTERNAL_URL` ใน `apps/web/.env.local`) รายละเอียดและ `data-testid` ดู [specs/09-frontend.md](specs/09-frontend.md) Playwright เปิดเว็บให้เองตอนรัน UI tests; ถ้าเว็บเปิดอยู่แล้วให้ตั้ง `WEB_BASE_URL`
 
-Playwright จะเปิดเว็บบน `http://localhost:4003` ให้อัตโนมัติระหว่าง `npm test` และ `npm run test:ui`; หากต้องการทดสอบเว็บที่เปิดอยู่แล้ว ให้ตั้ง `WEB_BASE_URL` เป็น origin ของเว็บนั้น โดย test selectors ใช้ `data-testid` ตาม convention ใน [specs/09-frontend.md](specs/09-frontend.md)
+### บัญชีทดลอง
 
-## ทดลอง login และเรียก API
+| Email | Password | ใช้สำหรับ |
+|---|---|---|
+| `lab-user-001@example.test` | `PokeMartLab!2026` | ทดลองเว็บและ API (KYC level 1) |
 
-บัญชีที่ล็อกอินได้จาก seed บน MySQL volume ใหม่มีหนึ่งบัญชี:
+มีบัญชี `lab-kyc-<key>@example.test` ให้ 1 บัญชีต่อ 1 test case KYC (password เดียวกัน) ดูรายการและ level/status ที่ [tests/support/data/kycUsers.ts](tests/support/data/kycUsers.ts) เป็นข้อมูลสาธิตสำหรับ local เท่านั้น
 
-| ผู้ใช้ | Email | Password | ใช้สำหรับ |
-|---|---|---|---|
-| PokéMart Lab User (`lab-user-001`) | `lab-user-001@example.test` | `PokeMartLab!2026` | ทดลองเว็บและเรียก API ใน local lab เท่านั้น |
-
-ผู้ใช้ `empty-user-001@example.invalid` เป็น test profile ที่ไม่มี wallet และไม่มี password จึงใช้ล็อกอินไม่ได้ เว็บจะไม่กรอกข้อมูลบัญชีให้อัตโนมัติ ให้ป้อน demo credentials ข้างต้นด้วยตนเองในหน้า sign in บัญชีและ password นี้เป็นข้อมูลสาธิตสำหรับ local lab เท่านั้น ห้ามนำไปใช้กับระบบ shared หรือ production
-
-### บัญชี KYC สำหรับทดสอบ
-
-seed [database/seed/014_seed_kyc_test_users.sql](database/seed/014_seed_kyc_test_users.sql) สร้างบัญชี `lab-kyc-<key>` (email `lab-kyc-<key>@example.test`) ให้ 1 บัญชีต่อ 1 test case ทุกบัญชีใช้ password hash เดียวกับ `lab-user-001` จึงล็อกอินด้วย `PokeMartLab!2026` ได้ รายการเดียวกันอยู่ใน [tests/support/data/kycUsers.ts](tests/support/data/kycUsers.ts)
-
-Level และ status ของ KYC ไม่ได้เก็บในตาราง `users` แต่ตั้งผ่าน `PUT /__test/users/{userId}` ของ KYC service (บัญชีที่ไม่ถูกตั้งค่าจะเป็น level 0 / ACTIVE)
-
-| Key | Level | Status | ใช้ทดสอบ |
-|---|---|---|---|
-| `none-pokemon` | 0 | ACTIVE | level 0 ซื้อ Pokémon ไม่ได้ |
-| `none-item` | 0 | ACTIVE | level 0 ซื้อ item ทั่วไปไม่ได้ |
-| `basic-pokemon` | 1 | ACTIVE | level 1 ซื้อ Pokémon ได้ |
-| `basic-item` | 1 | ACTIVE | level 1 ซื้อ item ทั่วไปได้ |
-| `basic-master` | 1 | ACTIVE | level 1 ซื้อ Master item ไม่ได้ |
-| `full-master` | 2 | ACTIVE | level 2 ซื้อ Master item ได้ |
-| `pending-pokemon` | 0 | PENDING_REVIEW | อยู่ระหว่างตรวจสอบ ซื้อ Pokémon ไม่ได้ |
-| `pending-item` | 0 | PENDING_REVIEW | อยู่ระหว่างตรวจสอบ ซื้อ item ไม่ได้ |
-| `basic-pending` | 1 | PENDING_REVIEW | สถานะตรวจสอบมีผลเหนือ level ที่เพียงพอ |
-| `rejected-pokemon` | 0 | REJECTED | บัญชีที่ถูกปฏิเสธซื้อ Pokémon ไม่ได้ |
-| `status-none` | 0 | ACTIVE | GET status / account-info ของ level 0 |
-| `status-basic` | 1 | ACTIVE | GET status / account-info ของ level 1 |
-| `status-full` | 2 | ACTIVE | GET status / account-info ของ level 2 |
-| `status-pending` | 0 | PENDING_REVIEW | GET status / account-info ระหว่างตรวจสอบ |
-| `status-rejected` | 0 | REJECTED | GET status / account-info หลังถูกปฏิเสธ |
-| `submit-valid` | 0 | ACTIVE | ส่งข้อมูลถูกต้อง แล้วเป็น PENDING_REVIEW |
-| `submit-invalid` | 0 | ACTIVE | ส่งข้อมูลไม่ถูกต้อง ได้ field errors |
-| `submit-malformed` | 0 | ACTIVE | field ที่ไม่รู้จักหรือ type ผิดถูกปฏิเสธ |
-| `submit-duplicate` | 0 | PENDING_REVIEW | ส่งซ้ำระหว่างรอตรวจสอบถูกปฏิเสธ |
-| `submit-verified` | 1 | ACTIVE | บัญชีที่ยืนยันแล้วส่งซ้ำไม่ได้ |
-| `submit-resubmit` | 0 | REJECTED | บัญชีที่ถูกปฏิเสธส่งใหม่ได้ |
-| `approve-flow` | 0 | PENDING_REVIEW | อนุมัติแล้วซื้อของได้ |
-| `down-purchase` | 1 | ACTIVE | KYC ล่ม การซื้อต้อง fail closed |
-| `down-account` | 1 | ACTIVE | KYC ล่ม account-info ได้ `kyc` เป็น null |
-| `ui-later` | 0 | ACTIVE | UI: กด "Maybe later" ปิด popup ได้ |
-| `ui-verify` | 0 | ACTIVE | UI: "Verify now" ไปหน้าฟอร์มและส่งได้ |
-| `ui-validation` | 0 | ACTIVE | UI: ฟอร์มแสดง validation errors |
-| `ui-pending` | 0 | PENDING_REVIEW | UI: แสดง banner กำลังตรวจสอบ |
-| `ui-rejected` | 0 | REJECTED | UI: แสดง banner ถูกปฏิเสธและปุ่ม Send again |
-
-เมื่อระบบพร้อมแล้ว สามารถทดลอง login ด้วย demo account ได้:
-
-### Windows — PowerShell
+ลอง login (PowerShell):
 
 ```powershell
 $login = Invoke-RestMethod -Method Post http://localhost:4001/api/auth/login -ContentType 'application/json' -Body '{"email":"lab-user-001@example.test","password":"PokeMartLab!2026"}'
-$headers = @{ Authorization = "Bearer $($login.accessToken)" }
-Invoke-RestMethod http://localhost:4001/api/auth/me -Headers $headers
-Invoke-RestMethod http://localhost:4001/api/wallet -Headers $headers
+Invoke-RestMethod http://localhost:4001/api/wallet -Headers @{ Authorization = "Bearer $($login.accessToken)" }
 ```
 
-### macOS — Terminal
+Login คืน JWT อายุ 1 ชั่วโมง ส่งเป็น `Authorization: Bearer <accessToken>` สำหรับ wallet, orders และการซื้อ (catalog อ่านได้โดยไม่ต้อง login) ไม่มี signup/reset password
 
-```zsh
-TOKEN=$(curl --fail --silent --show-error -X POST http://localhost:4001/api/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"lab-user-001@example.test","password":"PokeMartLab!2026"}' | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).accessToken")
-curl --fail --silent --show-error http://localhost:4001/api/auth/me -H "Authorization: Bearer $TOKEN"
-curl --fail --silent --show-error http://localhost:4001/api/wallet -H "Authorization: Bearer $TOKEN"
-```
+## รันทดสอบ
 
-Login returns a one-hour JWT. A frontend should send it as `Authorization: Bearer <accessToken>` for wallet, inventory, and purchase requests; catalog reads are public. No signup or password-reset flow is included. Replace the local-only `AUTH_JWT_SECRET`, enable HTTPS, and add rate limiting and a refresh/revocation strategy before exposing this flow beyond the lab.
+| Command | ตรวจสอบอะไร | ต้องมี |
+|---|---|---|
+| `npm run test:mocked` | WireMock contract (ไม่ทดสอบ logic จริงของ BFF) | WireMock |
+| `npm run test:api` | Public API validation กับ BFF จริง | stack |
+| `npm run test:pokeapi` | Internal API แยกตาม endpoint | stack |
+| `npm run test:purchase-retry` | Retry ด้วย `purchaseId` เดิม และ duplicate | stack |
+| `npm run test:e2e` | User journeys ผ่าน BFF ถึง MySQL | stack |
+| `npm run test:shipping` | Shipment: resilience, batch worker, idempotency, delivery lifecycle | stack |
+| `npm run test:kyc` | KYC levels, สถานะตรวจสอบ และฟอร์มยืนยันตัวตน (API + UI) | stack |
+| `npm run test:items` | ประวัติคำสั่งซื้อ item, shipment ของ item และหน้า Orders (API + UI) | stack |
+| `npm run test:ui` | Web UI: login, purchase flow, shipping resilience | stack |
+| `npm run test:observability` | `/metrics`, ค้น request ID ใน Loki, log ไม่มี token หลุด (ส่วน log ต้อง `make observe` ถ้าไม่เปิดจะถูกข้าม) | stack |
+| `npm test` | ทุก project | stack |
 
-## 3. รันทดสอบ — Step by step
+`make test-all` ทำ lint + build + เปิดระบบ + รันทั้งชุด + ปิดระบบ (ปิดเสมอแม้ test ล้ม) ดู report ด้วย `npm run test:report` (ที่ `tests/playwright-report/`)
 
-เริ่มจาก WireMock เพื่อฝึก mapping แล้วค่อยทดสอบ API จริงและ end-to-end:
+- WireMock pass ไม่ได้พิสูจน์ว่า BFF หรือฐานข้อมูลจริงถูกต้อง ใช้ดูเฉพาะ contract
+- โครงสร้างไฟล์: `mocked-bff/` (WireMock), `pokemon/` `purchases/` `items/` (BFF), `PokeAPI/<endpoint>/` (internal API), `e2e/`, `shipping/`, `kyc/`, `ui*/` ดู [Playwright structure.md](Playwright%20structure.md)
+- real-system tests เขียนข้อมูลใน MySQL: ก่อนแต่ละเคส fixture จะรีเซ็ต wallet และ listing ของ `REAL_USER_ID`/`REAL_POKEMON_ID` และลบ inventory row ของคู่นั้น ต้องใช้ database/user สำหรับทดสอบเท่านั้น
 
-| ขั้นตอน | npm command | ตรวจสอบอะไร | เป้าหมาย |
-|---|---|---|---|
-| 1 | `npm run test:mocked` | WireMock scenarios, mapping และ error response | WireMock; ไม่ทดสอบ logic ของ BFF จริง |
-| 2 | `npm run test:api` | Public API validation กับ BFF จริง | BFF + PokéMart API + MySQL |
-| 3 | `npm run test:pokeapi` | Contract ของ internal API แยกตาม endpoint | PokéMart API + MySQL |
-| 4 | `npm run test:purchase-retry` | Retry ด้วย `purchaseId` เดิมและ duplicate หลัง commit | ระบบจริง + MySQL |
-| 5 | `npm run test:e2e` | User journeys และผลกระทบต่อข้อมูล | BFF + PokéMart API + MySQL |
-| 6 | `npm run test:shipping` | Shipping integration, resilience, batch workers, idempotency และ delivery lifecycle | BFF + PokéMart API + Shipping Mock + MySQL |
-| 7 | `npm run test:observability` | `/metrics` ใช้รูปแบบ route ไม่ใช่ URL จริง, ค้น request ID ข้าม BFF → API ใน Loki, และ log ไม่มี token/รหัสผ่านหลุด | ส่วน metrics ใช้แค่ service; ส่วน log ต้อง `make observe` (ถ้าไม่เปิด จะถูกข้าม ไม่ล้ม) |
-| ทั้งหมด | `npm test` | ทุก Playwright project | ต้อง start Compose |
+### เลือก environment
 
-รันตามลำดับตัวอย่าง:
+`TEST_ENV` เลือก URL และ test data จาก `tests/configs/.env.<env>` ค่าเริ่มต้นคือ `test` (ตัวเลือกอื่น `sit`, `stg`):
 
 ```text
-npm run test:mocked
-npm run test:api
-npm run test:pokeapi
-npm run test:purchase-retry
-npm run test:e2e
+TEST_ENV=sit npm run test:api          # macOS/Linux
+$env:TEST_ENV='sit'; npm run test:api  # PowerShell
 ```
 
-### ผลลัพธ์และ HTML report
+ใส่ค่า SIT/STG จริงใน `tests/configs/.env.sit` / `.env.stg` (ห้ามใส่ credentials จริงลง Git) นอก `test` ต้องกำหนด `MYSQL_HOST`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD` ให้ชัดเจน และห้ามชี้ไป production `MYSQL_HOST_PORT` ใน `.env` (port บน host) ต้องตรงกับ `MYSQL_PORT` ใน `tests/configs/.env.*`
 
-Playwright แสดงผลใน terminal และสร้าง report ที่ `tests/playwright-report/` ทุกครั้งที่ทดสอบ หากต้องการเปิด HTML report:
+## คำสั่งที่ใช้บ่อย
 
-```text
-npm run test:report
-```
+| คำสั่ง | ทำอะไร |
+|---|---|
+| `make up` / `make down` | เปิด / ปิดทุกอย่าง (`down` ไม่ลบข้อมูล และปิด Grafana ด้วย) |
+| `make observe` | เปิดทุกอย่างพร้อม Grafana |
+| `make ps` / `make logs` | ดูสถานะ / logs (`Ctrl+C` หยุดดู logs ไม่หยุด container) |
+| `make db-migrate` / `make db-status` | รัน / ดู Liquibase changeset ที่ค้างอยู่ |
+| `make fresh` | **ลบข้อมูล local ทั้งหมด** แล้วเริ่มใหม่ |
+| `make db-reset` | **ลบฐานข้อมูล** แล้วสร้างใหม่ด้วย Liquibase |
+| `make help` | แสดงทุก target |
 
-ตรวจผลผ่าน terminal ได้ทันที หรือเปิด report เพื่อดู pass/fail, error details และ test ที่ล้มเหลว อย่าตีความ WireMock pass ว่าเป็นหลักฐานว่า BFF หรือฐานข้อมูลจริงทำงานถูกต้อง
-
-ทุก suite แยก test files ตาม target และ endpoint: `tests/testCases/mocked-bff/` สำหรับ WireMock, `pokemon/` และ `purchases/` สำหรับ public BFF, `PokeAPI/<endpoint>/` สำหรับ internal PokéMart API โดยตรง และ `e2e/` สำหรับ journeys ผ่าน BFF ผลจาก WireMock ยืนยันเฉพาะ contract ของ mapping ไม่ได้ยืนยัน business logic หรือ persistence ของระบบจริง ส่วน `PokeAPI` ตรวจ internal DTO/error behavior โดยไม่ใช้ BFF.
-
-`npm test` รัน WireMock และ real-system projects แยกกัน ไม่ได้ส่ง purchase ซ้ำจาก WireMock ไปยังฐานข้อมูลจริง แต่ละ purchase test ใช้ UUID ใหม่และตรวจ duplicate ภายในเคสของตัวเอง ก่อน real-system test แต่ละกรณี fixture จะตั้ง wallet ของ `REAL_USER_ID` และ listing ของ `REAL_POKEMON_ID` กลับเป็น `REAL_WALLET_BALANCE`, `REAL_POKEMON_PRICE`, `REAL_POKEMON_STOCK` และ active พร้อมลบ inventory row ของ user/โปเกมอนคู่นั้น การตั้งค่านี้ไม่ลบ purchase history หรือ reset Docker volume; purchase tests ยัง snapshot/restore state และลบ purchase ที่สร้างเอง
-
-> **สำคัญ:** setup นี้เขียนข้อมูลใน MySQL จึงต้องใช้ database และ user สำหรับทดสอบที่แยกจากข้อมูลใช้งานจริงเท่านั้น การรัน real-system tests จะคืนยอด wallet และ listing ที่เลือกเป็นค่าตั้งต้นก่อนทุกกรณีทดสอบ; ใช้ `npm run test:mocked` หากต้องการทดสอบ WireMock โดยไม่เชื่อม MySQL
-
-## เลือก environment ของ test
-
-`TEST_ENV` ใช้เลือก URLs และ test data โดยไม่เปลี่ยน test case ค่าเริ่มต้นคือ `test` และโหลดจาก `tests/configs/.env.test`; ตัวเลือกอื่นที่เตรียมไว้คือ `sit` และ `stg`:
-
-PowerShell:
-
-```powershell
-$env:TEST_ENV='test'; npm test
-$env:TEST_ENV='sit'; npm run test:api
-```
-
-macOS / zsh:
-
-```zsh
-TEST_ENV=test npm test
-TEST_ENV=sit npm run test:api
-```
-
-กำหนดค่า SIT/STG จริงใน `tests/configs/.env.sit` หรือ `.env.stg` ก่อนใช้งาน ไฟล์ตัวอย่างมี URL placeholder และห้ามใส่ credentials จริงลงใน Git การรัน real-system project จะ reset เฉพาะ wallet และ listing ที่ระบุ พร้อมลบ inventory row ของ user/โปเกมอนที่เลือก ดังนั้นต้องใช้ user และ MySQL database ที่แยกไว้สำหรับ test โดยเฉพาะ ห้ามชี้ไปยัง production หรือข้อมูล shared ที่ไม่อนุญาตให้แก้ไข ใน environment ที่ไม่ใช่ `test` การเชื่อมต่อฐานข้อมูลจะ fail หากไม่ได้กำหนด `MYSQL_HOST`, `MYSQL_DATABASE`, `MYSQL_USER` และ `MYSQL_PASSWORD` ไว้ชัดเจน
-
-`MYSQL_HOST_PORT` ใน `.env` คือ port ที่ container เปิดบน host ส่วน `MYSQL_PORT` ในไฟล์ `tests/configs/.env.*` คือ port ที่ test runner ใช้เชื่อมต่อจาก host ทั้งสองค่าต้องตรงกัน เช่น `MYSQL_HOST_PORT=4306` ต้องคู่กับ `MYSQL_PORT=4306`
-
-## Build, stop และจัดการฐานข้อมูล
-
-```bash
-npm run build
-npm run build:web
-make ps
-make logs
-make down
-```
-
-- `make logs` แสดง logs ต่อเนื่อง กด `Ctrl+C` เพื่อหยุดการติดตาม logs (ไม่ได้หยุด containers)
-- `make down` หยุด containers ทั้งหมดรวม profile `observability` (Grafana, Loki, Prometheus) โดยไม่ลบ database volume ถ้าเห็น `ssh: handshake failed: EOF` ระหว่างหยุด (การเชื่อมต่อกับ podman machine หลุดชั่วคราว) ให้รัน `make down` ซ้ำอีกครั้ง
-- ห้ามใช้ `podman compose down` เปล่าๆ เพราะจะไม่หยุด service ของ profile `observability`
-- `make help` แสดง targets ทั้งหมด คำสั่งที่ใช้บ่อย:
-
-  | คำสั่ง | ทำอะไร |
-  |---|---|
-  | `make up` / `make down` | เปิด / ปิดทุกอย่าง (`down` ไม่ลบข้อมูล และปิด Grafana ด้วยถ้าเปิดอยู่) |
-  | `make observe` | เปิดทุกอย่างพร้อม Grafana ที่ `http://localhost:4300` |
-  | `make test-all` | lint + build + เปิดระบบ + รันทดสอบทั้งชุด + ปิดระบบ (ปิดเสมอแม้ test ล้ม) |
-  | `make test-observability` | ทดสอบ metrics (และ log ถ้า Grafana เปิดอยู่) |
-  | `make db-migrate` / `make db-status` | รัน / ดู Liquibase changeset ที่ค้างอยู่ |
-  | `make fresh` | **ลบข้อมูล local ทั้งหมด** แล้วเริ่มใหม่สะอาด (`down -v` + `up`) |
-  | `make db-reset` | **ลบข้อมูลฐานข้อมูล** แล้วสร้างใหม่ด้วย Liquibase |
-
-  `make fresh` และ `make db-reset` ห้ามใช้กับ SIT, shared หรือ production data
-- ถ้าไดร์ C: เต็ม Podman จะเขียนไม่ได้และพัง ที่เก็บ image และ container อยู่ใน WSL distro ของ podman machine (ไฟล์ `ext4.vhdx`) ย้ายไปไดร์อื่นได้โดย `podman machine stop` แล้ว `wsl --export podman-machine-default <ไฟล์>.tar`, `wsl --unregister podman-machine-default`, `wsl --import podman-machine-default <โฟลเดอร์ปลายทาง> <ไฟล์>.tar --version 2` แล้ว `podman machine start`
-
-## แบบฝึกหัด: สร้าง WireMock และ tests เอง
-
-โฟลเดอร์ `tests/` และ `wiremock/` ที่ให้มาเป็นตัวอย่างเต็มรูปแบบ ให้อ่าน requirements ก่อน แล้วสร้าง mapping และ Playwright tests ของตัวเองจาก OpenAPI โดยไม่เปิดดูตัวอย่างระหว่างทำ หากต้องการเริ่มใหม่ทั้งสองโฟลเดอร์ ให้ทำใน worktree แยกเพื่อเก็บตัวอย่างและงานปัจจุบันไว้:
-
-```text
-git worktree add ..\PokeMart-practice -b practice/rebuild-tests
-```
-
-บน macOS ใช้ path แบบนี้:
-
-```zsh
-git worktree add ../PokeMart-practice -b practice/rebuild-tests
-```
-
-จากนั้นเข้าโฟลเดอร์และลบ `tests/` กับ `wiremock/` เฉพาะใน worktree ใหม่นั้น:
-
-```powershell
-Set-Location ..\PokeMart-practice
-Remove-Item -Recurse -Confirm -Path tests, wiremock
-```
-
-บน macOS:
-
-```zsh
-cd ../PokeMart-practice
-rm -ri tests wiremock
-```
-
-สร้างโครงสร้าง/config, mappings และ test cases ใหม่ โปรเจ็กต์ root กำหนด `tests` เป็น npm workspace จึงต้องสร้าง `tests/package.json` และ Playwright config กลับมาก่อนรัน `npm install`/tests
-
-เริ่มออกแบบจาก [BFF OpenAPI](specs/openapi.yaml), [internal API OpenAPI](specs/pokemart-openapi.yaml), [acceptance criteria](specs/06-acceptance-and-decisions.md) และ [test design / traceability](specs/08-test-design.md) แล้วใช้แผนภาพสถาปัตยกรรมและ workflow ที่ฝังใน README นี้ช่วยแยก real กับ mocked tests
+`make fresh` และ `make db-reset` ห้ามใช้กับ SIT/shared/production ห้ามใช้ `podman compose down` เปล่าๆ เพราะไม่หยุด service ของ profile `observability` ถ้าเห็น `ssh: handshake failed: EOF` ตอน `make down` ให้รันซ้ำ
 
 ## Purchase request และ retry
 
-Client สร้าง UUID `purchaseId` ก่อนเริ่มซื้อ และส่ง ID นี้ใน JSON body ไม่ใช้ `Idempotency-Key` header:
+Client สร้าง UUID `purchaseId` เองและส่งใน JSON body (ไม่ใช้ `Idempotency-Key` header) ใช้กับ `POST /api/purchases` (Pokémon, ส่ง `pokemonId`) และ `POST /api/items/purchases` (item, ส่ง `itemId`):
 
 ```json
-{
-  "purchaseId": "00000000-0000-4000-8000-000000000001",
-  "pokemonId": 1,
-  "quantity": 1
-}
+{ "purchaseId": "00000000-0000-4000-8000-000000000001", "pokemonId": 1, "quantity": 1 }
 ```
 
-- ใช้ `purchaseId` เดิมเมื่อต้อง retry purchase รายการเดิม
-- หาก request ล้มเหลวก่อน transaction commit จะไม่มีการจอง ID และ retry ด้วย ID เดิมได้
-- หาก purchase commit แล้ว การส่ง ID เดิมอีกครั้งจะได้ `409 PURCHASE_DUPLICATE` โดยไม่หัก wallet หรือ stock ซ้ำ
-- หากไม่แน่ใจว่าคำขอ commit แล้วหรือไม่ ให้ตรวจ `GET /api/purchases/{purchaseId}` ก่อน retry
+- ล้มเหลวก่อน commit: ไม่มีการจอง ID retry ด้วย ID เดิมได้
+- commit แล้ว: ส่ง ID เดิมซ้ำได้ `409 PURCHASE_DUPLICATE` (item: `ITEM_PURCHASE_DUPLICATE`) โดยไม่หัก wallet/stock ซ้ำ
+- ไม่แน่ใจว่า commit หรือยัง: ตรวจ `GET /api/purchases/{purchaseId}` ก่อน retry
+- สถานะจัดส่ง: `GET /api/purchases/{id}/shipment` (Pokémon) และ `GET /api/items/purchases/{id}/shipment` (item)
 
-## ฐานข้อมูลและ Pokémon seed
+## ฐานข้อมูล
 
-ฐานข้อมูลใช้ SQL ใน `database/schema/` และ `database/seed/` ซึ่ง Liquibase เป็นผู้นำไปใช้ผ่าน `database/liquibase/db.changelog-master.yaml` (ดูวิธีเพิ่มการเปลี่ยนแปลงและคำสั่ง `make db-*` ใน `database/README.md`) Seed ปัจจุบันมี Pokémon 1,025 ตัวและ item 2,222 รายการจาก PokeAPI snapshot ที่ pin ไว้ พร้อมราคา, stock และ KYC requirement จำลองของ PokéMart
-
-### ERD: ตารางและความสัมพันธ์
+SQL อยู่ใน `database/schema/`, `database/seed/` และ `database/migrations/` โดย Liquibase เป็นผู้ apply ผ่าน `database/liquibase/db.changelog-master.yaml` (การเพิ่ม changeset และคำสั่ง `make db-*` ดู [database/README.md](database/README.md)) Seed มี Pokémon 1,025 ตัวและ item 2,222 รายการ พร้อมราคา stock และ KYC requirement จำลอง: Pokémon และ item ทั่วไปต้อง level 1, item ระดับ Master ต้อง level 2, level 0 และบัญชีที่รอตรวจสอบซื้อไม่ได้
 
 ![PokéMart database tables and entity relationships](database/schema/erd.svg)
 
-ทุกเส้นใน ERD คือ foreign key ที่ประกาศใน MySQL รวมถึง `users.user_id` ที่เชื่อมกับ wallet, inventory และ purchases คัดลอก DBML ไปใช้ใน dbdiagram.io ได้จาก [database/schema/pokemart.dbml](database/schema/pokemart.dbml); ดูรายละเอียดคอลัมน์และ constraints ที่ [database/README.md](database/README.md).
+DBML สำหรับ dbdiagram.io: [database/schema/pokemart.dbml](database/schema/pokemart.dbml)
 
-ราคา Pokémon derive จาก base experience และราคา item ใช้ข้อมูลอ้างอิง PokéAPI; stock เป็น deterministic. Pokémon และ item ทั่วไปต้องมี KYC level 1, item ระดับ Master (เช่น Master Ball และยาระดับสูง) ต้อง level 2 และ level 0 ซื้ออะไรไม่ได้ ส่วนบัญชีที่รอตรวจสอบ (`PENDING_REVIEW`) ซื้อไม่ได้เช่นกัน Runtime/test ไม่เรียก PokéAPI และไม่ต้องมี clone `api-data`; ดู [database/README.md](database/README.md) และ seed ที่ generate ใน [database/seed](database/seed)
+## ปรับสถานะ shipment ตอนพัฒนา
 
-ที่มาข้อมูล: [PokeAPI REST API](https://pokeapi.co/) โปรดตรวจสอบ license/attribution ก่อนนำ snapshot ไปเผยแพร่ต่อ
+เปลี่ยน delivery status ของ order (Pokémon หรือ item) ทันที โดยไม่ต้องรอ worker sync (ทุก 15 วินาที) ใช้ได้เฉพาะ local:
 
-## เครื่องช่วยจัดการ Shipment Status
-
-สำหรับการทดสอบ E2E หรือ development มีเครื่อง CLI สำหรับอัปเดต shipping status โดยตรง:
-
-```bash
-npm run sync-shipment <purchaseId> <status>
+```text
+npm run update-shipment-status -- <purchaseId> <status>
 ```
 
-**การใช้งาน:**
-- `<purchaseId>`: Order ID (UUID) ของ order ที่ต้องการอัปเดต
-- `<status>`: ตัวเลขก 1-5
-  - 1 = LABEL_CREATED
-  - 2 = IN_TRANSIT
-  - 3 = OUT_FOR_DELIVERY
-  - 4 = DELIVERED
-  - 5 = DELIVERY_FAILED
+`status`: 1 = LABEL_CREATED, 2 = IN_TRANSIT, 3 = OUT_FOR_DELIVERY, 4 = DELIVERED, 5 = DELIVERY_FAILED ตัวอย่าง: `npm run update-shipment-status -- <purchaseId> 2`
 
-**ตัวอย่าง:**
-```bash
-npm run sync-shipment ba3d80c1-8e01-44a0-9c64-42c8d210f26c 3
-```
+คำสั่งนี้อัปเดตทั้ง shipping-mock (`http://localhost:4002`) และ `delivery_status` ในฐานข้อมูล (หาตาราง `shipments` หรือ `item_shipments` ให้เอง) shipping-mock บังคับลำดับสถานะ ต้องไล่ทีละขั้น (2 → 3 → 4) และ order ต้องผ่านการสร้าง label โดย worker ก่อน (สถานะอย่างน้อย `LABEL_CREATED`) ถึงจะอัปเดตได้ ถ้าเพิ่งรีเซ็ต shipping-mock order เก่าจะหาไม่เจอ
 
-**สิ่งที่ command นี้ทำ:**
-1. อัปเดต status ใน shipping-mock (`http://localhost:4002`)
-2. อัปเดต delivery_status ใน database โดยตรง
-3. ไม่ต้องรอ shipping-worker sync (ทุก 15 วินาที)
+## เอกสารเพิ่มเติม
 
-> **หมายเหตุ:** เครื่องนี้สำหรับ local development และ testing เท่านั้น อย่าใช้ใน production หรือ environment อื่น ๆ
+- Frontend: [specs/09-frontend.md](specs/09-frontend.md)
+- OpenAPI: [BFF](specs/openapi.yaml), [internal API](specs/pokemart-openapi.yaml) (ดูทุก service ที่ Scalar `http://localhost:8081`)
+- API behavior และ error contract: [specs/03-api-contract.md](specs/03-api-contract.md)
+- แนวทางและการออกแบบ test: [specs/04-testing.md](specs/04-testing.md), [specs/08-test-design.md](specs/08-test-design.md)
+- Shipping: [specs/10-shipping-integration.md](specs/10-shipping-integration.md)
+- Payment top-up: [specs/11-payment-integration.md](specs/11-payment-integration.md)
+- KYC: [specs/12-kyc.md](specs/12-kyc.md)
+- Database: [database/README.md](database/README.md)
 
-## API specifications และเอกสาร
-
-- Frontend behavior และ local setup: [specs/09-frontend.md](specs/09-frontend.md)
-- Public BFF OpenAPI: [specs/openapi.yaml](specs/openapi.yaml)
-- Internal PokéMart API OpenAPI: [specs/pokemart-openapi.yaml](specs/pokemart-openapi.yaml)
-- API behavior และ error contracts: [specs/03-api-contract.md](specs/03-api-contract.md)
-- Testing approach: [specs/04-testing.md](specs/04-testing.md)
-- Public/internal API test design, traceability และ coverage gaps: [specs/08-test-design.md](specs/08-test-design.md)
-- Database, seed และ migration: [database/README.md](database/README.md)
-- Payment top-up และ recovery contract: [specs/11-payment-integration.md](specs/11-payment-integration.md)
-- KYC levels และ purchase gating: [specs/12-kyc.md](specs/12-kyc.md)
-- โครงสร้าง Playwright: [Playwright structure.md](Playwright%20structure.md)
+ที่มาข้อมูล: [PokeAPI](https://pokeapi.co/) ตรวจสอบ license/attribution ก่อนนำ snapshot ไปเผยแพร่ต่อ
