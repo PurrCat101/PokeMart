@@ -39,19 +39,15 @@ Upstream paths use the service contract prefix `/pokemart/v1`. The PokéMart API
 | `GET` | `/api/pokemon/:id` | `GET /pokemart/v1/catalog/pokemon/{id}` | `200` | `400 VALIDATION_ERROR`; `404 POKEMON_NOT_FOUND`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
 | `GET` | `/api/wallet` | `GET /pokemart/v1/wallet` with bearer token | `200` | `401 UNAUTHORIZED`; `404 USER_NOT_FOUND`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
 | `GET` | `/api/inventory` | `GET /pokemart/v1/inventory` with bearer token | `200` | `401 UNAUTHORIZED`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
-| `POST` | `/api/purchases` | `POST /pokemart/v1/purchases` with bearer token and `purchaseId` body | `201` | `400 VALIDATION_ERROR` / `INVALID_JSON`; `401 UNAUTHORIZED`; `404 POKEMON_NOT_FOUND`; `409 PURCHASE_DUPLICATE` / `POKEMON_NOT_FOR_SALE` / `INSUFFICIENT_STOCK`; `415 UNSUPPORTED_MEDIA_TYPE`; `422 INSUFFICIENT_FUNDS`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
-| `POST` | `/api/items/purchases` | `POST /pokemart/v1/items/purchases` with bearer token and `purchaseId`, `itemId`, `quantity` body | `201` | `400 VALIDATION_ERROR` / `INVALID_JSON`; `401 UNAUTHORIZED`; `403 KYC_LEVEL_REQUIRED` / `KYC_PENDING_REVIEW`; `404 ITEM_NOT_FOUND`; `409 ITEM_PURCHASE_DUPLICATE` / `ITEM_NOT_FOR_SALE` / `INSUFFICIENT_STOCK`; `415 UNSUPPORTED_MEDIA_TYPE`; `422 INSUFFICIENT_FUNDS`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` (also when the KYC service is down and the item needs KYC) |
-| `GET` | `/api/items/purchases` | `GET /pokemart/v1/items/purchases?limit&offset` with bearer token; newest first, same paging rules as `/api/purchases`; each order has a shipment | `200` | `400 VALIDATION_ERROR` / `UNKNOWN_QUERY_PARAMETER`; `401 UNAUTHORIZED`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
+| `POST` | `/api/purchases` | `POST /pokemart/v1/purchases` with bearer token and `purchaseId`, `quantity` and exactly one of `pokemonId` / `itemId` in the body | `201` | `400 VALIDATION_ERROR` / `INVALID_JSON`; `401 UNAUTHORIZED`; `403 KYC_LEVEL_REQUIRED` / `KYC_PENDING_REVIEW`; `404 POKEMON_NOT_FOUND` / `ITEM_NOT_FOUND`; `409 PURCHASE_DUPLICATE` / `POKEMON_NOT_FOR_SALE` / `ITEM_NOT_FOR_SALE` / `INSUFFICIENT_STOCK`; `415 UNSUPPORTED_MEDIA_TYPE`; `422 INSUFFICIENT_FUNDS`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` (also when the KYC service is down and the listing needs KYC) |
 | `GET` | `/api/items/inventory` | `GET /pokemart/v1/items/inventory` with bearer token; items only (`/api/inventory` stays Pokémon only) | `200` | `401 UNAUTHORIZED`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
-| `GET` | `/api/items/purchases/:id` | `GET /pokemart/v1/items/purchases/{id}` with bearer token | `200` | `400 VALIDATION_ERROR`; `401 UNAUTHORIZED`; `404 PURCHASE_NOT_FOUND`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
 | `POST` | `/api/kyc/submissions` | `POST /pokemart/v1/kyc/submissions` with bearer token and `fullName`, `nationalId`, `dateOfBirth`, `phone`, `address` body | `202` | `400 VALIDATION_ERROR` / `INVALID_JSON`; `401 UNAUTHORIZED`; `409 KYC_ALREADY_PENDING` / `KYC_ALREADY_VERIFIED`; `415 UNSUPPORTED_MEDIA_TYPE`; `503 DEPENDENCY_UNAVAILABLE` (KYC service down) |
 | `GET` | `/api/kyc/status` | `GET /pokemart/v1/kyc/status` with bearer token | `200` | `401 UNAUTHORIZED`; `503 DEPENDENCY_UNAVAILABLE` (KYC service down) |
 | `POST` | `/api/wallet/top-ups` | `POST /pokemart/v1/wallet/top-ups` with bearer token and `topUpId`, `amount` body | `201` | `400 VALIDATION_ERROR` / `INVALID_JSON`; `401 UNAUTHORIZED`; `402 PAYMENT_FAILED`; `409 TOP_UP_DUPLICATE`; `415 UNSUPPORTED_MEDIA_TYPE`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
 | `GET` | `/api/wallet/top-ups/:topUpId` | `GET /pokemart/v1/wallet/top-ups/{topUpId}` with bearer token | `200` | `400 VALIDATION_ERROR`; `401 UNAUTHORIZED`; `404 TOP_UP_NOT_FOUND`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
-| `GET` | `/api/purchases` | `GET /pokemart/v1/purchases` with bearer token, `limit`, `offset` | `200` | `400 VALIDATION_ERROR` / `UNKNOWN_QUERY_PARAMETER`; `401 UNAUTHORIZED`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
+| `GET` | `/api/purchases` | `GET /pokemart/v1/purchases` with bearer token, `limit`, `offset` and optional `kind` (`POKEMON` or `ITEM`); one list for both kinds, newest first | `200` | `400 VALIDATION_ERROR` / `UNKNOWN_QUERY_PARAMETER`; `401 UNAUTHORIZED`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
 | `GET` | `/api/purchases/:id` | `GET /pokemart/v1/purchases/{id}` with bearer token | `200` | `400 VALIDATION_ERROR`; `401 UNAUTHORIZED`; `404 PURCHASE_NOT_FOUND`; `500 INTERNAL_ERROR`; `503 DEPENDENCY_UNAVAILABLE` |
 | `GET` | `/api/purchases/:id/shipment` | `GET /pokemart/v1/purchases/{id}/shipment` with bearer token | `200` | `400 VALIDATION_ERROR`; `401 UNAUTHORIZED`; `404 PURCHASE_NOT_FOUND`; `500 INTERNAL_ERROR` |
-| `GET` | `/api/items/purchases/:id/shipment` | `GET /pokemart/v1/items/purchases/{id}/shipment` with bearer token; same response as the Pokémon shipment | `200` | `400 VALIDATION_ERROR`; `401 UNAUTHORIZED`; `404 PURCHASE_NOT_FOUND`; `500 INTERNAL_ERROR` |
 | `GET` | `/health` | none | `200` | none |
 | `GET` | `/ready` | `GET /ready` on PokéMart API | `200` or `503` | none |
 
@@ -75,7 +71,7 @@ The BFF and PokéMart API paths differ on purpose. The BFF is the public contrac
 | `X-Request-Id` | client to BFF | Echo if valid (1–64 chars, `A-Za-z0-9_-`). Otherwise generate. |
 | `X-Request-Id` | BFF to PokéMart API | Always sent, same value as the BFF response. |
 | `Authorization` | client to BFF to PokéMart API | Forwarded unchanged for protected routes; never logged. |
-| `Location` | PokéMart API to BFF to client | On `201`, the BFF sets the **public** path (`/api/purchases/{id}`, `/api/items/purchases/{id}`, `/api/wallet/top-ups/{id}`). It never exposes an internal `/pokemart/v1/...` path. |
+| `Location` | PokéMart API to BFF to client | On `201`, the BFF sets the **public** path (`/api/purchases/{id}`, `/api/wallet/top-ups/{id}`). It never exposes an internal `/pokemart/v1/...` path. |
 | `X-Request-Id` | every response | Always present, including errors and health checks. |
 
 ## 5. Authentication
@@ -91,8 +87,8 @@ The BFF owns the public response DTOs and maps internal service responses rather
 | Catalog pages (Pokémon and items) | `{ totalCount, page: { limit, offset }, items: [...] }` |
 | Pokémon catalog entry | `{ pokemon: { id, name, types, spriteUrl }, listing: { price, availableStock } }` |
 | Item catalog entry | `{ item: { id, name, category, spriteUrl }, listing: { price, availableStock, requiredKycLevel } }` |
-| Pokémon purchase | `{ purchaseId, pokemon: { id, name }, quantity, pricing: { unitPrice, totalPrice }, createdAt }` |
-| Item purchase | `{ purchaseId, item: { id, name }, quantity, pricing: { unitPrice, totalPrice }, createdAt }` |
+| Pokémon purchase | `{ purchaseId, kind: "POKEMON", pokemon: { id, name }, quantity, pricing: { unitPrice, totalPrice }, createdAt }` |
+| Item purchase | `{ purchaseId, kind: "ITEM", item: { id, name }, quantity, pricing: { unitPrice, totalPrice }, createdAt }` |
 | KYC | `{ level, status, updatedAt }` |
 | Account info | `{ user, wallet, kyc }` where `kyc` is `null` if KYC is unavailable |
 | Top-up | `{ topUpId, amount, status, createdAt, updatedAt }` (`providerPaymentId` is internal and never exposed) |
@@ -117,7 +113,7 @@ Rules:
 
 Public error codes the BFF may produce itself (not from upstream): `VALIDATION_ERROR`, `UNKNOWN_QUERY_PARAMETER`, `INVALID_JSON`, `UNSUPPORTED_MEDIA_TYPE`, `DEPENDENCY_UNAVAILABLE`, `INTERNAL_ERROR`.
 
-Upstream codes the BFF passes through (status unchanged): `UNAUTHORIZED`, `INVALID_CREDENTIALS`, `POKEMON_NOT_FOUND`, `ITEM_NOT_FOUND`, `USER_NOT_FOUND`, `PURCHASE_NOT_FOUND`, `TOP_UP_NOT_FOUND`, `POKEMON_NOT_FOR_SALE`, `ITEM_NOT_FOR_SALE`, `INSUFFICIENT_STOCK`, `INSUFFICIENT_FUNDS`, `PURCHASE_DUPLICATE`, `ITEM_PURCHASE_DUPLICATE`, `TOP_UP_DUPLICATE`, `KYC_LEVEL_REQUIRED`, `KYC_PENDING_REVIEW`, `KYC_ALREADY_PENDING`, `KYC_ALREADY_VERIFIED`, `PAYMENT_FAILED`. Any other upstream 4xx code becomes `500 INTERNAL_ERROR`.
+Upstream codes the BFF passes through (status unchanged): `UNAUTHORIZED`, `INVALID_CREDENTIALS`, `POKEMON_NOT_FOUND`, `ITEM_NOT_FOUND`, `USER_NOT_FOUND`, `PURCHASE_NOT_FOUND`, `TOP_UP_NOT_FOUND`, `POKEMON_NOT_FOR_SALE`, `ITEM_NOT_FOR_SALE`, `INSUFFICIENT_STOCK`, `INSUFFICIENT_FUNDS`, `PURCHASE_DUPLICATE`, `TOP_UP_DUPLICATE`, `KYC_LEVEL_REQUIRED`, `KYC_PENDING_REVIEW`, `KYC_ALREADY_PENDING`, `KYC_ALREADY_VERIFIED`, `PAYMENT_FAILED`. Any other upstream 4xx code becomes `500 INTERNAL_ERROR`.
 
 Note: `502 Bad Gateway` is deliberately not used in the public contract. Clients get `503` for any upstream failure, so the contract stays small.
 

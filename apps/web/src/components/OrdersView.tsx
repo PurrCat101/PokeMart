@@ -59,7 +59,7 @@ const CELL = "block px-4 py-1.5 before:mr-3 before:text-xs before:font-medium be
 function OrderTableRow({ order, refreshToken, onOpen }: { order: OrderRow; refreshToken: number; onOpen: (order: OrderRow) => void }) {
   const ids = IDS[order.kind];
   // Quick status comes from the public shipment API, so it shows without opening the order.
-  const { shipment, loading, error } = usePurchaseShipment(order.purchaseId, refreshToken, order.kind);
+  const { shipment, loading, error } = usePurchaseShipment(order.purchaseId, refreshToken);
 
   return (
     <tr

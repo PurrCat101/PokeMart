@@ -10,7 +10,7 @@ import { newPurchaseId } from '../../support/utils/purchaseId';
  */
 
 const buyItem = (api: APIRequestContext, purchaseId = newPurchaseId()): Promise<APIResponse> =>
-  api.post('/api/items/purchases', { data: { purchaseId, itemId: kycCatalog.itemId, quantity: 1 } });
+  api.post('/api/purchases', { data: { purchaseId, itemId: kycCatalog.itemId, quantity: 1 } });
 
 const errorCode = async (response: APIResponse): Promise<string> => ((await response.json()) as { error: { code: string } }).error.code;
 
@@ -97,7 +97,7 @@ test.describe('RACE-003: stock is never oversold', () => {
 });
 
 test.describe('RACE-004: a purchase ID is processed once', () => {
-  test('RACE-004a the same purchaseId sent twice concurrently charges once and the duplicate gets 409 ITEM_PURCHASE_DUPLICATE', async ({ kycAccount }) => {
+  test('RACE-004a the same purchaseId sent twice concurrently charges once and the duplicate gets 409 PURCHASE_DUPLICATE', async ({ kycAccount }) => {
     const { api, database } = await kycAccount('race-duplicate-id');
     const purchaseId = newPurchaseId();
 
@@ -105,7 +105,7 @@ test.describe('RACE-004: a purchase ID is processed once', () => {
 
     expect(responses.map((response) => response.status()).sort()).toEqual([201, 409]);
     const duplicate = responses.find((response) => response.status() === 409)!;
-    expect(await errorCode(duplicate)).toBe('ITEM_PURCHASE_DUPLICATE');
+    expect(await errorCode(duplicate)).toBe('PURCHASE_DUPLICATE');
     expect(await walletBalance(database, 'race-duplicate-id')).toBe(kycCatalog.walletBalance - kycCatalog.itemPrice);
     expect(await holdsItem(database, 'race-duplicate-id', kycCatalog.itemId)).toBe(1);
   });

@@ -35,6 +35,7 @@ test('INT-PURCHASE-CREATE-001 POST purchase commits once, exposes service DTO, a
     expect(response.headers().location).toBe(`/pokemart/v1/purchases/${purchaseId}`);
     const expectedPurchase = {
       id: purchaseId,
+      kind: 'POKEMON',
       pokemonId: testEnvironment.pokemonId,
       pokemonName: listingRows[0].name,
       quantity: 1,

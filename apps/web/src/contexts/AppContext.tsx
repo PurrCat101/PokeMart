@@ -197,7 +197,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           completed.push({
             purchaseId: purchase.purchaseId,
             kind: "pokemon",
-            name: purchase.pokemon.name,
+            name: purchase.pokemon?.name ?? name,
             quantity: purchase.quantity,
             totalPrice: purchase.pricing.totalPrice,
           });

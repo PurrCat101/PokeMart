@@ -127,16 +127,17 @@ $env:TEST_ENV='sit'; npm run test:api  # PowerShell
 
 ## Purchase request และ retry
 
-Client สร้าง UUID `purchaseId` เองและส่งใน JSON body (ไม่ใช้ `Idempotency-Key` header) ใช้กับ `POST /api/purchases` (Pokémon, ส่ง `pokemonId`) และ `POST /api/items/purchases` (item, ส่ง `itemId`):
+Client สร้าง UUID `purchaseId` เองและส่งใน JSON body (ไม่ใช้ `Idempotency-Key` header) ใช้กับ `POST /api/purchases` (ส่ง `pokemonId` สำหรับ Pokémon หรือ `itemId` สำหรับ item อย่างใดอย่างหนึ่ง):
 
 ```json
 { "purchaseId": "00000000-0000-4000-8000-000000000001", "pokemonId": 1, "quantity": 1 }
 ```
 
 - ล้มเหลวก่อน commit: ไม่มีการจอง ID retry ด้วย ID เดิมได้
-- commit แล้ว: ส่ง ID เดิมซ้ำได้ `409 PURCHASE_DUPLICATE` (item: `ITEM_PURCHASE_DUPLICATE`) โดยไม่หัก wallet/stock ซ้ำ
+- commit แล้ว: ส่ง ID เดิมซ้ำได้ `409 PURCHASE_DUPLICATE` (ทั้ง Pokémon และ item) โดยไม่หัก wallet/stock ซ้ำ
 - ไม่แน่ใจว่า commit หรือยัง: ตรวจ `GET /api/purchases/{purchaseId}` ก่อน retry
-- สถานะจัดส่ง: `GET /api/purchases/{id}/shipment` (Pokémon) และ `GET /api/items/purchases/{id}/shipment` (item)
+- สถานะจัดส่ง: `GET /api/purchases/{id}/shipment` (ใช้ได้กับทั้ง Pokémon และ item)
+- ประวัติ: `GET /api/purchases` รวมทั้งสองประเภท กรองด้วย `?kind=POKEMON` หรือ `?kind=ITEM` ได้
 
 ## ฐานข้อมูล
 
