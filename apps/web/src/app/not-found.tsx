@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ErrorPage } from "../components/ErrorPage";
-import { buttonClass } from "../components/ui";
+import { buttonClass } from "../components/button-class";
 
 export default function NotFound() {
   return (
