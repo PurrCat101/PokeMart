@@ -58,7 +58,7 @@ The shared API client in `apps/web/src/lib/api.ts` sends an `X-Request-Id`, adds
 - Keep the access token in `pokemart_token` in browser `localStorage`; signing out clears the token.
 - Order history status is read from the public purchase/shipment APIs. The browser must never call Shipping Mock test-control endpoints.
 - Refresh or re-fetch shipment status when opening order detail and when the user activates refresh; do not assume status changes only while the page is open. Optional short polling may be used while the detail view is visible, with a bounded interval and cleanup on navigation.
-- If shipping is waiting for a label, show `รอจัดส่ง` and an explanatory message; do not show `จัดส่งแล้ว` merely because the provider accepted the shipment or generated a tracking number.
+- If shipping is waiting for a label, show `Preparing shipment` and an explanatory message; do not show `Delivered` merely because the provider accepted the shipment or generated a tracking number.
 - When the provider is unavailable, retain the last known status and show a non-blocking notice if the latest status cannot be refreshed. Purchase history and order detail should still render from local PokéMart API state.
 - Do not treat browser-held cart data, token state, prices, or stock as trusted server-side state.
 
@@ -173,14 +173,16 @@ Each purchase row/card must show a compact delivery-status label without requiri
 
 | API status | Display label |
 |---|---|
-| `WAITING_FOR_SHIPMENT` | รอจัดส่ง |
-| `LABEL_CREATED` | ออกเลขพัสดุแล้ว |
-| `IN_TRANSIT` | อยู่ระหว่างจัดส่ง |
-| `OUT_FOR_DELIVERY` | กำลังนำจ่าย |
-| `DELIVERED` | จัดส่งสำเร็จ |
-| `DELIVERY_FAILED` | จัดส่งไม่สำเร็จ |
+| `WAITING_FOR_SHIPMENT` | Preparing shipment |
+| `LABEL_CREATED` | Awaiting shipment |
+| `IN_TRANSIT` | In transit |
+| `OUT_FOR_DELIVERY` | Out for delivery |
+| `DELIVERED` | Delivered |
+| `DELIVERY_FAILED` | Delivery failed |
 
-The order itself may also display the order milestone `ORDER_PLACED` (สั่งซื้อแล้ว), but this must not replace the shipment status. When there is no shipment record because of a legacy order, show a safe neutral fallback rather than treating the order as delivered. Show the tracking number only after one has been issued.
+UI copy is English. The order detail timeline reads `Order placed` → `Tracking number issued` → `Awaiting shipment` → `In transit` → `Out for delivery` → `Delivered` (`Delivery failed` replaces the remaining steps on failure). `Tracking number issued` and `Awaiting shipment` are both reached at `LABEL_CREATED`; `WAITING_FOR_SHIPMENT` (no tracking number yet) leaves `Order placed` as the latest step.
+
+The order itself may also display the order milestone `ORDER_PLACED` (Order placed), but this must not replace the shipment status. When there is no shipment record because of a legacy order, show a safe neutral fallback rather than treating the order as delivered. Show the tracking number only after one has been issued.
 
 ### Order detail
 
@@ -190,8 +192,8 @@ Use accessible text in addition to any color/icon status treatment. Loading and 
 
 ### UI acceptance scenarios
 
-1. After checkout, the purchase appears in history with `รอจัดส่ง` while shipment label creation is pending.
-2. After the worker recovers from a simulated provider outage and creates a tracking number, the history row updates to `ออกเลขพัสดุแล้ว` without opening the order; the detail view shows the tracking number.
+1. After checkout, the purchase appears in history with `Preparing shipment` while shipment label creation is pending.
+2. After the worker recovers from a simulated provider outage and creates a tracking number, the history row updates to `Awaiting shipment` without opening the order; the detail view shows the tracking number.
 3. After a test operator advances provider status to `IN_TRANSIT`, `OUT_FOR_DELIVERY`, and `DELIVERED`, the reconciliation worker updates PokéMart state; history quick status and the order detail timeline show the latest status.
 4. If Shipping is down, history and detail remain available and display the last known state plus a non-blocking notice when appropriate.
 5. Verify loading, no-tracking-number, failed shipment creation, delivery failure, and refresh-error states.

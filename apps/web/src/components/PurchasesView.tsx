@@ -60,7 +60,7 @@ function PurchaseRow({
               {shipment.trackingNumber}
             </span>
           )}
-          {error && shipment && <span className="text-xs text-warn">อัปเดตล่าสุดไม่ได้</span>}
+          {error && shipment && <span className="text-xs text-warn">Update failed</span>}
         </div>
       </td>
       <td className={`${CELL} md:text-right`}>

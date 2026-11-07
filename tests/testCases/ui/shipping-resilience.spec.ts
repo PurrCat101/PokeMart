@@ -4,11 +4,11 @@ import { snapshotPurchaseState, restorePurchaseState, PurchaseStateSnapshot } fr
 import { ShippingWorker } from '../../../apps/pokemart-api/src/shipping-worker';
 import { testConfig } from '../../index';
 
-// Purchase -> shipping provider down -> UI shows "รอจัดส่ง" -> provider recovers -> UI shows the tracking number.
+// Purchase -> shipping provider down -> UI shows "Preparing shipment" -> provider recovers -> UI shows the tracking number.
 //
 // The purchase and the worker sweeps are driven from the test so the run is deterministic (the docker
 // shipping-worker only polls every 60s). The assertions are made on what the trainer sees in the web UI.
-test('UI shows "รอจัดส่ง" while the shipping provider is down, then the tracking number once it recovers', async ({
+test('UI shows "Preparing shipment" while the shipping provider is down, then the tracking number once it recovers', async ({
   page,
   bffRequest,
   shippingMock,
@@ -60,18 +60,18 @@ test('UI shows "รอจัดส่ง" while the shipping provider is down, t
 
     await page.getByTestId('nav-purchases').click();
     await expect(page.getByTestId(`purchase-row-${purchaseId}`)).toBeVisible();
-    await expect(page.getByTestId(`purchase-delivery-status-${purchaseId}`)).toHaveText('รอจัดส่ง');
+    await expect(page.getByTestId(`purchase-delivery-status-${purchaseId}`)).toHaveText('Preparing shipment');
     await expect(page.getByTestId(`purchase-tracking-number-${purchaseId}`)).toHaveCount(0);
 
     await page.getByTestId(`purchase-open-detail-${purchaseId}`).click();
     const detail = page.getByTestId(`order-detail-${purchaseId}`);
     await expect(detail).toBeVisible();
 
-    // 4. While waiting: "รอจัดส่ง" notice and badge, and no tracking number.
-    await expect(page.getByTestId('order-detail-shipping-notice')).toContainText('รอจัดส่ง');
-    await expect(page.getByTestId('order-detail-delivery-status')).toHaveText('รอจัดส่ง');
+    // 4. While waiting: "Preparing shipment" notice and badge, and no tracking number.
+    await expect(page.getByTestId('order-detail-shipping-notice')).toContainText('Preparing shipment');
+    await expect(page.getByTestId('order-detail-delivery-status')).toHaveText('Preparing shipment');
     await expect(page.getByTestId('order-detail-tracking-number')).toHaveCount(0);
-    await expect(detail).toContainText('ยังไม่ออกเลขพัสดุ');
+    await expect(detail).toContainText('Not issued yet');
 
     // 5. The provider recovers and the retry becomes due; the worker picks the shipment up again.
     await shippingMock.setMode('success');
@@ -85,7 +85,7 @@ test('UI shows "รอจัดส่ง" while the shipping provider is down, t
     // 6. Refresh in the open dialog: the tracking number appears, the waiting notice goes away.
     await page.getByTestId('order-detail-refresh').click();
     await expect(page.getByTestId('order-detail-tracking-number')).toHaveText(recovered.trackingNumber);
-    await expect(page.getByTestId('order-detail-delivery-status')).toHaveText('ออกเลขพัสดุแล้ว');
+    await expect(page.getByTestId('order-detail-delivery-status')).toHaveText('Awaiting shipment');
     await expect(page.getByTestId('order-detail-shipping-notice')).toHaveCount(0);
     await expect(page.getByTestId('shipment-timeline-step-LABEL_CREATED')).toHaveAttribute('aria-current', 'step');
 
