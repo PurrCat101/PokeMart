@@ -75,13 +75,13 @@ export function OrderDetailModal({ order, onClose }: OrderDetailModalProps) {
 
           {/* Non-blocking: the last known status stays visible if a refresh fails. */}
           {error && (
-            <Alert tone="warn" title="อัปเดตสถานะล่าสุดไม่ได้" data-testid="order-detail-shipping-notice">
-              {shipment ? "กำลังแสดงสถานะล่าสุดที่ทราบ ลองกดรีเฟรชอีกครั้งในภายหลัง" : "ยังโหลดข้อมูลการจัดส่งไม่ได้ ลองกดรีเฟรชอีกครั้ง"}
+            <Alert tone="warn" title="Could not update status" data-testid="order-detail-shipping-notice">
+              {shipment ? "Showing the last known status. Try refreshing again later." : "Shipment details could not be loaded. Try refreshing again."}
             </Alert>
           )}
           {!error && waitingForLabel && (
-            <Alert tone="info" title="รอจัดส่ง" data-testid="order-detail-shipping-notice">
-              ระบบกำลังเตรียมใบจัดส่ง เลขพัสดุจะแสดงที่นี่ทันทีที่พร้อม
+            <Alert tone="info" title="Preparing shipment" data-testid="order-detail-shipping-notice">
+              We are preparing your shipment. The tracking number will appear here as soon as it is ready.
             </Alert>
           )}
 
@@ -107,31 +107,31 @@ export function OrderDetailModal({ order, onClose }: OrderDetailModalProps) {
                         {shipment.trackingNumber}
                       </span>
                     ) : (
-                      <span className="font-sans text-fg-muted">ยังไม่ออกเลขพัสดุ</span>
+                      <span className="font-sans text-fg-muted">Not issued yet</span>
                     )}
                   </dd>
                 </div>
               </dl>
               <p className="text-xs text-fg-subtle">
-                อัปเดตล่าสุด <span className="font-mono tabular-nums">{new Date(shipment.updatedAt).toLocaleString()}</span>
+                Last updated <span className="font-mono tabular-nums">{new Date(shipment.updatedAt).toLocaleString()}</span>
               </p>
 
               {shipment.lastError && (
-                <Alert tone="danger" title="การสร้างใบจัดส่งไม่สำเร็จ">
+                <Alert tone="danger" title="Could not create shipment">
                   <span className="font-mono text-xs">{shipment.lastError}</span>
                 </Alert>
               )}
 
               <ol data-testid="order-detail-shipment-timeline" aria-label="Shipment timeline" className="space-y-0">
-                <TimelineRow done label={ORDER_PLACED_LABEL} />
+                <TimelineRow done current={currentStep === 0} label={ORDER_PLACED_LABEL} />
                 {TIMELINE_STEPS.map((step, index) => {
-                  const done = currentStep >= index && currentStep !== -1;
-                  const current = currentStep === index;
+                  const done = currentStep >= step.rank;
+                  const current = currentStep === step.currentAt;
                   return (
                     <TimelineRow
-                      key={step}
-                      testId={`shipment-timeline-step-${step}`}
-                      label={DELIVERY_LABELS[step]}
+                      key={step.key}
+                      testId={`shipment-timeline-step-${step.key}`}
+                      label={step.label}
                       done={done}
                       current={current}
                       last={index === TIMELINE_STEPS.length - 1 && !failed}
@@ -144,7 +144,7 @@ export function OrderDetailModal({ order, onClose }: OrderDetailModalProps) {
           ) : (
             <div data-testid="shipment-timeline-error" className="flex items-center gap-2 rounded-lg border border-dashed border-line-strong p-4 text-sm text-fg-muted">
               <AlertCircleIcon className="h-4 w-4 shrink-0" />
-              {error ? "ไม่สามารถโหลดข้อมูลการจัดส่งได้" : "ยังไม่มีข้อมูลการจัดส่งสำหรับคำสั่งซื้อนี้"}
+              {error ? "Could not load shipment details" : "No shipment information for this order yet"}
             </div>
           )}
         </section>
@@ -199,7 +199,7 @@ function TimelineRow({
           {label}
           {current && (
             <span data-testid="shipment-timeline-current" className="ml-2 rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand-text">
-              ล่าสุด
+              Latest
             </span>
           )}
         </p>

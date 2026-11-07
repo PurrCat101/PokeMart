@@ -1,316 +1,124 @@
+import { APIRequestContext, APIResponse } from '@playwright/test';
 import { expect, test } from '../../support/fixtures/kycFixtures';
+import { kycCatalog, holdsItem, itemStock, walletBalance } from '../../support/utils/kycTestData';
 import { newPurchaseId } from '../../support/utils/purchaseId';
-import { MySQLConnection } from '../../support/models/MySQL/MySQLConnection';
-import { kycCatalog } from '../../support/utils/kycTestData';
 
 /**
- * CONCURRENCY SAFETY TESTS
- *
- * Verify the system prevents:
- * - Double-spending (wallet depletion)
- * - Stock underselling
- * - Race conditions during KYC checks
+ * Concurrency safety: simultaneous purchases must never double-spend the wallet, oversell stock,
+ * process one purchase ID twice, or slip past the KYC gate. Every case owns one lab-kyc-race-* account
+ * and buys the ordinary item (level 1, price kycCatalog.itemPrice) that the fixture resets before each test.
  */
 
-test.describe('RACE-001: Concurrent Level-0 Purchases Both Blocked', () => {
-  test('two simultaneous level-0 purchase attempts both fail with KYC_LEVEL_REQUIRED', async ({
-    kycAccount,
-  }) => {
-    const { api, database } = await kycAccount('race-level-0');
+const buyItem = (api: APIRequestContext, purchaseId = newPurchaseId()): Promise<APIResponse> =>
+  api.post('/api/items/purchases', { data: { purchaseId, itemId: kycCatalog.itemId, quantity: 1 } });
 
-    // Start 2 purchases simultaneously - both should fail at assertKyc
-    const [res1, res2] = await Promise.all([
-      api.post('/api/purchases', {
-        data: {
-          purchaseId: newPurchaseId(),
-          pokemonId: kycCatalog.pokemonId,
-          quantity: 1,
-        },
-      }),
-      api.post('/api/purchases', {
-        data: {
-          purchaseId: newPurchaseId(),
-          pokemonId: kycCatalog.pokemonId,
-          quantity: 1,
-        },
-      }),
-    ]);
+const errorCode = async (response: APIResponse): Promise<string> => ((await response.json()) as { error: { code: string } }).error.code;
 
-    // Both should be rejected
-    expect(res1.status()).toBe(403);
-    expect(res2.status()).toBe(403);
+test.describe('RACE-001: concurrent level-0 purchases are all blocked', () => {
+  test('RACE-001a two simultaneous level-0 purchases both fail with 403 KYC_LEVEL_REQUIRED', async ({ kycAccount }) => {
+    const { api } = await kycAccount('race-level-0');
 
-    const err1 = (await res1.json()) as any;
-    const err2 = (await res2.json()) as any;
+    const responses = await Promise.all([buyItem(api), buyItem(api)]);
 
-    expect(err1.error.code).toBe('KYC_LEVEL_REQUIRED');
-    expect(err2.error.code).toBe('KYC_LEVEL_REQUIRED');
+    for (const response of responses) {
+      expect(response.status()).toBe(403);
+      expect(await errorCode(response)).toBe('KYC_LEVEL_REQUIRED');
+    }
   });
 
-  test('concurrent purchases by level-0 user do not affect wallet', async ({ kycAccount }) => {
+  test('RACE-001b concurrent level-0 purchases leave wallet, stock and inventory untouched', async ({ kycAccount }) => {
     const { api, database } = await kycAccount('race-level-0-wallet');
-    const walletBefore = kycCatalog.walletBalance;
+    const stockBefore = await itemStock(database, kycCatalog.itemId);
 
-    // Two concurrent purchases
-    await Promise.all([
-      api.post('/api/purchases', {
-        data: {
-          purchaseId: newPurchaseId(),
-          pokemonId: kycCatalog.pokemonId,
-          quantity: 1,
-        },
-      }),
-      api.post('/api/purchases', {
-        data: {
-          purchaseId: newPurchaseId(),
-          pokemonId: kycCatalog.pokemonId,
-          quantity: 1,
-        },
-      }),
-    ]);
+    await Promise.all([buyItem(api), buyItem(api), buyItem(api)]);
 
-    // Verify wallet unchanged
-    const [rows] = await database.query(
-      'SELECT balance FROM user_wallet WHERE user_id = ?',
-      ['lab-kyc-race-level-0-wallet'],
-    );
-    const walletAfter = (rows as any[])[0].balance;
-    expect(walletAfter).toBe(walletBefore);
+    expect(await walletBalance(database, 'race-level-0-wallet')).toBe(kycCatalog.walletBalance);
+    expect(await itemStock(database, kycCatalog.itemId)).toBe(stockBefore);
+    expect(await holdsItem(database, 'race-level-0-wallet', kycCatalog.itemId)).toBe(0);
   });
 });
 
-test.describe('RACE-002: Wallet Double-Spend Prevention', () => {
-  test('two concurrent purchases that would overdraw fail gracefully', async ({ kycAccount }) => {
+test.describe('RACE-002: the wallet cannot be double-spent', () => {
+  test('RACE-002a two concurrent purchases that only one balance can cover: exactly one succeeds, the other gets 422 INSUFFICIENT_FUNDS', async ({ kycAccount }) => {
     const { api, database } = await kycAccount('race-wallet-drain');
+    const balance = kycCatalog.itemPrice + 50; // covers one purchase, not two
+    await database.query('UPDATE user_wallet SET balance=? WHERE user_id=?', [balance, 'lab-kyc-race-wallet-drain']);
 
-    // User has limited balance, try to buy same expensive item twice concurrently
-    // Only one should succeed due to database lock and transaction rollback
+    const responses = await Promise.all([buyItem(api), buyItem(api)]);
 
-    const [res1, res2] = await Promise.all([
-      api.post('/api/purchases', {
-        data: {
-          purchaseId: newPurchaseId(),
-          pokemonId: kycCatalog.pokemonId, // ~1000 cost
-          quantity: 1,
-        },
-      }),
-      api.post('/api/purchases', {
-        data: {
-          purchaseId: newPurchaseId(),
-          pokemonId: kycCatalog.pokemonId,
-          quantity: 1,
-        },
-      }),
-    ]);
-
-    // Count successes
-    const succeeded = [res1.status(), res2.status()].filter((s) => s === 201).length;
-    const failed = [res1.status(), res2.status()].filter((s) => s === 403 || s === 422).length;
-
-    // At least one should fail. If first succeeds, second should fail with INSUFFICIENT_FUNDS
-    expect(succeeded + failed).toBe(2); // Both requests completed
-    expect(succeeded).toBeLessThanOrEqual(1); // At most 1 succeeded (or both failed if level-0)
-
-    if (succeeded === 1) {
-      // One succeeded, one failed
-      expect(failed).toBe(1);
-      const failedRes = res1.status() !== 201 ? res1 : res2;
-      const failedError = (await failedRes.json()) as any;
-      expect(['KYC_LEVEL_REQUIRED', 'INSUFFICIENT_FUNDS']).toContain(
-        failedError.error.code,
-      );
-    }
+    const statuses = responses.map((response) => response.status()).sort();
+    expect(statuses).toEqual([201, 422]);
+    const refused = responses.find((response) => response.status() === 422)!;
+    expect(await errorCode(refused)).toBe('INSUFFICIENT_FUNDS');
+    expect(await walletBalance(database, 'race-wallet-drain')).toBe(balance - kycCatalog.itemPrice);
+    expect(await holdsItem(database, 'race-wallet-drain', kycCatalog.itemId)).toBe(1);
   });
 
-  test('wallet balance is consistent after concurrent purchase attempts', async ({
-    kycAccount,
-  }) => {
+  test('RACE-002b the wallet equals the start balance minus price times successful purchases', async ({ kycAccount }) => {
     const { api, database } = await kycAccount('race-wallet-consistency');
-    const walletBefore = kycCatalog.walletBalance;
 
-    // 5 concurrent purchase attempts
-    const results = await Promise.all(
-      Array.from({ length: 5 }).map(() =>
-        api.post('/api/purchases', {
-          data: {
-            purchaseId: newPurchaseId(),
-            pokemonId: kycCatalog.pokemonId,
-            quantity: 1,
-          },
-        }),
-      ),
-    );
+    const responses = await Promise.all(Array.from({ length: 5 }, () => buyItem(api)));
 
-    const succeeded = results.filter((r) => r.status() === 201).length;
-
-    // Fetch final wallet
-    const [rows] = await database.query(
-      'SELECT balance FROM user_wallet WHERE user_id = ?',
-      ['lab-kyc-race-wallet-consistency'],
-    );
-    const walletAfter = (rows as any[])[0].balance;
-
-    // Wallet should equal: initial - (price * succeeded)
-    const expectedAfter = walletBefore - kycCatalog.pokemonPrice * succeeded;
-    expect(walletAfter).toBe(expectedAfter);
+    const succeeded = responses.filter((response) => response.status() === 201).length;
+    expect(succeeded).toBe(5); // wallet and stock are ample, so none should be refused
+    expect(await walletBalance(database, 'race-wallet-consistency')).toBe(kycCatalog.walletBalance - kycCatalog.itemPrice * succeeded);
+    expect(await holdsItem(database, 'race-wallet-consistency', kycCatalog.itemId)).toBe(succeeded);
   });
 });
 
-test.describe('RACE-003: Stock Underselling Prevention', () => {
-  test('concurrent purchases do not oversell stock', async ({ kycAccount }) => {
+test.describe('RACE-003: stock is never oversold', () => {
+  test('RACE-003a concurrent purchases reduce stock by exactly the number that succeeded', async ({ kycAccount }) => {
     const { api, database } = await kycAccount('race-stock-depletion');
+    const stockBefore = await itemStock(database, kycCatalog.itemId);
 
-    // Query initial stock
-    const [stockBefore] = await database.query(
-      'SELECT stock FROM shop_listing WHERE pokemon_source_id = ?',
-      [kycCatalog.pokemonId],
-    );
-    const initialStock = (stockBefore as any[])[0].stock;
+    const responses = await Promise.all(Array.from({ length: 5 }, () => buyItem(api)));
 
-    // Attempt 5 concurrent purchases by a level-1 user
-    const results = await Promise.all(
-      Array.from({ length: 5 }).map(() =>
-        api.post('/api/purchases', {
-          data: {
-            purchaseId: newPurchaseId(),
-            pokemonId: kycCatalog.pokemonId,
-            quantity: 1,
-          },
-        }),
-      ),
-    );
-
-    const succeeded = results.filter((r) => r.status() === 201).length;
-
-    // Fetch final stock
-    const [stockAfter] = await database.query(
-      'SELECT stock FROM shop_listing WHERE pokemon_source_id = ?',
-      [kycCatalog.pokemonId],
-    );
-    const finalStock = (stockAfter as any[])[0].stock;
-
-    // Stock should be: initial - succeeded
-    const expectedStock = initialStock - succeeded;
-    expect(finalStock).toBe(expectedStock);
-
-    // Stock should never go negative
-    expect(finalStock).toBeGreaterThanOrEqual(0);
-
-    // Number of successes should not exceed available stock
-    expect(succeeded).toBeLessThanOrEqual(initialStock);
+    const succeeded = responses.filter((response) => response.status() === 201).length;
+    const stockAfter = await itemStock(database, kycCatalog.itemId);
+    expect(stockAfter).toBe(stockBefore - succeeded);
+    expect(stockAfter).toBeGreaterThanOrEqual(0);
   });
 
-  test('INSUFFICIENT_STOCK is thrown when concurrent purchases exhaust stock', async ({
-    kycAccount,
-  }) => {
+  test('RACE-003b buying more than the remaining stock concurrently sells exactly the stock and refuses the rest with 409 INSUFFICIENT_STOCK', async ({ kycAccount }) => {
     const { api, database } = await kycAccount('race-stock-limit');
+    const limitedStock = 3;
+    await database.query('UPDATE item_listing SET stock=? WHERE item_source_id=?', [limitedStock, kycCatalog.itemId]);
 
-    // Find an item with limited stock for this test
-    const [stockRows] = await database.query(
-      'SELECT pokemon_source_id, stock FROM shop_listing WHERE required_kyc_level <= 1 AND stock < 10 LIMIT 1',
-    );
+    const responses = await Promise.all(Array.from({ length: limitedStock + 3 }, () => buyItem(api)));
 
-    if ((stockRows as any[]).length === 0) {
-      // Skip test if no limited-stock items available
-      return;
-    }
-
-    const limitedPokemonId = (stockRows as any[])[0].pokemon_source_id;
-    const limitedStock = (stockRows as any[])[0].stock;
-
-    // Try to buy more than available stock concurrently
-    const attemptCount = limitedStock + 3;
-    const results = await Promise.all(
-      Array.from({ length: attemptCount }).map(() =>
-        api.post('/api/purchases', {
-          data: {
-            purchaseId: newPurchaseId(),
-            pokemonId: limitedPokemonId,
-            quantity: 1,
-          },
-        }),
-      ),
-    );
-
-    const succeeded = results.filter((r) => r.status() === 201).length;
-    const outOfStock = results.filter((r) => r.status() === 409).length;
-
-    // Should succeed up to stock limit
-    expect(succeeded).toBeLessThanOrEqual(limitedStock);
-
-    // Extra attempts should fail
-    expect(outOfStock).toBeGreaterThanOrEqual(attemptCount - limitedStock);
-
-    // Verify at least some were rejected with INSUFFICIENT_STOCK
-    const hasInsufficientStock = results.some(async (r) => {
-      if (r.status() === 409) {
-        const error = (await r.json()) as any;
-        return error.error.code === 'INSUFFICIENT_STOCK';
-      }
-      return false;
-    });
-
-    expect(await hasInsufficientStock).toBeTruthy();
+    const succeeded = responses.filter((response) => response.status() === 201);
+    const refused = responses.filter((response) => response.status() === 409);
+    expect(succeeded).toHaveLength(limitedStock);
+    expect(refused).toHaveLength(3);
+    for (const response of refused) expect(await errorCode(response)).toBe('INSUFFICIENT_STOCK');
+    expect(await itemStock(database, kycCatalog.itemId)).toBe(0);
+    expect(await holdsItem(database, 'race-stock-limit', kycCatalog.itemId)).toBe(limitedStock);
   });
 });
 
-test.describe('RACE-004: Duplicate Purchase ID Prevention', () => {
-  test('same purchaseId cannot be processed twice concurrently', async ({ kycAccount }) => {
-    const { api } = await kycAccount('race-duplicate-id');
+test.describe('RACE-004: a purchase ID is processed once', () => {
+  test('RACE-004a the same purchaseId sent twice concurrently charges once and the duplicate gets 409 ITEM_PURCHASE_DUPLICATE', async ({ kycAccount }) => {
+    const { api, database } = await kycAccount('race-duplicate-id');
+    const purchaseId = newPurchaseId();
 
-    const duplicateId = newPurchaseId();
+    const responses = await Promise.all([buyItem(api, purchaseId), buyItem(api, purchaseId)]);
 
-    // Try to use the same purchaseId in 2 concurrent requests
-    const [res1, res2] = await Promise.all([
-      api.post('/api/purchases', {
-        data: {
-          purchaseId: duplicateId,
-          pokemonId: kycCatalog.pokemonId,
-          quantity: 1,
-        },
-      }),
-      api.post('/api/purchases', {
-        data: {
-          purchaseId: duplicateId,
-          pokemonId: kycCatalog.pokemonId,
-          quantity: 1,
-        },
-      }),
-    ]);
-
-    // One should succeed (201), one should fail with PURCHASE_DUPLICATE (409)
-    const statuses = [res1.status(), res2.status()];
-    expect(statuses).toContain(201);
-    expect(statuses).toContain(409);
-
-    const failedRes = res1.status() === 409 ? res1 : res2;
-    const error = (await failedRes.json()) as any;
-    expect(error.error.code).toBe('PURCHASE_DUPLICATE');
+    expect(responses.map((response) => response.status()).sort()).toEqual([201, 409]);
+    const duplicate = responses.find((response) => response.status() === 409)!;
+    expect(await errorCode(duplicate)).toBe('ITEM_PURCHASE_DUPLICATE');
+    expect(await walletBalance(database, 'race-duplicate-id')).toBe(kycCatalog.walletBalance - kycCatalog.itemPrice);
+    expect(await holdsItem(database, 'race-duplicate-id', kycCatalog.itemId)).toBe(1);
   });
 });
 
-test.describe('RACE-005: KYC Fetch-Check Timing', () => {
-  test('KYC level at transaction start is enforced (not at fetch time)', async ({
-    kycAccount,
-  }) => {
-    const { api } = await kycAccount('race-kyc-timing');
+test.describe('RACE-005: the KYC level is enforced at purchase time', () => {
+  test('RACE-005a a level-0 account is refused with 403 KYC_LEVEL_REQUIRED and nothing is charged', async ({ kycAccount }) => {
+    const { api, database } = await kycAccount('race-kyc-timing');
 
-    // This test documents the current behavior:
-    // KYC is fetched once before transaction (prefetchKyc)
-    // Then assertKyc runs inside transaction
-    // So even if KYC changes between fetch and transaction, the fetched value is used
+    const response = await buyItem(api);
 
-    // With level 0 user, purchase should be rejected at assertKyc
-    const res = await api.post('/api/purchases', {
-      data: {
-        purchaseId: newPurchaseId(),
-        pokemonId: kycCatalog.pokemonId,
-        quantity: 1,
-      },
-    });
-
-    expect(res.status()).toBe(403);
-    const error = (await res.json()) as any;
-    expect(error.error.code).toBe('KYC_LEVEL_REQUIRED');
+    expect(response.status()).toBe(403);
+    expect(await errorCode(response)).toBe('KYC_LEVEL_REQUIRED');
+    expect(await walletBalance(database, 'race-kyc-timing')).toBe(kycCatalog.walletBalance);
   });
 });

@@ -28,6 +28,8 @@ The BFF forwards tokens unchanged. The internal API is still intended to remain 
 | `GET` | `/pokemart/v1/catalog/pokemon/{id}` | One Pokémon with its listing |
 | `GET` | `/pokemart/v1/wallet` | Wallet of the caller |
 | `GET` | `/pokemart/v1/inventory` | Owned Pokémon of the caller |
+| `GET` | `/pokemart/v1/items/inventory` | Owned items of the caller (items only) |
+| `GET` | `/pokemart/v1/items/purchases` | Paged item purchase history of the caller, newest first |
 | `POST` | `/pokemart/v1/purchases` | Create a purchase using the supplied purchase ID |
 | `GET` | `/pokemart/v1/purchases` | Paged purchase history of the caller |
 | `GET` | `/pokemart/v1/purchases/{id}` | One purchase of the caller |

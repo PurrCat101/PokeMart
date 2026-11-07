@@ -1,6 +1,9 @@
 import { ShippingWorker } from './shipping-worker.js';
 import { PaymentRecoveryWorker } from './payment-recovery-worker.js';
 import { startMetricsServer } from './worker-metrics.js';
+import { installLogShipper } from './log-shipper.js';
+
+installLogShipper('shipping-worker');
 
 const worker = new ShippingWorker();
 const paymentWorker = new PaymentRecoveryWorker();

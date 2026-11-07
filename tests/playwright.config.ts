@@ -50,6 +50,19 @@ export default defineConfig({
       use: { baseURL: testConfig.bffBaseUrl },
     },
     {
+      // Item order history and item inventory (they use lab-kyc-* accounts, so the KYC service must be up).
+      name: 'items',
+      testMatch: ['items/**/*.spec.ts'],
+      dependencies: ['real-state-setup'],
+      use: { baseURL: testConfig.bffBaseUrl },
+    },
+    {
+      name: 'items-ui',
+      testMatch: ['ui-items/**/*.spec.ts'],
+      dependencies: ['real-state-setup'],
+      use: { baseURL: process.env.WEB_BASE_URL ?? 'http://localhost:4003' },
+    },
+    {
       name: 'kyc-ui',
       testMatch: ['ui-kyc/**/*.spec.ts'],
       dependencies: ['real-state-setup'],

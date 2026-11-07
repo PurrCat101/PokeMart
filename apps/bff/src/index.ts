@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import express, { NextFunction, Request, Response as ExpressResponse } from 'express';
 import { registry, observeRequest, observeUpstream, countUpstreamFailure } from './metrics.js';
+import { installLogShipper } from './log-shipper.js';
 
 class AppError extends Error {
   constructor(public status: number, public code: string, message: string, public details: unknown[] = []) { super(message); }
@@ -10,6 +11,7 @@ const app = express();
 const port = Number(process.env.PORT ?? 4001);
 const upstreamBase = (process.env.POKEMART_API_BASE_URL ?? 'http://localhost:4000').replace(/\/$/, '');
 const serviceName = 'bff';
+installLogShipper(serviceName);
 const validRequestId = /^[A-Za-z0-9_-]{1,64}$/;
 const validUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const knownCodes = new Set(['VALIDATION_ERROR', 'UNKNOWN_QUERY_PARAMETER', 'INVALID_JSON', 'UNSUPPORTED_MEDIA_TYPE', 'UNAUTHORIZED', 'INVALID_CREDENTIALS', 'POKEMON_NOT_FOUND', 'USER_NOT_FOUND', 'PURCHASE_NOT_FOUND', 'POKEMON_NOT_FOR_SALE', 'ITEM_NOT_FOUND', 'ITEM_NOT_FOR_SALE', 'INSUFFICIENT_STOCK', 'INSUFFICIENT_FUNDS', 'PURCHASE_DUPLICATE', 'ITEM_PURCHASE_DUPLICATE', 'KYC_LEVEL_REQUIRED', 'KYC_PENDING_REVIEW', 'KYC_ALREADY_PENDING', 'KYC_ALREADY_VERIFIED', 'TOP_UP_DUPLICATE', 'TOP_UP_NOT_FOUND', 'PAYMENT_FAILED']);
@@ -89,6 +91,26 @@ function mapItemPurchase(value: unknown) {
   const p = asRecord(value);
   if (typeof p.purchaseId !== 'string' || typeof p.itemId !== 'number' || typeof p.itemName !== 'string' || typeof p.quantity !== 'number' || typeof p.unitPrice !== 'number' || typeof p.totalPrice !== 'number' || typeof p.createdAt !== 'string') throw new AppError(503, 'DEPENDENCY_UNAVAILABLE', 'PokéMart API returned an invalid item purchase');
   return { purchaseId: p.purchaseId, item: { id: p.itemId, name: p.itemName }, quantity: p.quantity, pricing: { unitPrice: p.unitPrice, totalPrice: p.totalPrice }, createdAt: p.createdAt };
+}
+function mapItemPurchasePage(value: unknown) {
+  const page = asRecord(value);
+  if (typeof page.count !== 'number' || typeof page.limit !== 'number' || typeof page.offset !== 'number' || !Array.isArray(page.results)) {
+    throw new AppError(503, 'DEPENDENCY_UNAVAILABLE', 'PokéMart API returned an invalid item purchase page');
+  }
+  return { totalCount: page.count, page: { limit: page.limit, offset: page.offset }, items: page.results.map(mapItemPurchase) };
+}
+function mapItemInventory(value: unknown) {
+  const inventory = asRecord(value);
+  if (!Array.isArray(inventory.results)) throw new AppError(503, 'DEPENDENCY_UNAVAILABLE', 'PokéMart API returned an invalid item inventory');
+  return {
+    items: inventory.results.map((value) => {
+      const item = asRecord(value);
+      if (typeof item.itemId !== 'number' || typeof item.name !== 'string' || typeof item.quantity !== 'number') {
+        throw new AppError(503, 'DEPENDENCY_UNAVAILABLE', 'PokéMart API returned an invalid item inventory entry');
+      }
+      return { item: { id: item.itemId, name: item.name }, quantity: item.quantity };
+    }),
+  };
 }
 function mapTopUp(value: unknown) {
   const t = asRecord(value);
@@ -289,6 +311,8 @@ app.get('/api/account-info', async (req, res, next) => { try { await relay(req, 
 app.get('/api/pokemon', async (req, res, next) => { try { const { limit, offset } = pageParams(req, ['q', 'type', 'inStock']); const filters = new URLSearchParams(); for (const field of ['q', 'type', 'inStock']) if (typeof req.query[field] === 'string') filters.set(field, req.query[field] as string); await relay(req, res, `/pokemart/v1/catalog/pokemon?limit=${limit}&offset=${offset}${filters.size ? `&${filters}` : ''}`, 'GET', undefined, mapCatalog); } catch (error) { next(error); } });
 app.get('/api/items', async (req, res, next) => { try { const { limit, offset } = pageParams(req, ['q', 'category', 'inStock']); const filters = new URLSearchParams(); for (const field of ['q', 'category', 'inStock']) if (typeof req.query[field] === 'string') filters.set(field, req.query[field] as string); await relay(req, res, `/pokemart/v1/catalog/items?limit=${limit}&offset=${offset}${filters.size ? `&${filters}` : ''}`, 'GET', undefined, mapItemPage); } catch (error) { next(error); } });
 app.get('/api/item-categories', async (req, res, next) => { try { await relay(req, res, '/pokemart/v1/catalog/item-categories', 'GET', undefined, mapItemCategories); } catch (error) { next(error); } });
+app.get('/api/items/purchases', async (req, res, next) => { try { const { limit, offset } = pageParams(req); await relay(req, res, `/pokemart/v1/items/purchases?limit=${limit}&offset=${offset}`, 'GET', undefined, mapItemPurchasePage); } catch (error) { next(error); } });
+app.get('/api/items/inventory', async (req, res, next) => { try { await relay(req, res, '/pokemart/v1/items/inventory', 'GET', undefined, mapItemInventory); } catch (error) { next(error); } });
 app.get('/api/items/purchases/:id', async (req, res, next) => { try { if (!validUuid.test(req.params.id)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'id', message: 'must be a UUID' }]); await relay(req, res, `/pokemart/v1/items/purchases/${req.params.id}`, 'GET', undefined, mapItemPurchase); } catch (error) { next(error); } });
 app.post('/api/items/purchases', async (req, res, next) => { try { validateItemPurchase(req.body); await relay(req, res, '/pokemart/v1/items/purchases', 'POST', req.body, mapItemPurchase); } catch (error) { next(error); } });
 app.get('/api/pokemon/:id', async (req, res, next) => { try { positivePathId(req.params.id); await relay(req, res, `/pokemart/v1/catalog/pokemon/${req.params.id}`, 'GET', undefined, mapPokemon); } catch (error) { next(error); } });

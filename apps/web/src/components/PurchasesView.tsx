@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { PurchaseItem, AuthUser } from "../types/api";
 import { LedgerIcon, RefreshIcon, ChevronLeftIcon, ChevronRightIcon } from "./icons";
+import { ItemOrdersSection } from "./ItemSections";
 import { OrderDetailModal } from "./OrderDetailModal";
 import { DeliveryBadge, usePurchaseShipment } from "./ShipmentStatus";
 import { Button, EmptyState, IconButton, Skeleton, formatPokemonId, money } from "./ui";
@@ -59,7 +60,7 @@ function PurchaseRow({
               {shipment.trackingNumber}
             </span>
           )}
-          {error && shipment && <span className="text-xs text-warn">อัปเดตล่าสุดไม่ได้</span>}
+          {error && shipment && <span className="text-xs text-warn">Update failed</span>}
         </div>
       </td>
       <td className={`${CELL} md:text-right`}>
@@ -199,6 +200,8 @@ export function PurchasesView({
           </div>
         )}
       </div>
+
+      <ItemOrdersSection refreshToken={refreshToken} />
 
       {selectedOrder && <OrderDetailModal order={selectedOrder} onClose={() => setSelectedOrder(null)} />}
     </section>

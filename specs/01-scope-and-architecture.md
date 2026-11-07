@@ -136,7 +136,6 @@ pokemart-api-lab/
 │   └── k6/                      # later phase
 ├── observability/               # optional Compose profile `observability`
 │   ├── prometheus/              # scrape config
-│   ├── alloy/                   # reads container logs and ships them to Loki
 │   └── grafana/                 # provisioned datasources and the overview dashboard
 ├── tests/                       # adapt to team conventions
 ├── docker-compose.yml           # observability services live here under a profile

@@ -56,6 +56,7 @@ services:
       KYC_BASE_URL: http://kyc-api:4005
       KYC_API_KEY: ${KYC_API_KEY:-local-only-kyc-key}
       KYC_REQUEST_TIMEOUT_MS: 2000
+      LOKI_URL: http://loki:3100 # Sends logs straight to Loki when the observability profile runs
     ports: ["${POKEMART_API_HOST_PORT:-4000}:4000"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4000/ready"]
@@ -79,6 +80,7 @@ services:
       dockerfile: apps/payment-mock/Dockerfile
     environment:
       PORT: 4004
+      LOKI_URL: http://loki:3100
     ports: ["${PAYMENT_MOCK_HOST_PORT:-4004}:4004"]
 
   kyc-api:
@@ -88,6 +90,7 @@ services:
     environment:
       PORT: 4005
       KYC_API_KEY: ${KYC_API_KEY:-local-only-kyc-key}
+      LOKI_URL: http://loki:3100
     ports: ["${KYC_API_HOST_PORT:-4005}:4005"]
 
   bff:
@@ -97,6 +100,7 @@ services:
     environment:
       PORT: 4001
       POKEMART_API_BASE_URL: http://pokemart-api:4000
+      LOKI_URL: http://loki:3100
     ports: ["${BFF_HOST_PORT:-4001}:4001"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4001/ready"]
@@ -132,6 +136,7 @@ services:
       dockerfile: apps/shipping-mock/Dockerfile
     environment:
       PORT: 4002
+      LOKI_URL: http://loki:3100
     ports: ["${SHIPPING_MOCK_HOST_PORT:-4002}:4002"]
 
   shipping-worker:
@@ -149,11 +154,12 @@ services:
       SHIPPING_REQUEST_TIMEOUT_MS: 2000
       SHIPPING_MAX_ATTEMPTS: 5
       SHIPPING_BATCH_SIZE: 10
-      SHIPPING_POLL_INTERVAL_MS: 60000
+      SHIPPING_POLL_INTERVAL_MS: ${SHIPPING_POLL_INTERVAL_MS:-60000}
       SHIPPING_STATUS_SYNC_INTERVAL_MS: 15000
       PAYMENT_BASE_URL: http://payment-mock:4004
       PAYMENT_POLL_INTERVAL_MS: 60000
       METRICS_PORT: 4010
+      LOKI_URL: http://loki:3100
     depends_on:
       mysql:
         condition: service_healthy
@@ -178,20 +184,6 @@ services:
       timeout: 5s
       retries: 20
       start_period: 15s
-
-  alloy:
-    image: grafana/alloy:v1.5.1
-    profiles: ["observability"]
-    # Reads container logs through the Docker socket (read-only) and pushes them to Loki.
-    # Mounting the socket gives this container a view of every container on the machine: local lab only.
-    user: root
-    command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "--disable-reporting", "/etc/alloy/config.alloy"]
-    volumes:
-      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    depends_on:
-      loki:
-        condition: service_healthy
 
   prometheus:
     image: prom/prometheus:v3.1.0

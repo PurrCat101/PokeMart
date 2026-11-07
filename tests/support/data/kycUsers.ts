@@ -37,6 +37,14 @@ export const kycUsers = {
   'ui-validation': define('ui-validation', 0, 'ACTIVE', 'UI form shows validation errors'),
   'ui-pending': define('ui-pending', 0, 'PENDING_REVIEW', 'UI shows the under-review banner'),
   'ui-rejected': define('ui-rejected', 0, 'REJECTED', 'UI shows the rejected banner and Send again'),
+  'race-level-0': define('race-level-0', 0, 'ACTIVE', 'two concurrent level-0 purchases are both refused'),
+  'race-level-0-wallet': define('race-level-0-wallet', 0, 'ACTIVE', 'concurrent level-0 purchases leave the wallet untouched'),
+  'race-wallet-drain': define('race-wallet-drain', 1, 'ACTIVE', 'two concurrent purchases cannot overdraw the wallet'),
+  'race-wallet-consistency': define('race-wallet-consistency', 1, 'ACTIVE', 'wallet equals start minus price times successes'),
+  'race-stock-depletion': define('race-stock-depletion', 1, 'ACTIVE', 'concurrent purchases never oversell stock'),
+  'race-stock-limit': define('race-stock-limit', 1, 'ACTIVE', 'concurrent purchases beyond the stock fail with INSUFFICIENT_STOCK'),
+  'race-duplicate-id': define('race-duplicate-id', 1, 'ACTIVE', 'same purchase ID cannot be processed twice'),
+  'race-kyc-timing': define('race-kyc-timing', 0, 'ACTIVE', 'KYC level is enforced inside the purchase'),
 } as const;
 
 export type KycScenario = keyof typeof kycUsers;

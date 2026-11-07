@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import { InventoryItem, AuthUser } from "../types/api";
 import { BackpackIcon, RefreshIcon, PokeballIcon } from "./icons";
+import { ItemInventorySection } from "./ItemSections";
 import { Button, EmptyState, Skeleton, formatPokemonId } from "./ui";
 
 interface InventoryViewProps {
@@ -13,6 +14,9 @@ interface InventoryViewProps {
 }
 
 export function InventoryView({ items, isLoading, user, onRefresh, onGoToCatalog, onOpenLogin }: InventoryViewProps) {
+  // The items section loads its own data; bumping this makes it refresh together with the Pokémon list.
+  const [itemRefreshToken, setItemRefreshToken] = useState(0);
+
   if (!user) {
     return (
       <EmptyState
@@ -44,7 +48,16 @@ export function InventoryView({ items, isLoading, user, onRefresh, onGoToCatalog
             <span className="font-mono tabular-nums">{totalUnits}</span> Pokémon owned
           </p>
         </div>
-        <Button variant="secondary" size="sm" onClick={onRefresh} disabled={isLoading} data-testid="inventory-refresh">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => {
+            setItemRefreshToken((n) => n + 1);
+            onRefresh();
+          }}
+          disabled={isLoading}
+          data-testid="inventory-refresh"
+        >
           <RefreshIcon className={`h-4 w-4 ${isLoading ? "animate-spin motion-reduce:animate-none" : ""}`} />
           Refresh
         </Button>
@@ -90,6 +103,8 @@ export function InventoryView({ items, isLoading, user, onRefresh, onGoToCatalog
           ))}
         </ul>
       )}
+
+      <ItemInventorySection refreshToken={itemRefreshToken} />
     </section>
   );
 }
