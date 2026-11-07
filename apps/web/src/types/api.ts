@@ -57,6 +57,20 @@ export interface ItemPurchase {
   createdAt: string;
 }
 
+/** One owned item, flattened from the BFF `{ item: { id, name }, quantity }` shape. */
+export interface ItemInventoryEntry {
+  itemId: number;
+  name: string;
+  quantity: number;
+}
+
+export interface ItemPurchasesPage {
+  totalCount: number;
+  limit: number;
+  offset: number;
+  items: ItemPurchase[];
+}
+
 export interface AuthUser {
   userId: string;
   email: string;

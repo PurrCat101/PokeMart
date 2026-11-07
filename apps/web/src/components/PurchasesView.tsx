@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { PurchaseItem, AuthUser } from "../types/api";
 import { LedgerIcon, RefreshIcon, ChevronLeftIcon, ChevronRightIcon } from "./icons";
+import { ItemOrdersSection } from "./ItemSections";
 import { OrderDetailModal } from "./OrderDetailModal";
 import { DeliveryBadge, usePurchaseShipment } from "./ShipmentStatus";
 import { Button, EmptyState, IconButton, Skeleton, formatPokemonId, money } from "./ui";
@@ -199,6 +200,8 @@ export function PurchasesView({
           </div>
         )}
       </div>
+
+      <ItemOrdersSection refreshToken={refreshToken} />
 
       {selectedOrder && <OrderDetailModal order={selectedOrder} onClose={() => setSelectedOrder(null)} />}
     </section>

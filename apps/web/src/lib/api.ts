@@ -13,6 +13,8 @@ import {
   ItemCatalogResponse,
   CreateItemPurchaseRequest,
   ItemPurchase,
+  ItemInventoryEntry,
+  ItemPurchasesPage,
   AccountInfo,
   KycStatus,
   KycSubmission,
@@ -203,6 +205,26 @@ export const api = {
       method: "POST",
       body: JSON.stringify(purchase),
     });
+  },
+
+  // Items have their own inventory and order history (and no shipment, which belongs to Pokémon orders).
+  async getItemInventory(): Promise<ItemInventoryEntry[]> {
+    const result = await request<{ items: Array<{ item: { id: number; name: string }; quantity: number }> }>("/api/items/inventory");
+    return result.items.map(({ item, quantity }) => ({ itemId: item.id, name: item.name, quantity }));
+  },
+
+  async getItemPurchases(limit = 10, offset = 0): Promise<ItemPurchasesPage> {
+    const page = await request<{
+      totalCount: number;
+      page: { limit: number; offset: number };
+      items: Array<{ purchaseId: string; item: { id: number; name: string }; quantity: number; pricing: { unitPrice: number; totalPrice: number }; createdAt: string }>;
+    }>(`/api/items/purchases?limit=${limit}&offset=${offset}`);
+    return {
+      totalCount: page.totalCount,
+      limit: page.page.limit,
+      offset: page.page.offset,
+      items: page.items.map((p) => ({ purchaseId: p.purchaseId, itemId: p.item.id, itemName: p.item.name, quantity: p.quantity, unitPrice: p.pricing.unitPrice, totalPrice: p.pricing.totalPrice, createdAt: p.createdAt })),
+    };
   },
 
   async getShipment(purchaseId: string): Promise<ShipmentItem> {

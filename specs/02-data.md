@@ -63,7 +63,7 @@ Normal startup and tests must not fetch the latest data from the internet. The l
 
 ### Reset safety
 
-`docker compose down -v` removes Compose-managed volumes and deletes local database data. Document it as a destructive local reset only; never use it against shared or production environments.
+`make fresh` (which runs `down -v`) removes Compose-managed volumes and deletes local database data. Document it as a destructive local reset only; never use it against shared or production environments.
 
 
 ## 11. Shipping persistence (new)

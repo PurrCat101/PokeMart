@@ -99,7 +99,7 @@ Add a `shipments` table with at least:
 
 Required indexes: due-work lookup on `(status, next_attempt_at)`, lease recovery on `(status, claimed_until)`, and unique relation to the purchase. Add checks for non-negative attempt count and allowed status values where supported.
 
-Schema changes are Liquibase changesets (`database/liquibase/db.changelog-master.yaml`): add a numbered changeset and keep the canonical schema file equal to the end result. `make up` or `make db-migrate` applies it once and Liquibase records it, so it is safe to repeat. Do not use `docker compose down -v` as a migration.
+Schema changes are Liquibase changesets (`database/liquibase/db.changelog-master.yaml`): add a numbered changeset and keep the canonical schema file equal to the end result. `make up` or `make db-migrate` applies it once and Liquibase records it, so it is safe to repeat. Do not use `make fresh` as a migration.
 
 ## 5. Purchase and shipment lifecycle
 
