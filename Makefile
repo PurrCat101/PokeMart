@@ -5,6 +5,10 @@
 # hands off to Docker Desktop's docker-compose.exe, which cannot reach the Podman machine on Windows.
 COMPOSE ?= podman compose
 
+# Call npm.cmd, not `npm`: GNU make (msys) finds the extensionless `npm` bash script first, and its shebang
+# launches WSL bash ("execvpe(/bin/bash) failed"). npm.cmd is the real Windows launcher.
+NPM ?= npm.cmd
+
 # A terminal or editor that was already open when PODMAN_COMPOSE_PROVIDER was set does not see it (environment
 # variables are copied at start-up), and `podman compose` would silently fall back to Docker Desktop. So when the
 # variable is missing, look for podman-compose.exe in the pip --user scripts folder and use that.
@@ -20,14 +24,14 @@ help: ## Show available local-lab commands (db-reset deletes local data)
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-20s %s\n", $$1, $$2}'
 
 install: ## Install pinned Node.js dependencies from package-lock.json
-	npm ci
+	$(NPM) ci
 
 build: ## Compile the BFF and PokéMart API TypeScript projects
-	npm run build
+	$(NPM) run build
 
 lint: ## Lint the web app (ESLint) and type-check every service
-	npm run lint:web
-	npm run build
+	$(NPM) run lint:web
+	$(NPM) run build
 
 # podman-compose 1.6 cannot resolve `dockerfile: apps/<svc>/Dockerfile` on Windows ("no Containerfile ...
 # found in context directory"), so images are built with `podman build` and compose only starts them.
@@ -79,36 +83,36 @@ docs: ## Print the Scalar API reference URL (BFF, PokéMart, KYC, Payment, Shipp
 swagger: docs ## Alias of `make docs` (Swagger UI was replaced by Scalar)
 
 test: ## Run the configured Playwright suite
-	npm test
+	$(NPM) test
 
 test-all: ## Lint, build, start the stack, run the whole Playwright suite, then always stop the stack
 	$(MAKE) lint
 	$(MAKE) up
-	@npm test; status=$$?; $(MAKE) down; exit $$status
+	@$(NPM) test; status=$$?; $(MAKE) down; exit $$status
 
 test-observability: ## Metrics tests; log and Grafana tests run only if `make observe` is up
-	npm run test:observability
+	$(NPM) run test:observability
 
 test-mocked: ## Run contract tests against WireMock
-	npm run test:mocked
+	$(NPM) run test:mocked
 
 test-api: ## Run API-validation tests against the real BFF
-	npm run test:api
+	$(NPM) run test:api
 
 test-pokeapi: ## Run internal PokéMart API endpoint tests directly
-	npm run test:pokeapi
+	$(NPM) run test:pokeapi
 
 test-purchase-retry: ## Verify purchase ID retries and duplicate detection
-	npm run test:purchase-retry
+	$(NPM) run test:purchase-retry
 
 test-e2e: ## Run real BFF-to-MySQL journeys
-	npm run test:e2e
+	$(NPM) run test:e2e
 
 test-kyc: ## KYC levels, review status and verification form (one account per test case)
-	npm run test:kyc
+	$(NPM) run test:kyc
 
 test-items: ## Item order history and item inventory (API and web UI)
-	npm run test:items
+	$(NPM) run test:items
 
 db-seed: ## Confirm baseline data is present in the local lab
 	$(COMPOSE) exec -T mysql sh -c 'mysql -u"$$MYSQL_USER" -p"$$MYSQL_PASSWORD" "$$MYSQL_DATABASE" -e "SELECT COUNT(*) AS catalog_records FROM shop_listing;"'
