@@ -51,7 +51,7 @@ export async function resetKycScenarioData(database: MySQLConnection, scenario: 
   await database.query('UPDATE user_wallet SET balance=? WHERE user_id=?', [kycCatalog.walletBalance, userId]);
   await database.query('DELETE FROM user_inventory WHERE user_id=?', [userId]);
   await database.query(
-    'UPDATE item_listing SET price=?, stock=?, active=TRUE WHERE item_source_id IN (?, ?)',
+    'UPDATE listings SET price=?, stock=?, active=TRUE WHERE item_source_id IN (?, ?)',
     [kycCatalog.itemPrice, kycCatalog.itemStock, kycCatalog.itemId, kycCatalog.masterItemId],
   );
 }
@@ -62,7 +62,7 @@ export async function walletBalance(database: MySQLConnection, scenario: KycScen
 }
 
 export async function itemStock(database: MySQLConnection, itemId: number): Promise<number> {
-  const [rows] = await database.query<import('mysql2').RowDataPacket[]>('SELECT stock FROM item_listing WHERE item_source_id=?', [itemId]);
+  const [rows] = await database.query<import('mysql2').RowDataPacket[]>('SELECT stock FROM listings WHERE item_source_id=?', [itemId]);
   return Number(rows[0].stock);
 }
 

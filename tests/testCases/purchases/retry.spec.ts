@@ -12,7 +12,7 @@ test('@e2e @purchase-flow an uncommitted purchaseId can be retried, while a comm
 
   try {
     const [walletRows] = await database.query<RowDataPacket[]>('SELECT balance FROM user_wallet WHERE user_id=?', [testEnvironment.userId]);
-    const [listingRows] = await database.query<RowDataPacket[]>('SELECT stock FROM shop_listing WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
+    const [listingRows] = await database.query<RowDataPacket[]>('SELECT stock FROM listings WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
     const [inventoryRows] = await database.query<RowDataPacket[]>('SELECT quantity FROM user_inventory WHERE user_id=? AND pokemon_source_id=?', [testEnvironment.userId, testEnvironment.pokemonId]);
     expect(walletRows).toHaveLength(1);
     expect(listingRows).toHaveLength(1);
@@ -45,7 +45,7 @@ test('@e2e @purchase-flow an uncommitted purchaseId can be retried, while a comm
     expect(await storedPurchaseResponse.json()).toMatchObject({ purchaseId });
 
     const [walletAfterRows] = await database.query<RowDataPacket[]>('SELECT balance FROM user_wallet WHERE user_id=?', [testEnvironment.userId]);
-    const [listingAfterRows] = await database.query<RowDataPacket[]>('SELECT stock, price FROM shop_listing WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
+    const [listingAfterRows] = await database.query<RowDataPacket[]>('SELECT stock, price FROM listings WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
     const [inventoryAfterRows] = await database.query<RowDataPacket[]>('SELECT quantity FROM user_inventory WHERE user_id=? AND pokemon_source_id=?', [testEnvironment.userId, testEnvironment.pokemonId]);
     const price = Number(listingAfterRows[0].price);
     expect(Number(walletAfterRows[0].balance)).toBe(walletBefore - price);
@@ -54,7 +54,7 @@ test('@e2e @purchase-flow an uncommitted purchaseId can be retried, while a comm
   } finally {
     try {
       if (walletBefore !== undefined) await database.query('UPDATE user_wallet SET balance=? WHERE user_id=?', [walletBefore, testEnvironment.userId]);
-      if (stockBefore !== undefined) await database.query('UPDATE shop_listing SET stock=? WHERE pokemon_source_id=?', [stockBefore, testEnvironment.pokemonId]);
+      if (stockBefore !== undefined) await database.query('UPDATE listings SET stock=? WHERE pokemon_source_id=?', [stockBefore, testEnvironment.pokemonId]);
       if (inventorySnapshotTaken) {
         if (inventoryBefore === undefined) {
           await database.query('DELETE FROM user_inventory WHERE user_id=? AND pokemon_source_id=?', [testEnvironment.userId, testEnvironment.pokemonId]);

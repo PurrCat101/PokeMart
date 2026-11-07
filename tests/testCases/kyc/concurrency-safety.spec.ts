@@ -82,7 +82,7 @@ test.describe('RACE-003: stock is never oversold', () => {
   test('RACE-003b buying more than the remaining stock concurrently sells exactly the stock and refuses the rest with 409 INSUFFICIENT_STOCK', async ({ kycAccount }) => {
     const { api, database } = await kycAccount('race-stock-limit');
     const limitedStock = 3;
-    await database.query('UPDATE item_listing SET stock=? WHERE item_source_id=?', [limitedStock, kycCatalog.itemId]);
+    await database.query('UPDATE listings SET stock=? WHERE item_source_id=?', [limitedStock, kycCatalog.itemId]);
 
     const responses = await Promise.all(Array.from({ length: limitedStock + 3 }, () => buyItem(api)));
 

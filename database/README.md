@@ -27,16 +27,13 @@ The copyable DBML source is [`schema/pokemart.dbml`](schema/pokemart.dbml). In d
 | | `password_hash` | `VARCHAR(255)` | Yes | scrypt hash; NULL until credentials are provisioned |
 | | `is_active` | `BOOLEAN` | No | DEFAULT `TRUE` |
 | | `created_at` | `TIMESTAMP(3)` | No | DEFAULT `CURRENT_TIMESTAMP(3)` |
-| `shop_listing` | `pokemon_source_id` | `INT` | No | PK, FK → `pokemon_reference.source_id` |
-| | `price` | `INT` | No | CHECK `price >= 0` |
-| | `stock` | `INT` | No | CHECK `stock >= 0` |
-| | `active` | `BOOLEAN` | No | DEFAULT `TRUE` |
 | `item_reference` | `source_id` | `INT` | No | PK |
 | | `name` | `VARCHAR(128)` | No | UNIQUE |
 | | `pokeapi_cost` | `INT UNSIGNED` | No | DEFAULT `0` |
 | | `category` | `VARCHAR(128)` | Yes | |
 | | `sprite_url` | `VARCHAR(512)` | Yes | |
-| `item_listing` | `item_source_id` | `INT` | No | PK, FK → `item_reference.source_id` |
+| `listings` | `id` | `BIGINT UNSIGNED` | No | PK, auto-increment |
+| | `pokemon_source_id` / `item_source_id` | `INT` | Yes | FK → `pokemon_reference` / `item_reference`; CHECK exactly one is set; each has its own UNIQUE key, so at most one listing per product |
 | | `price`, `stock` | `INT` | No | CHECK `>= 0` |
 | | `active` | `BOOLEAN` | No | DEFAULT `TRUE` |
 | | `required_kyc_level` | `TINYINT UNSIGNED` | No | CHECK 0–2 |
@@ -95,7 +92,7 @@ Existing volumes created before item catalog, KYC, or payment support needed `da
 
 `database/migrations/007_create_item_shipments_table.sql` adds `item_shipments` (item orders are shipped like Pokémon orders) and creates a shipment for every existing item purchase. Unlike 001-006 it is **not** in the baseline file: Liquibase applies it as changeset `009-item-shipments`, so `make db-migrate` brings an existing volume up to date and a fresh volume gets it automatically.
 
-`database/migrations/008_unify_orders_shipments_inventory.sql` (schema audit, Liquibase changeset `010`) folds `item_purchases` into `purchases`, `item_shipments` into `shipments` and `user_item_inventory` into `user_inventory`, then drops the three twin tables (13 → 10 tables). Existing rows are copied over. A purchase ID is now unique across both kinds. DDL commits implicitly in MySQL, so the file is not atomic: a failure part-way leaves a half-migrated database. Back up first and restore if it fails:
+`database/migrations/008_unify_orders_shipments_inventory.sql` (schema audit, Liquibase changeset `010`) folds `item_purchases` into `purchases`, `item_shipments` into `shipments` and `user_item_inventory` into `user_inventory`, then drops the three twin tables (13 tables → 10). Existing rows are copied over. A purchase ID is now unique across both kinds. DDL commits implicitly in MySQL, so the file is not atomic: a failure part-way leaves a half-migrated database. Back up first and restore if it fails:
 
 ```
 # before: make db-migrate
@@ -105,5 +102,7 @@ podman compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQ
 ```
 
 The migration also stops (and the backup is the way back) if a purchase ID exists in both `purchases` and `item_purchases`, because the merged table's primary key rejects the duplicate. After a successful run, `make up` recreates `pokemart-api`, `shipping-worker` and `bff` so they run code that matches the new schema.
+
+`database/migrations/009_merge_listings.sql` (Liquibase changeset `011`) folds `shop_listing` and `item_listing` into `listings` the same way, then drops them (10 → 9 tables). Column names are unchanged, so queries only change the table name. The checked-in catalog seeds (`012`, `013`) still insert into the old table names on purpose: Liquibase runs them before the merge changesets, and editing an applied changeset would break its checksum. Use the same backup steps as for 008.
 
 `make db-reset` deletes the local Compose volume, then re-applies every Liquibase changeset, and is destructive. It must never be used for shared or production data.

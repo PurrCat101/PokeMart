@@ -15,7 +15,7 @@ const requestId = 'tc-purchase-validation';
 
 async function snapshotState(database: MySQLConnection, userId: string, pokemonId: number, sentinelId: string) {
   const [walletRows] = await database.query<RowDataPacket[]>('SELECT balance FROM user_wallet WHERE user_id=?', [userId]);
-  const [listingRows] = await database.query<RowDataPacket[]>('SELECT stock FROM shop_listing WHERE pokemon_source_id=?', [pokemonId]);
+  const [listingRows] = await database.query<RowDataPacket[]>('SELECT stock FROM listings WHERE pokemon_source_id=?', [pokemonId]);
   const [inventoryRows] = await database.query<RowDataPacket[]>('SELECT quantity FROM user_inventory WHERE user_id=? AND pokemon_source_id=?', [userId, pokemonId]);
   const [purchaseRows] = await database.query<RowDataPacket[]>('SELECT id FROM purchases WHERE id=?', [sentinelId]);
   return {
@@ -140,10 +140,10 @@ test('PUR-API-001 quantity 99 is schema-valid and reaches the stock business rul
   const database = new MySQLConnection();
   let originalStock: number | undefined;
   try {
-    const [listingRows] = await database.query<RowDataPacket[]>('SELECT stock FROM shop_listing WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
+    const [listingRows] = await database.query<RowDataPacket[]>('SELECT stock FROM listings WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
     expect(listingRows).toHaveLength(1);
     originalStock = Number(listingRows[0].stock);
-    await database.query('UPDATE shop_listing SET stock=0 WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
+    await database.query('UPDATE listings SET stock=0 WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
 
     const response = await bffRequest.post('/api/purchases', {
       data: { purchaseId: testEnvironment.purchaseId(), pokemonId: testEnvironment.pokemonId, quantity: 99 },
@@ -158,7 +158,7 @@ test('PUR-API-001 quantity 99 is schema-valid and reaches the stock business rul
     });
   } finally {
     try {
-      if (originalStock !== undefined) await database.query('UPDATE shop_listing SET stock=? WHERE pokemon_source_id=?', [originalStock, testEnvironment.pokemonId]);
+      if (originalStock !== undefined) await database.query('UPDATE listings SET stock=? WHERE pokemon_source_id=?', [originalStock, testEnvironment.pokemonId]);
     } finally {
       await database.close();
     }

@@ -12,7 +12,7 @@ test('@e2e concurrent POST /api/purchases with the same purchaseId commits exact
 
   try {
     snapshot = await snapshotPurchaseState(database, testEnvironment.userId, testEnvironment.pokemonId);
-    const [listingRows] = await database.query<RowDataPacket[]>('SELECT price FROM shop_listing WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
+    const [listingRows] = await database.query<RowDataPacket[]>('SELECT price FROM listings WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
     const price = Number(listingRows[0].price);
     expect(snapshot.stock).toBeGreaterThanOrEqual(1);
     expect(snapshot.walletBalance).toBeGreaterThanOrEqual(price);
@@ -51,7 +51,7 @@ test('@e2e concurrent POST /api/purchases with the same purchaseId commits exact
     const [purchaseRows] = await database.query<RowDataPacket[]>('SELECT id FROM purchases WHERE id=?', [purchaseId]);
     expect(purchaseRows).toHaveLength(1);
     const [walletRows] = await database.query<RowDataPacket[]>('SELECT balance FROM user_wallet WHERE user_id=?', [testEnvironment.userId]);
-    const [listingAfterRows] = await database.query<RowDataPacket[]>('SELECT stock FROM shop_listing WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
+    const [listingAfterRows] = await database.query<RowDataPacket[]>('SELECT stock FROM listings WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
     const [inventoryRows] = await database.query<RowDataPacket[]>('SELECT quantity FROM user_inventory WHERE user_id=? AND pokemon_source_id=?', [testEnvironment.userId, testEnvironment.pokemonId]);
     expect(Number(walletRows[0].balance)).toBe(snapshot.walletBalance - price);
     expect(Number(listingAfterRows[0].stock)).toBe(snapshot.stock - 1);

@@ -13,22 +13,6 @@ Table pokemon_reference {
   Note: 'Seeded reference snapshot. This is the parent catalog for listings, inventory, and purchase history.'
 }
 
-Table shop_listing {
-  pokemon_source_id int [pk, not null]
-  price int [not null]
-  stock int [not null]
-  active boolean [not null, default: true]
-  required_kyc_level "tinyint unsigned" [not null, default: 0]
-
-  checks {
-    `price >= 0` [name: 'chk_listing_price']
-    `stock >= 0` [name: 'chk_listing_stock']
-    `required_kyc_level between 0 and 2` [name: 'chk_listing_kyc']
-  }
-
-  Note: 'At most one shop listing per Pokémon. Price and stock are PokéMart-owned values.'
-}
-
 Table item_reference {
   source_id int [pk, not null]
   name varchar(128) [not null, unique]
@@ -39,18 +23,28 @@ Table item_reference {
   Note: 'Seeded, canonicalized PokeAPI item snapshot.'
 }
 
-Table item_listing {
-  item_source_id int [pk, not null]
+Table listings {
+  id bigint [pk, increment, not null]
+  pokemon_source_id int [note: 'Set for a Pokémon listing; NULL for an item listing.']
+  item_source_id int [note: 'Set for an item listing; NULL for a Pokémon listing.']
   price int [not null]
   stock int [not null]
   active boolean [not null, default: true]
   required_kyc_level "tinyint unsigned" [not null, default: 0]
 
-  checks {
-    `price >= 0` [name: 'chk_item_listing_price']
-    `stock >= 0` [name: 'chk_item_listing_stock']
-    `required_kyc_level between 0 and 2` [name: 'chk_item_listing_kyc']
+  indexes {
+    pokemon_source_id [unique, name: 'uq_listings_pokemon']
+    item_source_id [unique, name: 'uq_listings_item']
   }
+
+  checks {
+    `(pokemon_source_id is null) <> (item_source_id is null)` [name: 'chk_listings_one_product']
+    `price >= 0` [name: 'chk_listings_price']
+    `stock >= 0` [name: 'chk_listings_stock']
+    `required_kyc_level between 0 and 2` [name: 'chk_listings_kyc']
+  }
+
+  Note: 'One shop listing per product, Pokémon or item. Price, stock and KYC level are PokéMart-owned values. Surrogate key because a nullable product column cannot be in a primary key; the unique keys give at most one listing per product. Added by migration 009 (folded shop_listing and item_listing).'
 }
 
 Table users {
@@ -168,8 +162,8 @@ Table top_ups {
   Note: 'Wallet top-up through the payment provider; credited to user_wallet when COMPLETED.'
 }
 
-Ref fk_listing_pokemon: pokemon_reference.source_id - shop_listing.pokemon_source_id
-Ref fk_item_listing_reference: item_reference.source_id - item_listing.item_source_id
+Ref fk_listings_pokemon: pokemon_reference.source_id - listings.pokemon_source_id
+Ref fk_listings_item: item_reference.source_id - listings.item_source_id
 Ref fk_inventory_pokemon: pokemon_reference.source_id < user_inventory.pokemon_source_id
 Ref fk_purchase_pokemon: pokemon_reference.source_id < purchases.pokemon_source_id
 Ref fk_wallet_user: users.user_id - user_wallet.user_id

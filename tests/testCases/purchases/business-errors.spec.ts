@@ -43,9 +43,9 @@ test('PUR-BIZ-002 inactive listing returns 409 without state changes', async ({ 
   let active: number | undefined;
   try {
     snapshot = await snapshotPurchaseState(database, testEnvironment.userId, testEnvironment.pokemonId);
-    const [listingRows] = await database.query<RowDataPacket[]>('SELECT active FROM shop_listing WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
+    const [listingRows] = await database.query<RowDataPacket[]>('SELECT active FROM listings WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
     active = Number(listingRows[0].active);
-    await database.query('UPDATE shop_listing SET active=FALSE WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
+    await database.query('UPDATE listings SET active=FALSE WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
 
     const response = await bffRequest.post('/api/purchases', {
       data: { purchaseId, pokemonId: testEnvironment.pokemonId, quantity: 1 },
@@ -62,7 +62,7 @@ test('PUR-BIZ-002 inactive listing returns 409 without state changes', async ({ 
     await expectNoPurchase(database, purchaseId);
   } finally {
     try {
-      if (active !== undefined) await database.query('UPDATE shop_listing SET active=? WHERE pokemon_source_id=?', [active, testEnvironment.pokemonId]);
+      if (active !== undefined) await database.query('UPDATE listings SET active=? WHERE pokemon_source_id=?', [active, testEnvironment.pokemonId]);
       if (snapshot) await restorePurchaseState(database, testEnvironment.userId, testEnvironment.pokemonId, snapshot);
     } finally {
       await database.close();
@@ -76,7 +76,7 @@ test('PUR-BIZ-003 insufficient stock returns 409 without state changes', async (
   let snapshot: PurchaseStateSnapshot | undefined;
   try {
     snapshot = await snapshotPurchaseState(database, testEnvironment.userId, testEnvironment.pokemonId);
-    await database.query('UPDATE shop_listing SET stock=0 WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
+    await database.query('UPDATE listings SET stock=0 WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
 
     const response = await bffRequest.post('/api/purchases', {
       data: { purchaseId, pokemonId: testEnvironment.pokemonId, quantity: 1 },

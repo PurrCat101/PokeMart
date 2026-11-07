@@ -12,7 +12,7 @@ test('INT-PURCHASE-RETRY-001 POST failed purchase can retry the same ID after fu
   let snapshot: Awaited<ReturnType<typeof snapshotPurchaseState>> | undefined;
   try {
     snapshot = await snapshotPurchaseState(database, testEnvironment.userId, testEnvironment.pokemonId);
-    const [listingRows] = await database.query<RowDataPacket[]>('SELECT price FROM shop_listing WHERE pokemon_source_id=? AND active=TRUE', [testEnvironment.pokemonId]);
+    const [listingRows] = await database.query<RowDataPacket[]>('SELECT price FROM listings WHERE pokemon_source_id=? AND active=TRUE', [testEnvironment.pokemonId]);
     expect(listingRows).toHaveLength(1);
     expect(snapshot.stock).toBeGreaterThanOrEqual(1);
     expect(snapshot.walletBalance).toBeGreaterThanOrEqual(Number(listingRows[0].price));
