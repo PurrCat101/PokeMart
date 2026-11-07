@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Sans_Thai, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "../contexts/ThemeContext";
+import { AppProvider } from "../contexts/AppContext";
 
 // Plex Sans Thai covers both Latin and Thai (the UI shows Thai delivery labels).
 const plexSans = IBM_Plex_Sans_Thai({
@@ -21,7 +22,7 @@ const plexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "PokéMart",
-  description: "Browse the PokéMart catalog, manage your bag, and track your Pokémon orders.",
+  description: "Browse the PokéMart catalog, manage your bag, and track your orders.",
 };
 
 export const viewport: Viewport = {
@@ -39,7 +40,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             __html: `try{var t=localStorage.getItem("pokemart_theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.classList.add("dark")}catch(e){}`,
           }}
         />
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <AppProvider>{children}</AppProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
