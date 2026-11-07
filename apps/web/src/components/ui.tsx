@@ -3,9 +3,11 @@
 import React, { useEffect, useRef } from "react";
 import { AlertCircleIcon, CheckIcon, XIcon, ClockIcon } from "./icons";
 
-export function cx(...parts: Array<string | false | null | undefined>): string {
-  return parts.filter(Boolean).join(" ");
-}
+import { buttonClass, cx, type ButtonSize, type ButtonVariant } from "./button-class";
+
+// Re-exported for existing client-side imports; server components must import
+// from "./button-class" directly.
+export { buttonClass, cx };
 
 /** Prices, balances and totals share one format so the UI never drifts. */
 export function money(value: number): string {
@@ -27,31 +29,6 @@ export function titleCase(value: string): string {
 /* ------------------------------------------------------------------ */
 /* Button                                                              */
 /* ------------------------------------------------------------------ */
-
-type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
-type ButtonSize = "md" | "sm";
-
-const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
-  primary: "bg-brand text-brand-fg hover:bg-brand-hover active:bg-brand-hover shadow-card",
-  secondary: "bg-surface text-fg border border-line-strong hover:bg-surface-2",
-  ghost: "text-fg-muted hover:bg-surface-2 hover:text-fg",
-  danger: "bg-surface text-danger border border-line-strong hover:bg-danger-soft",
-};
-
-// 44px touch target on small screens, compact on pointer devices.
-const BUTTON_SIZES: Record<ButtonSize, string> = {
-  md: "min-h-11 px-4 text-sm",
-  sm: "min-h-11 px-3 text-sm sm:min-h-9",
-};
-
-export function buttonClass(variant: ButtonVariant = "secondary", size: ButtonSize = "md", extra?: string): string {
-  return cx(
-    "inline-flex items-center justify-center gap-2 rounded-md font-semibold whitespace-nowrap transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-    BUTTON_VARIANTS[variant],
-    BUTTON_SIZES[size],
-    extra,
-  );
-}
 
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant;
