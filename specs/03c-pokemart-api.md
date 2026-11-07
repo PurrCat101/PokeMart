@@ -51,8 +51,8 @@ Behavior rules are the same as the public contract in `03-api-contract.md`, with
 
 Each purchase runs in a single database transaction with the following steps. If any step fails, the transaction rolls back.
 
-1. Lock the listing row for the Pokémon (`SELECT ... FOR UPDATE`). This serializes competing purchases of the same stock.
-2. Check for an existing purchase ID before business constraints, then check listing, stock, and wallet balance.
+1. Lock the `listings` row for the Pokémon (`SELECT ... FOR UPDATE`, found by `pokemon_source_id`). This serializes competing purchases of the same stock. Item purchases do the same with the row found by `item_source_id`.
+2. Check for an existing purchase ID (in `purchases`, which holds both kinds) before business constraints, then check listing, stock, and wallet balance.
 3. Insert the purchase row.
 4. Decrement stock and wallet balance.
 5. Upsert the inventory row for the Pokémon, adding `quantity`.
