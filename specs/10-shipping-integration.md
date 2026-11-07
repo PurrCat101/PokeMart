@@ -4,7 +4,7 @@
 
 Add a fictional third-party Shipping Provider to PokéMart so the lab can exercise HTTP integration, persistence, retries, batch workers, idempotency, recovery, and observability. The provider is represented by a **real Node.js + Express HTTP mock service in Docker Compose**. Do not use WireMock for this integration; WireMock remains available for the existing mocked-BFF contract suite.
 
-PokéMart owns purchases, shipment state, retry scheduling, and recovery. The provider owns only its simulated shipment records and responses. The mock is replaceable: changing `SHIPPING_BASE_URL` must not require changes to purchase business logic.
+Both Pokémon and item purchases are shipped. Each kind has its own table (`shipments` and `item_shipments`, see section 4) and the same worker processes both. PokéMart owns purchases, shipment state, retry scheduling, and recovery. The provider owns only its simulated shipment records and responses. The mock is replaceable: changing `SHIPPING_BASE_URL` must not require changes to purchase business logic.
 
 ## 2. Architecture
 
@@ -97,6 +97,8 @@ Add a `shipments` table with at least:
 | `last_error_message` | Nullable sanitized diagnostic text; no secrets or full request bodies |
 | `created_at`, `updated_at` | Millisecond timestamps |
 
+`item_shipments` repeats this table exactly, with `purchase_id` as the FK to `item_purchases.id` (`ON DELETE CASCADE`). The worker claims due rows from both tables with `FOR UPDATE SKIP LOCKED`, builds the provider request from the matching purchase (`pokemonId`/`pokemonName` or `itemId`/`itemName` in `items[]`), and reconciles delivery status for both.
+
 Required indexes: due-work lookup on `(status, next_attempt_at)`, lease recovery on `(status, claimed_until)`, and unique relation to the purchase. Add checks for non-negative attempt count and allowed status values where supported.
 
 Schema changes are Liquibase changesets (`database/liquibase/db.changelog-master.yaml`): add a numbered changeset and keep the canonical schema file equal to the end result. `make up` or `make db-migrate` applies it once and Liquibase records it, so it is safe to repeat. Do not use `make fresh` as a migration.
@@ -162,6 +164,8 @@ Add an authenticated, owner-scoped read endpoint to both public and internal con
 
 - Public: `GET /api/purchases/{purchaseId}/shipment`
 - Internal: `GET /pokemart/v1/purchases/{purchaseId}/shipment`
+
+Item purchases have the same endpoint: public `GET /api/items/purchases/{purchaseId}/shipment`, internal `GET /pokemart/v1/items/purchases/{purchaseId}/shipment` (looked up in `item_purchases` / `item_shipments`; same response and errors).
 
 Return the current local shipment state, not a live proxy to the provider. Suggested public response:
 

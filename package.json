@@ -26,7 +26,7 @@
     "test:items": "npm run test:items --workspace=@pokemart/tests",
     "test:shipping": "npm run test:shipping --workspace=@pokemart/tests",
     "test:observability": "npm run test:observability --workspace=@pokemart/tests",
-    "sync-shipment": "tsx scripts/sync-shipment-to-db.ts"
+    "update-shipment-status": "tsx scripts/update-shipment-status.ts"
   },
   "devDependencies": {
     "@types/node": "22.18.6",

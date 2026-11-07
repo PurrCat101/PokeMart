@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { PurchaseItem } from "../types/api";
+import type { OrderRow } from "../lib/orders";
 import { AlertCircleIcon, CheckIcon, LedgerIcon, RefreshIcon } from "./icons";
 import { DeliveryBadge, usePurchaseShipment } from "./ShipmentStatus";
-import { Alert, Button, Modal, ModalHeader, Skeleton, cx, formatPokemonId, money } from "./ui";
+import { Alert, Button, Modal, ModalHeader, Skeleton, cx, money } from "./ui";
 import { DELIVERY_LABELS, ORDER_PLACED_LABEL, TIMELINE_STEPS, timelineIndex } from "../lib/shipping";
 
 interface OrderDetailModalProps {
-  order: PurchaseItem;
+  order: OrderRow;
   onClose: () => void;
 }
 
@@ -15,7 +15,7 @@ const POLL_INTERVAL_MS = 15_000;
 
 export function OrderDetailModal({ order, onClose }: OrderDetailModalProps) {
   const [refreshToken, setRefreshToken] = useState(0);
-  const { shipment, loading, error } = usePurchaseShipment(order.purchaseId, refreshToken);
+  const { shipment, loading, error } = usePurchaseShipment(order.purchaseId, refreshToken, order.kind);
 
   useEffect(() => {
     const timer = setInterval(() => setRefreshToken((n) => n + 1), POLL_INTERVAL_MS);
@@ -43,14 +43,14 @@ export function OrderDetailModal({ order, onClose }: OrderDetailModalProps) {
         <section aria-label="Order summary">
           <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-2 p-4">
             <div className="min-w-0">
-              <p className="font-mono text-xs tabular-nums text-fg-subtle">{formatPokemonId(order.pokemon.id)}</p>
-              <p className="truncate text-lg font-semibold capitalize">{order.pokemon.name}</p>
+              <p className="font-mono text-xs tabular-nums text-fg-subtle">{order.idLabel}</p>
+              <p className="truncate text-lg font-semibold capitalize">{order.name}</p>
               <p className="text-sm text-fg-muted">
                 Quantity <span className="font-mono tabular-nums">{order.quantity}</span> ·{" "}
-                <span className="font-mono tabular-nums">{money(order.pricing.unitPrice)}</span> each
+                <span className="font-mono tabular-nums">{money(order.unitPrice)}</span> each
               </p>
             </div>
-            <p className="shrink-0 font-mono text-xl font-bold tabular-nums">{money(order.pricing.totalPrice)}</p>
+            <p className="shrink-0 font-mono text-xl font-bold tabular-nums">{money(order.totalPrice)}</p>
           </div>
           <p className="mt-2 break-all font-mono text-xs text-fg-subtle">Order ID {order.purchaseId}</p>
         </section>
