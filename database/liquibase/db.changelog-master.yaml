@@ -120,3 +120,15 @@ databaseChangeLog:
             relativeToChangelogFile: true
             splitStatements: true
             endDelimiter: ;
+
+  - changeSet:
+      id: 010-unify-orders-shipments-inventory
+      author: pokemart
+      context: schema
+      comment: Schema audit - fold item_purchases, item_shipments and user_item_inventory into purchases, shipments and user_inventory (migration 008)
+      changes:
+        - sqlFile:
+            path: ../migrations/008_unify_orders_shipments_inventory.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            endDelimiter: ;

@@ -10,7 +10,7 @@ import { ShippingWorker } from '../../../apps/pokemart-api/src/shipping-worker';
 
 test('ITEM-SHIP-001 an item order starts waiting for shipment, then gets a tracking number from the worker', async ({ kycAccount }) => {
   const { api, database, userId } = await kycAccount('basic-item');
-  await database.query('DELETE FROM item_purchases WHERE user_id=?', [userId]);
+  await database.query('DELETE FROM purchases WHERE user_id=? AND kind="ITEM"', [userId]);
   const purchaseId = newPurchaseId();
   const worker = new ShippingWorker({ shippingBaseUrl: 'http://localhost:4002', requestTimeoutMs: 1000, batchSize: 1000, logger: () => undefined });
 
@@ -35,7 +35,7 @@ test('ITEM-SHIP-001 an item order starts waiting for shipment, then gets a track
     expect(shipped.trackingNumber).toEqual(expect.any(String));
   } finally {
     await worker.close();
-    await database.query('DELETE FROM item_purchases WHERE id=?', [purchaseId]);
+    await database.query('DELETE FROM purchases WHERE id=?', [purchaseId]);
   }
 });
 

@@ -13,3 +13,4 @@ data/mysql/
 .cursor/*
 .gemini/*
 .vscode/*
+backup-before-*.sql

@@ -27,7 +27,7 @@ async function signIn(page: Page, email: string): Promise<void> {
 test('ITEM-UI-001 an item bought in the web UI appears in Orders with its delivery status', async ({ page, kycAccount }) => {
   test.setTimeout(60_000);
   const { database, userId, email } = await kycAccount('basic-item');
-  await database.query('DELETE FROM item_purchases WHERE user_id=?', [userId]);
+  await database.query('DELETE FROM purchases WHERE user_id=? AND kind="ITEM"', [userId]);
   await signIn(page, email);
 
   // Nothing bought yet: the item orders tab says so.

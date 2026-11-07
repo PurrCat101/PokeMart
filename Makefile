@@ -50,8 +50,13 @@ build-images: ## Build every service image with podman (compose --build does not
 # or has exited (liquibase), so readiness is polled through the BFF /ready endpoint instead (up to ~2 minutes).
 WAIT_READY = for i in $$(seq 1 60); do $(COMPOSE) exec -T bff curl -sf http://localhost:4001/ready && exit 0; sleep 2; done; echo "BFF did not become ready in time"; exit 1
 
+# `up -d` keeps a running container even when its image was just rebuilt, so a code change (for example
+# queries that match a new schema) would not take effect. Recreate the services built from this repo's code.
+APP_SERVICES = pokemart-api shipping-worker bff
+
 up: build-images ## Build images, start the core stack and wait for it to become ready
 	$(COMPOSE) up -d --remove-orphans
+	$(COMPOSE) up -d --no-deps --force-recreate $(APP_SERVICES)
 	@$(WAIT_READY)
 
 observe: build-images ## Build images, start everything plus Grafana, Loki and Prometheus (profile observability)

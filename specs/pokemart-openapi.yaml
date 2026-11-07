@@ -407,7 +407,7 @@ paths:
       summary: Read persisted shipment state for the caller's item purchase
       security:
         - bearerAuth: []
-      description: Reads MySQL only (`item_shipments`) and does not proxy to the shipping provider. Scoped to the caller's item purchase.
+      description: Reads MySQL only (`shipments`) and does not proxy to the shipping provider. Scoped to the caller's item purchase.
       parameters:
         - $ref: '#/components/parameters/XRequestIdRequest'
         - $ref: '#/components/parameters/PurchaseId'

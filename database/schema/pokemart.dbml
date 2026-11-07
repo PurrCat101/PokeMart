@@ -74,79 +74,108 @@ Table user_wallet {
 }
 
 Table user_inventory {
+  id bigint [pk, increment, not null]
   user_id varchar(64) [not null]
-  pokemon_source_id int [not null]
+  pokemon_source_id int [note: 'Set for a Pokémon row; NULL for an item row.']
+  item_source_id int [note: 'Set for an item row; NULL for a Pokémon row.']
   quantity int [not null]
 
   indexes {
-    (user_id, pokemon_source_id) [pk]
+    (user_id, pokemon_source_id) [unique, name: 'uq_inventory_user_pokemon']
+    (user_id, item_source_id) [unique, name: 'uq_inventory_user_item']
   }
 
   checks {
     `quantity > 0` [name: 'chk_inventory_quantity']
-  }
-}
-
-Table user_item_inventory {
-  user_id varchar(64) [not null]
-  item_source_id int [not null]
-  quantity int [not null]
-
-  indexes {
-    (user_id, item_source_id) [pk]
+    `(pokemon_source_id is null) <> (item_source_id is null)` [name: 'chk_inventory_one_product']
   }
 
-  checks {
-    `quantity > 0` [name: 'chk_item_inventory_quantity']
-  }
+  Note: 'One table for Pokémon and item ownership. Surrogate key because a nullable product column cannot be in a primary key; the two unique keys give one row per user per product (NULLs never collide). Added by migration 008.'
 }
 
 Table purchases {
-  id char(36) [pk, not null, note: 'Client-generated purchase UUID; committed IDs are unique.']
+  id char(36) [pk, not null, note: 'Client-generated purchase UUID; committed IDs are unique across Pokémon and item orders.']
   user_id varchar(64) [not null]
-  pokemon_source_id int [not null]
+  pokemon_source_id int [note: 'Set for a Pokémon order; NULL for an item order.']
+  item_source_id int [note: 'Set for an item order; NULL for a Pokémon order.']
+  kind "enum('POKEMON','ITEM')" [not null, note: 'STORED generated column: POKEMON when pokemon_source_id is set, otherwise ITEM.']
   quantity int [not null]
   unit_price int [not null, note: 'Price snapshot at purchase time.']
   total_price int [not null, note: 'Price snapshot at purchase time.']
   created_at timestamp(3) [not null, default: `CURRENT_TIMESTAMP(3)`]
 
   indexes {
-    (user_id, created_at, id) [name: 'idx_purchase_user_created', note: 'created_at and id are DESC in the MySQL schema']
+    (user_id, kind, created_at, id) [name: 'idx_purchase_user_kind_created', note: 'created_at and id are DESC in the MySQL schema']
   }
 
   checks {
     `quantity between 1 and 99` [name: 'chk_purchase_quantity']
+    `(pokemon_source_id is null) <> (item_source_id is null)` [name: 'chk_purchase_one_product']
+    `total_price = unit_price * quantity` [name: 'chk_purchase_total']
   }
 
-  Note: 'Purchase history snapshots pricing and references the Pokémon, not the shop listing.'
+  Note: 'One order table for Pokémon and item purchases (migration 008 folded item_purchases in). Snapshots pricing and references the product, not the shop listing.'
 }
 
-Table item_purchases {
-  id char(36) [pk, not null, note: 'Client-generated UUID; committed IDs are unique for item purchases.']
-  user_id varchar(64) [not null]
-  item_source_id int [not null]
-  quantity int [not null]
-  unit_price int [not null, note: 'Price snapshot at purchase time.']
-  total_price int [not null, note: 'Price snapshot at purchase time.']
+Table shipments {
+  purchase_id char(36) [pk, not null, note: 'One shipment per order; same value as purchases.id.']
+  processing_status "enum('PENDING','PROCESSING','RETRY_WAIT','LABEL_CREATED','FAILED','UNKNOWN')" [not null, default: 'PENDING', note: 'Worker queue and retry lifecycle.']
+  delivery_status "enum('WAITING_FOR_SHIPMENT','LABEL_CREATED','IN_TRANSIT','OUT_FOR_DELIVERY','DELIVERED','DELIVERY_FAILED')" [not null, default: 'WAITING_FOR_SHIPMENT', note: 'Customer-facing delivery progress.']
+  provider_shipment_id varchar(128)
+  tracking_number varchar(128)
+  attempt_count "int unsigned" [not null, default: 0]
+  next_attempt_at timestamp(3) [not null, default: `CURRENT_TIMESTAMP(3)`]
+  claimed_until timestamp(3) [note: 'Worker lease expiry.']
+  last_error_code varchar(64)
+  last_error_message varchar(512)
   created_at timestamp(3) [not null, default: `CURRENT_TIMESTAMP(3)`]
+  updated_at timestamp(3) [not null, default: `CURRENT_TIMESTAMP(3)`, note: 'ON UPDATE CURRENT_TIMESTAMP(3) in the MySQL schema']
 
   indexes {
-    (user_id, created_at, id) [name: 'idx_item_purchase_user_created', note: 'created_at and id are DESC in the MySQL schema']
+    (processing_status, next_attempt_at) [name: 'idx_shipment_due_work']
+    (processing_status, claimed_until) [name: 'idx_shipment_lease']
   }
 
   checks {
-    `quantity between 1 and 99` [name: 'chk_item_purchase_quantity']
+    `attempt_count >= 0` [name: 'chk_shipment_attempts']
   }
+
+  Note: 'Durable work item and local status for any order, Pokémon or item (migration 008 folded item_shipments in). Deleting the purchase deletes its shipment.'
+}
+
+Table top_ups {
+  top_up_id char(36) [pk, not null, note: 'Client-generated UUID; also the payment provider idempotency key.']
+  user_id varchar(64) [not null]
+  amount_baht "int unsigned" [not null]
+  status "enum('PENDING','COMPLETED','FAILED','UNKNOWN')" [not null, default: 'PENDING']
+  provider_payment_id varchar(128)
+  last_error_code varchar(64)
+  attempt_count "int unsigned" [not null, default: 0]
+  next_attempt_at timestamp(3) [not null, default: `CURRENT_TIMESTAMP(3)`]
+  claimed_until timestamp(3)
+  created_at timestamp(3) [not null, default: `CURRENT_TIMESTAMP(3)`]
+  updated_at timestamp(3) [not null, default: `CURRENT_TIMESTAMP(3)`, note: 'ON UPDATE CURRENT_TIMESTAMP(3) in the MySQL schema']
+
+  indexes {
+    (status, next_attempt_at) [name: 'idx_top_up_due_work']
+    (status, claimed_until) [name: 'idx_top_up_lease']
+  }
+
+  checks {
+    `amount_baht between 1 and 10000` [name: 'chk_top_up_amount']
+  }
+
+  Note: 'Wallet top-up through the payment provider; credited to user_wallet when COMPLETED.'
 }
 
 Ref fk_listing_pokemon: pokemon_reference.source_id - shop_listing.pokemon_source_id
 Ref fk_item_listing_reference: item_reference.source_id - item_listing.item_source_id
 Ref fk_inventory_pokemon: pokemon_reference.source_id < user_inventory.pokemon_source_id
-Ref fk_item_inventory_item: item_reference.source_id < user_item_inventory.item_source_id
 Ref fk_purchase_pokemon: pokemon_reference.source_id < purchases.pokemon_source_id
-Ref fk_item_purchase_item: item_reference.source_id < item_purchases.item_source_id
 Ref fk_wallet_user: users.user_id - user_wallet.user_id
+Ref fk_inventory_item: item_reference.source_id < user_inventory.item_source_id
 Ref fk_inventory_user: users.user_id < user_inventory.user_id
-Ref fk_item_inventory_user: users.user_id < user_item_inventory.user_id
+Ref fk_purchase_item: item_reference.source_id < purchases.item_source_id
 Ref fk_purchase_user: users.user_id < purchases.user_id
-Ref fk_item_purchase_user: users.user_id < item_purchases.user_id
+Ref fk_shipment_purchase: purchases.id - shipments.purchase_id [delete: cascade]
+Ref fk_top_up_user: users.user_id < top_ups.user_id

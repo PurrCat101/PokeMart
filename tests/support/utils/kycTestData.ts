@@ -50,7 +50,6 @@ export async function resetKycScenarioData(database: MySQLConnection, scenario: 
   }
   await database.query('UPDATE user_wallet SET balance=? WHERE user_id=?', [kycCatalog.walletBalance, userId]);
   await database.query('DELETE FROM user_inventory WHERE user_id=?', [userId]);
-  await database.query('DELETE FROM user_item_inventory WHERE user_id=?', [userId]);
   await database.query(
     'UPDATE item_listing SET price=?, stock=?, active=TRUE WHERE item_source_id IN (?, ?)',
     [kycCatalog.itemPrice, kycCatalog.itemStock, kycCatalog.itemId, kycCatalog.masterItemId],
@@ -68,7 +67,7 @@ export async function itemStock(database: MySQLConnection, itemId: number): Prom
 }
 
 export async function holdsItem(database: MySQLConnection, scenario: KycScenario, itemId: number): Promise<number> {
-  const [rows] = await database.query<import('mysql2').RowDataPacket[]>('SELECT quantity FROM user_item_inventory WHERE user_id=? AND item_source_id=?', [kycUsers[scenario].userId, itemId]);
+  const [rows] = await database.query<import('mysql2').RowDataPacket[]>('SELECT quantity FROM user_inventory WHERE user_id=? AND item_source_id=?', [kycUsers[scenario].userId, itemId]);
   return rows.length ? Number(rows[0].quantity) : 0;
 }
 
