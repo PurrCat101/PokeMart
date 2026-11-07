@@ -22,11 +22,11 @@ The formal contract is `specs/openapi.yaml`. This file describes behavior and ru
 | `GET` | `/api/pokemon/:id` | Get Pokémon reference details and shop listing |
 | `GET` | `/api/wallet` | Get the lab user's wallet |
 | `GET` | `/api/inventory` | Get Pokémon owned by the lab user |
-| `POST` | `/api/purchases` | Purchase a Pokémon using a client-generated purchase ID |
-| `GET` | `/api/purchases` | List purchase history |
-| `GET` | `/api/purchases/:id` | Get purchase details |
-| `GET` | `/api/purchases/:id/shipment` | Get the authenticated user's local shipping status |
-| `GET` | `/api/items/purchases/:id/shipment` | Same, for an item purchase |
+| `POST` | `/api/purchases` | Purchase a Pokémon (`pokemonId`) or an item (`itemId`, never both) using a client-generated purchase ID |
+| `GET` | `/api/purchases` | List purchase history of both kinds, newest first; optional `kind=POKEMON` or `kind=ITEM` |
+| `GET` | `/api/purchases/:id` | Get purchase details (either kind) |
+| `GET` | `/api/purchases/:id/shipment` | Get the authenticated user's local shipping status (either kind) |
+| `GET` | `/api/items/inventory` | Get items owned by the lab user |
 | `GET` | `/health` | Liveness |
 | `GET` | `/ready` | Readiness (includes PokéMart API check) |
 
@@ -88,7 +88,9 @@ Validation and business rules, checked in this order:
 7. Stock ≥ quantity → otherwise `409 INSUFFICIENT_STOCK`.
 8. Wallet balance ≥ unit price × quantity → otherwise `422 INSUFFICIENT_FUNDS`.
 
-`POST /api/items/purchases` (body `{ purchaseId, itemId, quantity }`) follows the same order with `ITEM_PURCHASE_DUPLICATE`, `ITEM_NOT_FOUND`, `ITEM_NOT_FOR_SALE`, and a real KYC check. Like a Pokémon purchase it creates a `PENDING` shipment in the same transaction. Item purchases are read back with `GET /api/items/purchases/{id}`.
+One endpoint buys either kind of product: the body is `{ purchaseId, quantity }` plus exactly one of `pokemonId` or `itemId`. Sending both returns `400 VALIDATION_ERROR` (field `body`), and sending neither reports the missing `pokemonId`. A request with `itemId` follows the same order with `ITEM_NOT_FOUND` and `ITEM_NOT_FOR_SALE` in place of the Pokémon codes (the duplicate code is always `PURCHASE_DUPLICATE`), and a real KYC check. Either kind creates a `PENDING` shipment in the same transaction. Both kinds are read back with the same `GET /api/purchases/{id}`.
+
+A purchase response carries `purchaseId`, `kind` (`POKEMON` or `ITEM`), `pokemon` or `item` (`{ id, name }`, only the one that applies), `quantity`, `pricing` (`unitPrice`, `totalPrice`) and `createdAt`. `GET /api/purchases` uses the same shape in `items`, accepts `limit`, `offset` and `kind` (any other value of `kind` returns `400 VALIDATION_ERROR`), and an unknown query parameter returns `400 UNKNOWN_QUERY_PARAMETER`.
 
 Effects of a successful purchase, all in one database transaction:
 
@@ -109,7 +111,7 @@ The client generates a UUID `purchaseId` before sending `POST /api/purchases`. I
 - Generate a new ID for each new purchase intent.
 - A failure before the purchase transaction commits does not reserve the ID. The same ID can be retried, including after a timeout or dependency error; the client should first check `GET /api/purchases/{purchaseId}` when the result is uncertain.
 - When a purchase with that ID has committed, another POST using it returns `409 PURCHASE_DUPLICATE`, even if the body differs. Use `GET /api/purchases/{purchaseId}` to inspect the completed purchase.
-- Pokémon and item purchases share one `purchases` table, so a committed `purchaseId` is a duplicate for both `POST /api/purchases` and `POST /api/items/purchases`; the response uses the code of the endpoint called (`PURCHASE_DUPLICATE` or `ITEM_PURCHASE_DUPLICATE`). Clients should generate a fresh UUID per purchase attempt regardless of kind.
+- Pokémon and item purchases share one `purchases` table and one endpoint, so a committed `purchaseId` is a duplicate whichever product the second request names (`409 PURCHASE_DUPLICATE`). Clients should generate a fresh UUID per purchase attempt regardless of kind.
 - The purchase row's primary key is the final duplicate guard. The purchase row and wallet, stock, and inventory changes commit atomically.
 
 ## 7.5 Purchase history
@@ -130,4 +132,4 @@ Purchase-ID retry and duplicate behavior has a dedicated test group in `04-testi
 
 ## 7.7 Shipment status
 
-`GET /api/purchases/{purchaseId}/shipment` (and `GET /api/items/purchases/{purchaseId}/shipment` for item purchases, with identical behavior and response) requires bearer authentication and returns the locally persisted shipment state. It does not proxy to the shipping provider, so it remains available during provider outages. A valid purchase may be committed while `processingStatus` is `PENDING`, `RETRY_WAIT`, or `UNKNOWN` and `deliveryStatus` is `WAITING_FOR_SHIPMENT`; shipping failure does not mean the purchase failed. The response keeps `orderStatus`, `processingStatus`, and `deliveryStatus` separate so operational retry state cannot be mistaken for delivery progress. The lookup is scoped to the authenticated user's purchase and must not disclose another user's records. Malformed UUID returns `400 VALIDATION_ERROR`; missing or non-owned purchase returns `404 PURCHASE_NOT_FOUND`. Response schema and state transitions are defined in [`10-shipping-integration.md`](10-shipping-integration.md).
+`GET /api/purchases/{purchaseId}/shipment` (same behavior and response for Pokémon and item purchases) requires bearer authentication and returns the locally persisted shipment state. It does not proxy to the shipping provider, so it remains available during provider outages. A valid purchase may be committed while `processingStatus` is `PENDING`, `RETRY_WAIT`, or `UNKNOWN` and `deliveryStatus` is `WAITING_FOR_SHIPMENT`; shipping failure does not mean the purchase failed. The response keeps `orderStatus`, `processingStatus`, and `deliveryStatus` separate so operational retry state cannot be mistaken for delivery progress. The lookup is scoped to the authenticated user's purchase and must not disclose another user's records. Malformed UUID returns `400 VALIDATION_ERROR`; missing or non-owned purchase returns `404 PURCHASE_NOT_FOUND`. Response schema and state transitions are defined in [`10-shipping-integration.md`](10-shipping-integration.md).

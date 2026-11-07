@@ -67,7 +67,7 @@ Base path `/kyc/v1`. Contract เต็มอยู่ใน [`kyc-openapi.yaml`
 ลำดับการตรวจในการซื้อ (Pokémon และ item):
 
 1. ตรวจรูปแบบ request
-2. ตรวจ `purchaseId` ซ้ำ → `409 PURCHASE_DUPLICATE` / `ITEM_PURCHASE_DUPLICATE`
+2. ตรวจ `purchaseId` ซ้ำ → `409 PURCHASE_DUPLICATE`
 3. ตรวจว่ามีสินค้า → `404 POKEMON_NOT_FOUND` / `ITEM_NOT_FOUND`
 4. ตรวจว่าขายได้ → `409 POKEMON_NOT_FOR_SALE` / `ITEM_NOT_FOR_SALE`
 5. **ตรวจ KYC** → `403 KYC_PENDING_REVIEW` เมื่อบัญชีอยู่ระหว่างตรวจสอบ (ทุกสินค้า), `403 KYC_LEVEL_REQUIRED` เมื่อระดับไม่พอ, หรือ `503 DEPENDENCY_UNAVAILABLE` หาก KYC ใช้ไม่ได้และสินค้าต้องการระดับ > 0

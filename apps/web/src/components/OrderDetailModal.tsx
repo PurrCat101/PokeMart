@@ -15,7 +15,7 @@ const POLL_INTERVAL_MS = 15_000;
 
 export function OrderDetailModal({ order, onClose }: OrderDetailModalProps) {
   const [refreshToken, setRefreshToken] = useState(0);
-  const { shipment, loading, error } = usePurchaseShipment(order.purchaseId, refreshToken, order.kind);
+  const { shipment, loading, error } = usePurchaseShipment(order.purchaseId, refreshToken);
 
   useEffect(() => {
     const timer = setInterval(() => setRefreshToken((n) => n + 1), POLL_INTERVAL_MS);

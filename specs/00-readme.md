@@ -62,10 +62,10 @@ Public API:
 - `GET /api/pokemon` และ `GET /api/pokemon/{id}`
 - `GET /api/wallet`, `POST /api/wallet/top-ups`, `GET /api/wallet/top-ups/{topUpId}`, `GET /api/kyc/status` และ `POST /api/kyc/submissions`
 - `GET /api/inventory`
-- `GET /api/purchases` และ `GET /api/purchases/{id}`
+- `GET /api/purchases` (ประวัติรวม Pokémon และ item, กรองด้วย `?kind=POKEMON|ITEM` ได้) และ `GET /api/purchases/{id}`
 - `GET /api/purchases/{id}/shipment`
-- `GET /api/items/purchases`, `GET /api/items/purchases/{id}`, `GET /api/items/purchases/{id}/shipment`, `GET /api/items/inventory`
-- `POST /api/purchases` (ส่ง `purchaseId`, `pokemonId`, `quantity` ใน JSON body) และ `POST /api/items/purchases` (ส่ง `itemId` แทน `pokemonId`)
+- `GET /api/items/inventory`
+- `POST /api/purchases` (ส่ง `purchaseId`, `quantity` และ `pokemonId` หรือ `itemId` อย่างใดอย่างหนึ่งใน JSON body)
 - `GET /health` และ `GET /ready`
 
 Internal service ใช้ endpoints ที่สอดคล้องกันภายใต้ `/pokemart/v1` เช่น `/pokemart/v1/catalog/pokemon`, `/pokemart/v1/auth/login`, `/pokemart/v1/wallet` และ `/pokemart/v1/purchases`; wallet, inventory และ purchase resources ต้องใช้ bearer JWT

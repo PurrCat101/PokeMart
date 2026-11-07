@@ -10,16 +10,15 @@ tags:
   - { name: Account, description: 'Profile, wallet and identity verification (KYC) of the authenticated user: level 0 buys nothing, level 1 buys Pokémon and ordinary items, level 2 also buys the Master tier. An account under review (`PENDING_REVIEW`) buys nothing.' }
   - { name: Pokémon Catalog, description: Browse Pokémon listings. Public. }
   - { name: Item Catalog, description: Browse item listings and categories. Public. }
-  - { name: Inventory, description: Pokémon owned by the authenticated user. }
-  - { name: Pokémon Purchases, description: Buy a Pokémon and review purchase history. }
-  - { name: Item Purchases, description: Buy items and review item orders. }
+  - { name: Inventory, description: Pokémon and items owned by the authenticated user. }
+  - { name: Purchases, description: Buy a Pokémon or an item and review purchase history. }
   - { name: Shipping, description: Shipment status for a purchase. }
   - { name: Wallet, description: Balance and THB top-ups. }
   - { name: Health, description: Liveness and readiness probes. }
 x-tagGroups:
   - { name: Getting Started, tags: [Authentication, Account] }
   - { name: Shop, tags: [Pokémon Catalog, Item Catalog, Inventory] }
-  - { name: Orders, tags: [Pokémon Purchases, Item Purchases, Shipping] }
+  - { name: Orders, tags: [Purchases, Shipping] }
   - { name: Wallet & Payments, tags: [Wallet] }
   - { name: System, tags: [Health] }
 paths:
@@ -176,17 +175,25 @@ paths:
           $ref: '#/components/responses/Error'
   /api/purchases:
     get:
-      tags: [Pokémon Purchases]
-      summary: List the authenticated user's purchases
+      tags: [Purchases]
+      summary: List the authenticated user's purchases (Pokémon and items), newest first
       security:
         - bearerAuth: []
       description: |
-        Errors: 400 `VALIDATION_ERROR` or `UNKNOWN_QUERY_PARAMETER`;
+        One history for both kinds; each entry has a `kind`. `kind=POKEMON` or `kind=ITEM` narrows it.
+        Errors: 400 `VALIDATION_ERROR` (including an invalid `kind`) or `UNKNOWN_QUERY_PARAMETER`;
         500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE`.
       parameters:
         - $ref: '#/components/parameters/XRequestIdRequest'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
+        - name: kind
+          in: query
+          required: false
+          description: Narrow the history to one kind of purchase.
+          schema:
+            type: string
+            enum: [POKEMON, ITEM]
       responses:
         '200':
           $ref: '#/components/responses/PurchasePage'
@@ -199,15 +206,17 @@ paths:
         '503':
           $ref: '#/components/responses/Error'
     post:
-      tags: [Pokémon Purchases]
-      summary: Purchase a Pokémon
+      tags: [Purchases]
+      summary: Purchase a Pokémon or an item
       security:
         - bearerAuth: []
       description: |
-        Every Pokémon needs verification level 1. Errors: 400 `VALIDATION_ERROR` or `INVALID_JSON`;
-        403 `KYC_PENDING_REVIEW` (account under review) or `KYC_LEVEL_REQUIRED` (level 0, `details` has `required`/`current`);
-        404 `POKEMON_NOT_FOUND`;
-        409 `PURCHASE_DUPLICATE`, `POKEMON_NOT_FOR_SALE`, or `INSUFFICIENT_STOCK`;
+        Send exactly one of `pokemonId` or `itemId`. Every Pokémon and ordinary item needs verification level 1, the
+        Master tier level 2. A purchase ID is unique across both kinds. Errors: 400 `VALIDATION_ERROR` or `INVALID_JSON`
+        (including both or neither product id);
+        403 `KYC_PENDING_REVIEW` (account under review) or `KYC_LEVEL_REQUIRED` (`details` has `required`/`current`);
+        404 `POKEMON_NOT_FOUND` or `ITEM_NOT_FOUND`;
+        409 `PURCHASE_DUPLICATE`, `POKEMON_NOT_FOR_SALE`, `ITEM_NOT_FOR_SALE`, or `INSUFFICIENT_STOCK`;
         415 `UNSUPPORTED_MEDIA_TYPE`; 422 `INSUFFICIENT_FUNDS`;
         500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE` (also when the KYC service is down).
       parameters:
@@ -240,7 +249,7 @@ paths:
         '404':
           $ref: '#/components/responses/Error'
         '409':
-          description: Purchase ID already committed, Pokémon not for sale, or insufficient stock
+          description: Purchase ID already committed, product not for sale, or insufficient stock
           headers:
             X-Request-Id:
               $ref: '#/components/headers/XRequestId'
@@ -258,8 +267,8 @@ paths:
           $ref: '#/components/responses/Error'
   /api/purchases/{id}:
     get:
-      tags: [Pokémon Purchases]
-      summary: Get a purchase
+      tags: [Purchases]
+      summary: Get a purchase (either kind)
       security:
         - bearerAuth: []
       description: |
@@ -284,7 +293,7 @@ paths:
   /api/purchases/{id}/shipment:
     get:
       tags: [Shipping]
-      summary: Get the local shipment status for a purchase
+      summary: Get the local shipment status for a purchase (either kind)
       operationId: getPurchaseShipment
       security:
         - bearerAuth: []
@@ -342,7 +351,7 @@ paths:
         '503': { $ref: '#/components/responses/Error' }
   /api/items/inventory:
     get:
-      tags: [Item Purchases]
+      tags: [Inventory]
       summary: Get the authenticated user's item inventory
       security: [{ bearerAuth: [] }]
       description: Items only. Pokémon are listed by `GET /api/inventory`. Errors 500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE`.
@@ -356,94 +365,6 @@ paths:
           content: { application/json: { schema: { $ref: '#/components/schemas/ItemInventory' } } }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '500': { $ref: '#/components/responses/Error' }
-        '503': { $ref: '#/components/responses/Error' }
-  /api/items/purchases:
-    get:
-      tags: [Item Purchases]
-      summary: List the authenticated user's item purchases
-      security: [{ bearerAuth: [] }]
-      description: Newest first. Each item order has its own shipment (`GET /api/items/purchases/{id}/shipment`). Errors 400 `VALIDATION_ERROR` or `UNKNOWN_QUERY_PARAMETER`; 500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE`.
-      parameters:
-        - $ref: '#/components/parameters/XRequestIdRequest'
-        - $ref: '#/components/parameters/Limit'
-        - $ref: '#/components/parameters/Offset'
-      responses:
-        '200':
-          description: Page of item purchases
-          headers:
-            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
-          content: { application/json: { schema: { $ref: '#/components/schemas/ItemPurchasePage' } } }
-        '400': { $ref: '#/components/responses/Error' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '500': { $ref: '#/components/responses/Error' }
-        '503': { $ref: '#/components/responses/Error' }
-    post:
-      tags: [Item Purchases]
-      summary: Purchase one item listing
-      security: [{ bearerAuth: [] }]
-      description: The server enforces the account's verification, the item listing's KYC level (1 for ordinary items, 2 for the Master tier), stock, and wallet balance atomically. `403 KYC_PENDING_REVIEW` while the account is under review; `403 KYC_LEVEL_REQUIRED` when the level is too low (`details` has `required` and `current`).
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [purchaseId, itemId, quantity]
-              properties:
-                purchaseId: { type: string, format: uuid }
-                itemId: { type: integer, minimum: 1 }
-                quantity: { type: integer, minimum: 1, maximum: 99 }
-      responses:
-        '201':
-          description: Item purchased and added to item inventory
-          headers:
-            Location: { schema: { type: string, example: /api/items/purchases/6f1f0d7a-52a1-4c2a-9a0b-0c2e8f3d1a11 } }
-          content: { application/json: { schema: { $ref: '#/components/schemas/ItemPurchase' } } }
-        '400': { $ref: '#/components/responses/Error' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Error' }
-        '404': { $ref: '#/components/responses/Error' }
-        '409': { $ref: '#/components/responses/Error' }
-        '422': { $ref: '#/components/responses/Error' }
-        '503': { $ref: '#/components/responses/Error' }
-  /api/items/purchases/{id}:
-    get:
-      tags: [Item Purchases]
-      summary: Get a caller-owned item purchase
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        '200':
-          description: Item purchase
-          content: { application/json: { schema: { $ref: '#/components/schemas/ItemPurchase' } } }
-        '400': { $ref: '#/components/responses/Error' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { $ref: '#/components/responses/Error' }
-        '503': { $ref: '#/components/responses/Error' }
-  /api/items/purchases/{id}/shipment:
-    get:
-      tags: [Shipping]
-      summary: Get the local shipment status for an item purchase
-      operationId: getItemPurchaseShipment
-      security: [{ bearerAuth: [] }]
-      description: Same behaviour and response as `GET /api/purchases/{id}/shipment`, scoped to the caller's item purchase. Reads persisted state only.
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        '200':
-          description: Local shipment status
-          content: { application/json: { schema: { $ref: '#/components/schemas/Shipment' } } }
-        '400': { $ref: '#/components/responses/Error' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { $ref: '#/components/responses/Error' }
         '503': { $ref: '#/components/responses/Error' }
   /api/kyc/status:
     get:
@@ -648,24 +569,6 @@ components:
             properties:
               item: { type: object, required: [id, name, category, spriteUrl], properties: { id: { type: integer }, name: { type: string }, category: { type: string, nullable: true }, spriteUrl: { type: string, nullable: true } } }
               listing: { type: object, required: [price, availableStock, requiredKycLevel], properties: { price: { type: integer }, availableStock: { type: integer }, requiredKycLevel: { type: integer, enum: [0, 1, 2], description: 'Level needed to buy: 1 for ordinary items, 2 for the Master tier.' } } }
-    ItemPurchase:
-      type: object
-      required: [purchaseId, item, quantity, pricing, createdAt]
-      properties:
-        purchaseId: { type: string, format: uuid }
-        item: { type: object, required: [id, name], properties: { id: { type: integer }, name: { type: string } } }
-        quantity: { type: integer }
-        pricing: { type: object, required: [unitPrice, totalPrice], properties: { unitPrice: { type: integer }, totalPrice: { type: integer } } }
-        createdAt: { type: string, format: date-time }
-    ItemPurchasePage:
-      type: object
-      required: [totalCount, page, items]
-      properties:
-        totalCount: { type: integer }
-        page: { $ref: '#/components/schemas/Page' }
-        items:
-          type: array
-          items: { $ref: '#/components/schemas/ItemPurchase' }
     ItemInventory:
       type: object
       required: [items]
@@ -825,27 +728,47 @@ components:
     PurchaseRequest:
       type: object
       additionalProperties: false
-      required: [purchaseId, pokemonId, quantity]
+      required: [purchaseId, quantity]
+      oneOf:
+        - required: [pokemonId]
+        - required: [itemId]
       properties:
         purchaseId:
           type: string
           format: uuid
-          description: Client-generated UUID reused only when retrying this purchase attempt.
+          description: Client-generated UUID reused only when retrying this purchase attempt. Unique across Pokémon and item purchases.
         pokemonId:
           type: integer
           minimum: 1
+          description: Buy this Pokémon. Mutually exclusive with `itemId`.
+        itemId:
+          type: integer
+          minimum: 1
+          description: Buy this item. Mutually exclusive with `pokemonId`.
         quantity:
           type: integer
           minimum: 1
           maximum: 99
     Purchase:
       type: object
-      required: [purchaseId, pokemon, quantity, pricing, createdAt]
+      required: [purchaseId, kind, quantity, pricing, createdAt]
       properties:
         purchaseId:
           type: string
           format: uuid
+        kind:
+          type: string
+          enum: [POKEMON, ITEM]
+          description: Which product the purchase is for; `pokemon` is present for POKEMON, `item` for ITEM.
         pokemon:
+          type: object
+          required: [id, name]
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+        item:
           type: object
           required: [id, name]
           properties:
@@ -961,7 +884,6 @@ components:
                 - INSUFFICIENT_STOCK
                 - INSUFFICIENT_FUNDS
                 - PURCHASE_DUPLICATE
-                - ITEM_PURCHASE_DUPLICATE
                 - KYC_LEVEL_REQUIRED
                 - KYC_PENDING_REVIEW
                 - KYC_ALREADY_PENDING
