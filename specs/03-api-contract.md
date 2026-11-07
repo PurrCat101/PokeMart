@@ -26,6 +26,7 @@ The formal contract is `specs/openapi.yaml`. This file describes behavior and ru
 | `GET` | `/api/purchases` | List purchase history |
 | `GET` | `/api/purchases/:id` | Get purchase details |
 | `GET` | `/api/purchases/:id/shipment` | Get the authenticated user's local shipping status |
+| `GET` | `/api/items/purchases/:id/shipment` | Same, for an item purchase |
 | `GET` | `/health` | Liveness |
 | `GET` | `/ready` | Readiness (includes PokéMart API check) |
 
@@ -87,7 +88,7 @@ Validation and business rules, checked in this order:
 7. Stock ≥ quantity → otherwise `409 INSUFFICIENT_STOCK`.
 8. Wallet balance ≥ unit price × quantity → otherwise `422 INSUFFICIENT_FUNDS`.
 
-`POST /api/items/purchases` (body `{ purchaseId, itemId, quantity }`) follows the same order with `ITEM_PURCHASE_DUPLICATE`, `ITEM_NOT_FOUND`, `ITEM_NOT_FOR_SALE`, and a real KYC check. It creates no shipment. Item purchases are read back with `GET /api/items/purchases/{id}`.
+`POST /api/items/purchases` (body `{ purchaseId, itemId, quantity }`) follows the same order with `ITEM_PURCHASE_DUPLICATE`, `ITEM_NOT_FOUND`, `ITEM_NOT_FOR_SALE`, and a real KYC check. Like a Pokémon purchase it creates a `PENDING` shipment in the same transaction. Item purchases are read back with `GET /api/items/purchases/{id}`.
 
 Effects of a successful purchase, all in one database transaction:
 
@@ -128,4 +129,4 @@ Purchase-ID retry and duplicate behavior has a dedicated test group in `04-testi
 
 ## 7.7 Shipment status
 
-`GET /api/purchases/{purchaseId}/shipment` requires bearer authentication and returns the locally persisted shipment state. It does not proxy to the shipping provider, so it remains available during provider outages. A valid purchase may be committed while `processingStatus` is `PENDING`, `RETRY_WAIT`, or `UNKNOWN` and `deliveryStatus` is `WAITING_FOR_SHIPMENT`; shipping failure does not mean the purchase failed. The response keeps `orderStatus`, `processingStatus`, and `deliveryStatus` separate so operational retry state cannot be mistaken for delivery progress. The lookup is scoped to the authenticated user's purchase and must not disclose another user's records. Malformed UUID returns `400 VALIDATION_ERROR`; missing or non-owned purchase returns `404 PURCHASE_NOT_FOUND`. Response schema and state transitions are defined in [`10-shipping-integration.md`](10-shipping-integration.md).
+`GET /api/purchases/{purchaseId}/shipment` (and `GET /api/items/purchases/{purchaseId}/shipment` for item purchases, with identical behavior and response) requires bearer authentication and returns the locally persisted shipment state. It does not proxy to the shipping provider, so it remains available during provider outages. A valid purchase may be committed while `processingStatus` is `PENDING`, `RETRY_WAIT`, or `UNKNOWN` and `deliveryStatus` is `WAITING_FOR_SHIPMENT`; shipping failure does not mean the purchase failed. The response keeps `orderStatus`, `processingStatus`, and `deliveryStatus` separate so operational retry state cannot be mistaken for delivery progress. The lookup is scoped to the authenticated user's purchase and must not disclose another user's records. Malformed UUID returns `400 VALIDATION_ERROR`; missing or non-owned purchase returns `404 PURCHASE_NOT_FOUND`. Response schema and state transitions are defined in [`10-shipping-integration.md`](10-shipping-integration.md).

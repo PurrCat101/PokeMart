@@ -34,8 +34,8 @@ The BFF and its downstream services must be running for API-backed features to w
 - **Identity verification flow:** a signed-in account that is not verified (`level` 0, `status` `ACTIVE`) sees a popup, "Verify your identity", once per browser session (remembered per account in `sessionStorage`). "Maybe later" or the close button dismisses it; "Verify now" opens a full-page form (not a route; it replaces the tab content). The form asks for full name, 13-digit national ID, date of birth (18+), 10-digit phone, address and a confirmation checkbox, validates on submit with the same rules as the API (see [`12-kyc.md`](12-kyc.md) section 10), and shows server `details` next to the matching fields. A successful `POST /api/kyc/submissions` returns the user to the shop with a toast, and every tab then shows a banner: *Your verification is under review* (`PENDING_REVIEW`; browsing works, purchases are rejected by the API) or *We couldn't verify your identity* with a **Send again** button (`REJECTED`). The popup does not open while sign-in, checkout or the form is open. Approval or rejection happens out of band (test-only `PUT /__test/users/{userId}` on the KYC service); the UI picks it up the next time account info is loaded (page load or sign-in).
 - **Trainer sign-in:** use the demo login endpoint to establish a session. The access token is stored in browser `localStorage` and attached as a bearer token to authenticated API requests.
 - **Wallet:** display the signed-in trainer's balance and refresh it after purchase activity.
-- **Inventory:** display the signed-in trainer's owned Pokémon and, in a separate **Items** section, their owned items. Refresh the view after checkout (an item-only checkout also opens Inventory).
-- **Orders:** the Pokémon order table (with delivery status) is followed by an **Item orders** table. Item orders have no shipment, so they show no delivery status or order-detail dialog.
+- **No inventory page:** this is a shop, so the web has no Inventory screen. What a trainer bought is their order history, and everything bought (Pokémon or items) is delivered.
+- **Orders (`/orders`):** a real route. Pokémon orders and item orders sit on two tabs of the same page (`orders-kind-pokemon`, `orders-kind-items`). Every order row shows its delivery status and tracking number, and opens the same order-detail dialog with the shipment timeline. A successful checkout opens `/orders`. Signed-out visitors see a sign-in prompt.
 - **Purchase history:** show the signed-in trainer's purchase ledger with paginated results. Each order row/card displays a compact customer-facing delivery status and tracking number when available, without requiring navigation into the order.
 - **Order detail:** selecting an order opens a dedicated detail view with purchased Pokémon, totals, purchase timestamp, tracking number, current delivery status, and a chronological shipment timeline.
 
@@ -97,7 +97,7 @@ QA can use this mapping from requirements or a Figma screen to design a test bef
 | Screen / user intent | Figma concept or requirement | Required `data-testid` | Playwright locator |
 |---|---|---|---|
 | Open the app | Main application is ready | `app-shell` | `page.getByTestId('app-shell')` |
-| Navigate | Open catalog, inventory, or purchases | `nav-catalog`, `nav-inventory`, `nav-purchases` | `page.getByTestId('nav-inventory')` |
+| Navigate | Open catalog (`/`) or orders (`/orders`) | `nav-catalog`, `nav-orders` | `page.getByTestId('nav-orders')` |
 | See current balance | Signed-in trainer wallet amount | `wallet-balance` | `page.getByTestId('wallet-balance')` |
 | Search catalog | Search field | `catalog-search` | `page.getByTestId('catalog-search')` |
 | Browse items | Switch to item catalog and choose an item category from the dropdown (there are 50+ categories) | `catalog-kind-items`, `catalog-item-category` | `page.getByTestId('catalog-kind-items')`; `page.getByTestId('catalog-item-category').selectOption('standard-balls')` |
@@ -133,7 +133,7 @@ Known IDs should always use `page.getByTestId('pokemon-card-25')` directly. Do n
 | Area | Selector IDs |
 |---|---|
 | App shell | `app-shell`, `app-header`, `app-main` |
-| Navigation and cart entry | `nav-catalog`, `nav-inventory`, `nav-purchases`, `nav-catalog-mobile`, `nav-inventory-mobile`, `nav-purchases-mobile`, `open-cart`, `sign-in`, `sign-out` |
+| Navigation and cart entry | `nav-catalog`, `nav-orders`, `nav-catalog-mobile`, `nav-orders-mobile`, `open-cart`, `sign-in`, `sign-out` |
 | Catalog controls and states | `catalog-kind-pokemon`, `catalog-kind-items`, `catalog-search`, `catalog-in-stock-filter`, `catalog-sort`, `catalog-refresh`, `catalog-retry`, `catalog-service-error`, `catalog-type` (Pokémon type `<select>`, value = type or `all`), `catalog-item-category` (item category `<select>`, value = category slug or `all`), `catalog-results-summary`, `catalog-clear-filters`, `catalog-loading`, `catalog-empty`, `catalog-grid`, `catalog-pagination`, `catalog-page-previous`, `catalog-page-next`, `catalog-page-{number}` |
 | Catalog item | `pokemon-card-{pokemonId}`, `pokemon-name-{pokemonId}`, `pokemon-price-{pokemonId}`, `pokemon-stock-{pokemonId}`, `pokemon-quantity-{pokemonId}`, `pokemon-quantity-decrease-{pokemonId}`, `pokemon-quantity-increase-{pokemonId}`, `pokemon-add-to-cart-{pokemonId}` |
 | Catalog item (Pokémon) | adds `pokemon-buy-now-{pokemonId}` to the selectors above |

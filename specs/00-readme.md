@@ -10,7 +10,7 @@
 
 - **BFF** เป็นทางเข้าสำหรับ client ที่ `/api` ตรวจ request, ส่งต่อไปยัง service และดูแล contract ฝั่ง public
 - **PokéMart API** อยู่ใต้ `/pokemart/v1` และเป็นเจ้าของ business rules, purchase, duplicate detection และการเข้าถึงฐานข้อมูล
-- **MySQL** เก็บข้อมูลร้าน (Pokémon และ item), wallet/top-up, inventory, purchase และสถานะ/งาน shipment ที่ต้อง retry (ข้อมูล KYC อยู่ใน KYC API ไม่ใช่ MySQL)
+- **MySQL** เก็บข้อมูลร้าน (Pokémon และ item), wallet/top-up, inventory, purchase และสถานะ/งาน shipment ของทั้ง Pokémon และ item ที่ต้อง retry (ข้อมูล KYC อยู่ใน KYC API ไม่ใช่ MySQL)
 - **Payment Mock** จำลอง PaymentIntent สำหรับ top-up แบบ idempotent โดยไม่มีเงินจริงเคลื่อนย้าย
 - **Shipping Mock** เป็น HTTP service จำลองผู้ให้บริการขนส่งภายนอก; **Shipping Worker** ทำ batch/retry แยกจาก request ของผู้ซื้อ
 - **WireMock** ใช้จำลอง BFF สำหรับ contract tests เท่านั้น การทดสอบ integration จริงต้องเรียก BFF และ service จริง
@@ -64,7 +64,8 @@ Public API:
 - `GET /api/inventory`
 - `GET /api/purchases` และ `GET /api/purchases/{id}`
 - `GET /api/purchases/{id}/shipment`
-- `POST /api/purchases` (ส่ง `purchaseId`, `pokemonId`, `quantity` ใน JSON body)
+- `GET /api/items/purchases`, `GET /api/items/purchases/{id}`, `GET /api/items/purchases/{id}/shipment`, `GET /api/items/inventory`
+- `POST /api/purchases` (ส่ง `purchaseId`, `pokemonId`, `quantity` ใน JSON body) และ `POST /api/items/purchases` (ส่ง `itemId` แทน `pokemonId`)
 - `GET /health` และ `GET /ready`
 
 Internal service ใช้ endpoints ที่สอดคล้องกันภายใต้ `/pokemart/v1` เช่น `/pokemart/v1/catalog/pokemon`, `/pokemart/v1/auth/login`, `/pokemart/v1/wallet` และ `/pokemart/v1/purchases`; wallet, inventory และ purchase resources ต้องใช้ bearer JWT

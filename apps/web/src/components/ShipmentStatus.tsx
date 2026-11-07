@@ -55,16 +55,15 @@ interface Fetched {
   error: boolean;
 }
 
-/** Loads the public shipment for a purchase. Re-fetches when `refreshToken` changes. */
-export function usePurchaseShipment(purchaseId: string | null, refreshToken = 0): ShipmentState {
-  const key = `${purchaseId}:${refreshToken}`;
+/** Loads the public shipment for a Pokémon or item purchase. Re-fetches when `refreshToken` changes. */
+export function usePurchaseShipment(purchaseId: string | null, refreshToken = 0, kind: "pokemon" | "item" = "pokemon"): ShipmentState {
+  const key = `${kind}:${purchaseId}:${refreshToken}`;
   const [fetched, setFetched] = useState<Fetched | null>(null);
 
   useEffect(() => {
     if (!purchaseId) return;
     let cancelled = false;
-    api
-      .getShipment(purchaseId)
+    (kind === "item" ? api.getItemShipment(purchaseId) : api.getShipment(purchaseId))
       .then((shipment) => {
         if (!cancelled) setFetched({ key, shipment, error: false });
       })
@@ -75,7 +74,7 @@ export function usePurchaseShipment(purchaseId: string | null, refreshToken = 0)
     return () => {
       cancelled = true;
     };
-  }, [purchaseId, refreshToken, key]);
+  }, [purchaseId, refreshToken, kind, key]);
 
   return {
     shipment: fetched?.shipment ?? null,

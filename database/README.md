@@ -58,6 +58,9 @@ The copyable DBML source is [`schema/pokemart.dbml`](schema/pokemart.dbml). In d
 | | `user_id`, `item_source_id` | `VARCHAR(64)`, `INT` | No | FK → users/item_reference |
 | | `quantity` | `INT` | No | CHECK 1–99 |
 | | `unit_price`, `total_price` | `INT` | No | Price snapshots |
+| `item_shipments` | `purchase_id` | `CHAR(36)` | No | PK and FK → `item_purchases.id` (`ON DELETE CASCADE`); one shipment per item order |
+| | `processing_status`, `delivery_status` | `ENUM` | No | Same values as `shipments`: worker lifecycle and customer-facing delivery status |
+| | `provider_shipment_id`, `tracking_number`, `attempt_count`, `next_attempt_at`, `claimed_until`, `last_error_*`, `created_at`, `updated_at` | | | Same columns and indexes as `shipments` (the Pokémon equivalent, linked to `purchases.id`) |
 
 The remaining index columns are `created_at DESC, id DESC` in `idx_purchase_user_created`. The composite inventory primary key is `(user_id, pokemon_source_id)`.
 
@@ -96,5 +99,7 @@ Existing volumes that contain the retired `idempotency_keys` table needed `datab
 Existing volumes needed `database/migrations/003_add_users_and_foreign_keys.sql` once. It creates user profiles for existing wallet, inventory, and purchase IDs, then adds the user foreign keys. Existing IDs receive placeholder `.invalid` email addresses except for the lab demo user; password hashes remain NULL until credentials are provisioned.
 
 Existing volumes created before item catalog, KYC, or payment support needed `database/migrations/005_add_catalog_items_payment_and_kyc.sql`, and `database/migrations/006_add_item_purchases.sql` for item checkout. The baseline schema already contains all of these tables.
+
+`database/migrations/007_create_item_shipments_table.sql` adds `item_shipments` (item orders are shipped like Pokémon orders) and creates a shipment for every existing item purchase. Unlike 001-006 it is **not** in the baseline file: Liquibase applies it as changeset `009-item-shipments`, so `make db-migrate` brings an existing volume up to date and a fresh volume gets it automatically.
 
 `make db-reset` deletes the local Compose volume, then re-applies every Liquibase changeset, and is destructive. It must never be used for shared or production data.

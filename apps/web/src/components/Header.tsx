@@ -1,43 +1,41 @@
 "use client";
 
 import React from "react";
-import { PokeballIcon, WalletIcon, BackpackIcon, LedgerIcon, CartIcon, SunIcon, MoonIcon, UserIcon } from "./icons";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { PokeballIcon, WalletIcon, LedgerIcon, CartIcon, SunIcon, MoonIcon, UserIcon } from "./icons";
 import { AuthUser, WalletData } from "../types/api";
 import { useTheme } from "../contexts/ThemeContext";
 import { Button, IconButton, cx, money } from "./ui";
 
-export type AppTab = "catalog" | "inventory" | "purchases";
-
 interface HeaderProps {
-  activeTab: AppTab;
-  onTabChange: (tab: AppTab) => void;
   user: AuthUser | null;
   wallet: WalletData | null;
-  inventoryCount: number;
   cartCount: number;
+  /** Called when a nav link is followed, e.g. to leave the verification screen. */
+  onNavigate: () => void;
   onOpenCart: () => void;
   onOpenLogin: () => void;
   onLogout: () => void;
 }
 
-const TABS: Array<{ id: AppTab; label: string; Icon: typeof PokeballIcon }> = [
-  { id: "catalog", label: "Catalog", Icon: PokeballIcon },
-  { id: "inventory", label: "Inventory", Icon: BackpackIcon },
-  { id: "purchases", label: "Orders", Icon: LedgerIcon },
+const TABS: Array<{ id: "catalog" | "orders"; href: string; label: string; Icon: typeof PokeballIcon }> = [
+  { id: "catalog", href: "/", label: "Catalog", Icon: PokeballIcon },
+  { id: "orders", href: "/orders", label: "Orders", Icon: LedgerIcon },
 ];
 
 export function Header({
-  activeTab,
-  onTabChange,
   user,
   wallet,
-  inventoryCount,
   cartCount,
+  onNavigate,
   onOpenCart,
   onOpenLogin,
   onLogout,
 }: HeaderProps) {
   const { theme, toggleTheme } = useTheme();
+  const pathname = usePathname();
+  const activeTab = pathname.startsWith("/orders") ? "orders" : "catalog";
 
   return (
     <>
@@ -60,13 +58,13 @@ export function Header({
 
           {/* Primary navigation (desktop) */}
           <nav aria-label="Primary" className="ml-4 hidden h-full items-stretch gap-1 md:flex">
-            {TABS.map(({ id, label, Icon }) => {
+            {TABS.map(({ id, href, label, Icon }) => {
               const active = activeTab === id;
               return (
-                <button
+                <Link
                   key={id}
-                  type="button"
-                  onClick={() => onTabChange(id)}
+                  href={href}
+                  onClick={onNavigate}
                   data-testid={`nav-${id}`}
                   aria-current={active ? "page" : undefined}
                   className={cx(
@@ -76,16 +74,11 @@ export function Header({
                 >
                   <Icon className="h-4 w-4" />
                   <span>{label}</span>
-                  {id === "inventory" && inventoryCount > 0 && (
-                    <span className="rounded-full bg-surface-2 px-1.5 font-mono text-xs font-semibold tabular-nums text-fg-muted">
-                      {inventoryCount}
-                    </span>
-                  )}
                   <span
                     aria-hidden="true"
                     className={cx("absolute inset-x-3 -bottom-px h-0.5 rounded-full transition-colors", active ? "bg-brand" : "bg-transparent")}
                   />
-                </button>
+                </Link>
               );
             })}
           </nav>
@@ -148,15 +141,15 @@ export function Header({
       {/* Primary navigation (mobile): bottom tab bar, icon + label */}
       <nav
         aria-label="Primary"
-        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-2 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
       >
-        {TABS.map(({ id, label, Icon }) => {
+        {TABS.map(({ id, href, label, Icon }) => {
           const active = activeTab === id;
           return (
-            <button
+            <Link
               key={id}
-              type="button"
-              onClick={() => onTabChange(id)}
+              href={href}
+              onClick={onNavigate}
               data-testid={`nav-${id}-mobile`}
               aria-current={active ? "page" : undefined}
               className={cx(
@@ -165,11 +158,8 @@ export function Header({
               )}
             >
               <Icon className="h-5 w-5" />
-              <span>
-                {label}
-                {id === "inventory" && inventoryCount > 0 ? ` (${inventoryCount})` : ""}
-              </span>
-            </button>
+              <span>{label}</span>
+            </Link>
           );
         })}
       </nav>

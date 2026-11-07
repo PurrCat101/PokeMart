@@ -207,7 +207,7 @@ export const api = {
     });
   },
 
-  // Items have their own inventory and order history (and no shipment, which belongs to Pokémon orders).
+  // Items have their own inventory and order history; item orders ship just like Pokémon orders.
   async getItemInventory(): Promise<ItemInventoryEntry[]> {
     const result = await request<{ items: Array<{ item: { id: number; name: string }; quantity: number }> }>("/api/items/inventory");
     return result.items.map(({ item, quantity }) => ({ itemId: item.id, name: item.name, quantity }));
@@ -229,5 +229,9 @@ export const api = {
 
   async getShipment(purchaseId: string): Promise<ShipmentItem> {
     return request<ShipmentItem>(`/api/purchases/${purchaseId}/shipment`);
+  },
+
+  async getItemShipment(purchaseId: string): Promise<ShipmentItem> {
+    return request<ShipmentItem>(`/api/items/purchases/${purchaseId}/shipment`);
   },
 };

@@ -400,6 +400,30 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '500': { $ref: '#/components/responses/InternalError' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /pokemart/v1/items/purchases/{id}/shipment:
+    get:
+      tags: [Purchases]
+      operationId: getItemPurchaseShipment
+      summary: Read persisted shipment state for the caller's item purchase
+      security:
+        - bearerAuth: []
+      description: Reads MySQL only (`item_shipments`) and does not proxy to the shipping provider. Scoped to the caller's item purchase.
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdRequest'
+        - $ref: '#/components/parameters/PurchaseId'
+      responses:
+        '200':
+          description: Local shipment status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Shipment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /pokemart/v1/items/purchases:
     get:
       tags: [Purchases]

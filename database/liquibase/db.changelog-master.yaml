@@ -108,3 +108,15 @@ databaseChangeLog:
             relativeToChangelogFile: true
             splitStatements: true
             endDelimiter: ;
+
+  - changeSet:
+      id: 009-item-shipments
+      author: pokemart
+      context: schema
+      comment: Item purchases ship too - item_shipments mirrors shipments (migration 007)
+      changes:
+        - sqlFile:
+            path: ../migrations/007_create_item_shipments_table.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            endDelimiter: ;

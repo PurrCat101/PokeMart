@@ -362,7 +362,7 @@ paths:
       tags: [Item Purchases]
       summary: List the authenticated user's item purchases
       security: [{ bearerAuth: [] }]
-      description: Newest first. Item orders have no shipment. Errors 400 `VALIDATION_ERROR` or `UNKNOWN_QUERY_PARAMETER`; 500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE`.
+      description: Newest first. Each item order has its own shipment (`GET /api/items/purchases/{id}/shipment`). Errors 400 `VALIDATION_ERROR` or `UNKNOWN_QUERY_PARAMETER`; 500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE`.
       parameters:
         - $ref: '#/components/parameters/XRequestIdRequest'
         - $ref: '#/components/parameters/Limit'
@@ -421,6 +421,26 @@ paths:
         '200':
           description: Item purchase
           content: { application/json: { schema: { $ref: '#/components/schemas/ItemPurchase' } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /api/items/purchases/{id}/shipment:
+    get:
+      tags: [Shipping]
+      summary: Get the local shipment status for an item purchase
+      operationId: getItemPurchaseShipment
+      security: [{ bearerAuth: [] }]
+      description: Same behaviour and response as `GET /api/purchases/{id}/shipment`, scoped to the caller's item purchase. Reads persisted state only.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Local shipment status
+          content: { application/json: { schema: { $ref: '#/components/schemas/Shipment' } } }
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/Error' }
