@@ -12,7 +12,7 @@ test('INT-PURCHASE-CONCURRENCY-001 concurrent POSTs with one purchaseId commit o
   let snapshot: Awaited<ReturnType<typeof snapshotPurchaseState>> | undefined;
   try {
     snapshot = await snapshotPurchaseState(database, testEnvironment.userId, testEnvironment.pokemonId);
-    const [listingRows] = await database.query<RowDataPacket[]>('SELECT price, active FROM shop_listing WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
+    const [listingRows] = await database.query<RowDataPacket[]>('SELECT price, active FROM listings WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
     expect(listingRows).toHaveLength(1);
     expect(Number(listingRows[0].active)).toBe(1);
     const price = Number(listingRows[0].price);
@@ -37,7 +37,7 @@ test('INT-PURCHASE-CONCURRENCY-001 concurrent POSTs with one purchaseId commit o
 
     const [purchaseRows] = await database.query<RowDataPacket[]>('SELECT id FROM purchases WHERE id=?', [purchaseId]);
     const [walletRows] = await database.query<RowDataPacket[]>('SELECT balance FROM user_wallet WHERE user_id=?', [testEnvironment.userId]);
-    const [stockRows] = await database.query<RowDataPacket[]>('SELECT stock FROM shop_listing WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
+    const [stockRows] = await database.query<RowDataPacket[]>('SELECT stock FROM listings WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
     const [inventoryRows] = await database.query<RowDataPacket[]>('SELECT quantity FROM user_inventory WHERE user_id=? AND pokemon_source_id=?', [testEnvironment.userId, testEnvironment.pokemonId]);
     expect(purchaseRows).toHaveLength(1);
     expect(Number(walletRows[0].balance)).toBe(snapshot.walletBalance - price);
@@ -60,12 +60,12 @@ test('INT-PURCHASE-CONCURRENCY-002 concurrent distinct purchases competing for t
   let snapshot: Awaited<ReturnType<typeof snapshotPurchaseState>> | undefined;
   try {
     snapshot = await snapshotPurchaseState(database, testEnvironment.userId, testEnvironment.pokemonId);
-    const [listingRows] = await database.query<RowDataPacket[]>('SELECT price, active FROM shop_listing WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
+    const [listingRows] = await database.query<RowDataPacket[]>('SELECT price, active FROM listings WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
     expect(listingRows).toHaveLength(1);
     expect(Number(listingRows[0].active)).toBe(1);
     const price = Number(listingRows[0].price);
     expect(snapshot.walletBalance).toBeGreaterThanOrEqual(price);
-    await database.query('UPDATE shop_listing SET stock=1 WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
+    await database.query('UPDATE listings SET stock=1 WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
 
     const responses = await Promise.all(purchaseIds.map((purchaseId) => request.post('/pokemart/v1/purchases', {
       data: { purchaseId, pokemonId: testEnvironment.pokemonId, quantity: 1 },
@@ -84,7 +84,7 @@ test('INT-PURCHASE-CONCURRENCY-002 concurrent distinct purchases competing for t
 
     const [purchaseRows] = await database.query<RowDataPacket[]>('SELECT id FROM purchases WHERE id IN (?, ?)', purchaseIds);
     const [walletRows] = await database.query<RowDataPacket[]>('SELECT balance FROM user_wallet WHERE user_id=?', [testEnvironment.userId]);
-    const [stockRows] = await database.query<RowDataPacket[]>('SELECT stock FROM shop_listing WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
+    const [stockRows] = await database.query<RowDataPacket[]>('SELECT stock FROM listings WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
     const [inventoryRows] = await database.query<RowDataPacket[]>('SELECT quantity FROM user_inventory WHERE user_id=? AND pokemon_source_id=?', [testEnvironment.userId, testEnvironment.pokemonId]);
     expect(purchaseRows).toHaveLength(1);
     expect(Number(walletRows[0].balance)).toBe(snapshot.walletBalance - price);

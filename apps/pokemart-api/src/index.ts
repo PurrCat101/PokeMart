@@ -244,7 +244,7 @@ app.get('/metrics', async (_req, res) => {
 app.get('/ready', async (_req, res) => {
   try {
     await pool.query('SELECT 1');
-    const [rows] = await pool.query('SELECT COUNT(*) AS count FROM shop_listing');
+    const [rows] = await pool.query('SELECT COUNT(*) AS count FROM listings WHERE pokemon_source_id IS NOT NULL');
     const [userRows] = await pool.query('SELECT COUNT(*) AS count FROM users');
     if (Number((rows as Row[])[0].count) === 0 || Number((userRows as Row[])[0].count) === 0) {
       return res.status(503).json({ status: 'not_ready', checks: { mysql: 'uninitialized' } });
@@ -303,15 +303,15 @@ app.get('/pokemart/v1/catalog/pokemon', async (req, res, next) => {
     if (type) { conditions.push('JSON_CONTAINS(r.types, JSON_QUOTE(?))'); values.push(type); }
     if (inStock) conditions.push('l.stock > 0');
     const where = conditions.join(' AND ');
-    const [countRows] = await pool.query(`SELECT COUNT(*) AS count FROM shop_listing l JOIN pokemon_reference r ON r.source_id=l.pokemon_source_id WHERE ${where}`, values);
-    const [rows] = await pool.query(`SELECT r.source_id AS id, r.name, r.types, r.sprite_url AS spriteUrl, l.price, l.stock FROM shop_listing l JOIN pokemon_reference r ON r.source_id=l.pokemon_source_id WHERE ${where} ORDER BY r.source_id ASC LIMIT ? OFFSET ?`, [...values, limit, offset]);
+    const [countRows] = await pool.query(`SELECT COUNT(*) AS count FROM listings l JOIN pokemon_reference r ON r.source_id=l.pokemon_source_id WHERE ${where}`, values);
+    const [rows] = await pool.query(`SELECT r.source_id AS id, r.name, r.types, r.sprite_url AS spriteUrl, l.price, l.stock FROM listings l JOIN pokemon_reference r ON r.source_id=l.pokemon_source_id WHERE ${where} ORDER BY r.source_id ASC LIMIT ? OFFSET ?`, [...values, limit, offset]);
     res.json({ count: Number((countRows as Row[])[0].count), limit, offset, results: (rows as Row[]).map(asPokemon) });
   } catch (error) { next(error); }
 });
 app.get('/pokemart/v1/catalog/pokemon/:id', async (req, res, next) => {
   try {
     const id = pokemonId(req.params.id);
-    const [rows] = await pool.query(`SELECT r.source_id AS id, r.name, r.types, r.sprite_url AS spriteUrl, l.price, l.stock FROM shop_listing l JOIN pokemon_reference r ON r.source_id=l.pokemon_source_id WHERE l.active=TRUE AND r.source_id=?`, [id]);
+    const [rows] = await pool.query(`SELECT r.source_id AS id, r.name, r.types, r.sprite_url AS spriteUrl, l.price, l.stock FROM listings l JOIN pokemon_reference r ON r.source_id=l.pokemon_source_id WHERE l.active=TRUE AND r.source_id=?`, [id]);
     if (!(rows as Row[]).length) throw new AppError(404, 'POKEMON_NOT_FOUND', 'Pokémon not found');
     res.json(asPokemon((rows as Row[])[0]));
   } catch (error) { next(error); }
@@ -328,14 +328,14 @@ app.get('/pokemart/v1/catalog/items', async (req, res, next) => {
     if (category) { conditions.push('r.category=?'); values.push(category); }
     if (inStock) conditions.push('l.stock > 0');
     const where = conditions.join(' AND ');
-    const [countRows] = await pool.query(`SELECT COUNT(*) AS count FROM item_listing l JOIN item_reference r ON r.source_id=l.item_source_id WHERE ${where}`, values);
-    const [rows] = await pool.query(`SELECT r.source_id AS id, r.name, r.category, r.sprite_url AS spriteUrl, l.price, l.stock, l.required_kyc_level AS requiredKycLevel FROM item_listing l JOIN item_reference r ON r.source_id=l.item_source_id WHERE ${where} ORDER BY r.source_id LIMIT ? OFFSET ?`, [...values, limit, offset]);
+    const [countRows] = await pool.query(`SELECT COUNT(*) AS count FROM listings l JOIN item_reference r ON r.source_id=l.item_source_id WHERE ${where}`, values);
+    const [rows] = await pool.query(`SELECT r.source_id AS id, r.name, r.category, r.sprite_url AS spriteUrl, l.price, l.stock, l.required_kyc_level AS requiredKycLevel FROM listings l JOIN item_reference r ON r.source_id=l.item_source_id WHERE ${where} ORDER BY r.source_id LIMIT ? OFFSET ?`, [...values, limit, offset]);
     res.json({ count: Number((countRows as Row[])[0].count), limit, offset, results: rows });
   } catch (error) { next(error); }
 });
 app.get('/pokemart/v1/catalog/item-categories', async (_req, res, next) => {
   try {
-    const [rows] = await pool.query('SELECT DISTINCT r.category FROM item_listing l JOIN item_reference r ON r.source_id=l.item_source_id WHERE l.active=TRUE AND r.category IS NOT NULL ORDER BY r.category');
+    const [rows] = await pool.query('SELECT DISTINCT r.category FROM listings l JOIN item_reference r ON r.source_id=l.item_source_id WHERE l.active=TRUE AND r.category IS NOT NULL ORDER BY r.category');
     res.json({ categories: (rows as Row[]).map((row) => row.category) });
   } catch (error) { next(error); }
 });
@@ -422,11 +422,11 @@ async function createPurchase(userId: string, body: unknown): Promise<{ status: 
   if (typeof candidate.purchaseId !== 'string' || !validUuid.test(candidate.purchaseId)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'purchaseId', message: 'must be a UUID' }]);
   const purchaseId = candidate.purchaseId as string;
   const pokemon = positiveInt(candidate.pokemonId, 'pokemonId'); const quantity = positiveInt(candidate.quantity, 'quantity', 99);
-  const kycGate = await prefetchKyc('SELECT required_kyc_level AS required FROM shop_listing WHERE pokemon_source_id=?', pokemon, userId);
+  const kycGate = await prefetchKyc('SELECT required_kyc_level AS required FROM listings WHERE pokemon_source_id=?', pokemon, userId);
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
-    const [listings] = await connection.query(`SELECT l.pokemon_source_id AS pokemonId,l.price,l.stock,l.active,l.required_kyc_level,r.name FROM shop_listing l JOIN pokemon_reference r ON r.source_id=l.pokemon_source_id WHERE l.pokemon_source_id=? FOR UPDATE`, [pokemon]);
+    const [listings] = await connection.query(`SELECT l.pokemon_source_id AS pokemonId,l.price,l.stock,l.active,l.required_kyc_level,r.name FROM listings l JOIN pokemon_reference r ON r.source_id=l.pokemon_source_id WHERE l.pokemon_source_id=? FOR UPDATE`, [pokemon]);
     const listing = (listings as Row[])[0];
     const [existingPurchases] = await connection.query('SELECT id FROM purchases WHERE id=?', [purchaseId]);
     if ((existingPurchases as Row[]).length) throw new AppError(409, 'PURCHASE_DUPLICATE', 'Purchase ID has already been processed');
@@ -441,7 +441,7 @@ async function createPurchase(userId: string, body: unknown): Promise<{ status: 
     const createdAt = new Date();
     await connection.query('INSERT INTO purchases (id,user_id,pokemon_source_id,quantity,unit_price,total_price,created_at) VALUES (?, ?, ?, ?, ?, ?, ?)', [purchaseId, userId, pokemon, quantity, listing.price, total, createdAt]);
     await connection.query('INSERT INTO shipments (purchase_id, processing_status, delivery_status, attempt_count, next_attempt_at, created_at, updated_at) VALUES (?, "PENDING", "WAITING_FOR_SHIPMENT", 0, ?, ?, ?)', [purchaseId, createdAt, createdAt, createdAt]);
-    await connection.query('UPDATE shop_listing SET stock=stock-? WHERE pokemon_source_id=?', [quantity, pokemon]);
+    await connection.query('UPDATE listings SET stock=stock-? WHERE pokemon_source_id=?', [quantity, pokemon]);
     await connection.query('UPDATE user_wallet SET balance=balance-? WHERE user_id=?', [total, userId]);
     await connection.query('INSERT INTO user_inventory (user_id,pokemon_source_id,quantity) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE quantity=quantity+VALUES(quantity)', [userId, pokemon, quantity]);
     const response = { id: purchaseId, pokemonId: pokemon, pokemonName: listing.name, quantity, unitPrice: Number(listing.price), totalPrice: total, createdAt: createdAt.toISOString() };
@@ -468,14 +468,14 @@ app.post('/pokemart/v1/items/purchases', authenticate, async (req, res, next) =>
     if (Object.keys(body).some((field) => field !== 'purchaseId' && field !== 'itemId' && field !== 'quantity')) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'body', message: 'contains unknown fields' }]);
     if (typeof body.purchaseId !== 'string' || !validUuid.test(body.purchaseId)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'purchaseId', message: 'must be a UUID' }]);
     const itemId = positiveInt(body.itemId, 'itemId'); const quantity = positiveInt(body.quantity, 'quantity', 99); const id = userId(res);
-    const kycGate = await prefetchKyc('SELECT required_kyc_level AS required FROM item_listing WHERE item_source_id=?', itemId, id);
+    const kycGate = await prefetchKyc('SELECT required_kyc_level AS required FROM listings WHERE item_source_id=?', itemId, id);
     connection = await pool.getConnection(); // acquired only after the KYC HTTP call
     await connection.beginTransaction();
     const [existing] = await connection.query('SELECT id FROM purchases WHERE id=?', [body.purchaseId]);
     if ((existing as Row[]).length) throw new AppError(409, 'ITEM_PURCHASE_DUPLICATE', 'Purchase ID has already been processed');
     const [references] = await connection.query('SELECT source_id FROM item_reference WHERE source_id=?', [itemId]);
     if (!(references as Row[]).length) throw new AppError(404, 'ITEM_NOT_FOUND', 'Item not found');
-    const [listings] = await connection.query('SELECT l.item_source_id AS itemId, l.price, l.stock, l.active, l.required_kyc_level, r.name FROM item_listing l JOIN item_reference r ON r.source_id=l.item_source_id WHERE l.item_source_id=? FOR UPDATE', [itemId]);
+    const [listings] = await connection.query('SELECT l.item_source_id AS itemId, l.price, l.stock, l.active, l.required_kyc_level, r.name FROM listings l JOIN item_reference r ON r.source_id=l.item_source_id WHERE l.item_source_id=? FOR UPDATE', [itemId]);
     const listing = (listings as Row[])[0];
     if (!listing || !listing.active) throw new AppError(409, 'ITEM_NOT_FOR_SALE', 'Item is not for sale');
     assertKyc(kycGate(), Number(listing.required_kyc_level ?? 0), 'item');
@@ -486,7 +486,7 @@ app.post('/pokemart/v1/items/purchases', authenticate, async (req, res, next) =>
     const createdAt = new Date();
     await connection.query('INSERT INTO purchases (id, user_id, item_source_id, quantity, unit_price, total_price, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)', [body.purchaseId, id, itemId, quantity, listing.price, total, createdAt]);
     await connection.query('INSERT INTO shipments (purchase_id, processing_status, delivery_status, attempt_count, next_attempt_at, created_at, updated_at) VALUES (?, "PENDING", "WAITING_FOR_SHIPMENT", 0, ?, ?, ?)', [body.purchaseId, createdAt, createdAt, createdAt]);
-    await connection.query('UPDATE item_listing SET stock=stock-? WHERE item_source_id=?', [quantity, itemId]);
+    await connection.query('UPDATE listings SET stock=stock-? WHERE item_source_id=?', [quantity, itemId]);
     await connection.query('UPDATE user_wallet SET balance=balance-? WHERE user_id=?', [total, id]);
     await connection.query('INSERT INTO user_inventory (user_id, item_source_id, quantity) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE quantity=quantity+VALUES(quantity)', [id, itemId, quantity]);
     await connection.commit();

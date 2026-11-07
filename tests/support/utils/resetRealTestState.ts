@@ -18,7 +18,7 @@ export async function resetRealTestState(database: MySQLConnection): Promise<voi
   }
 
   const [listingRows] = await database.query<RowDataPacket[]>(
-    'SELECT pokemon_source_id FROM shop_listing WHERE pokemon_source_id=?',
+    'SELECT pokemon_source_id FROM listings WHERE pokemon_source_id=?',
     [pokemonId],
   );
   if (listingRows.length !== 1) {
@@ -27,7 +27,7 @@ export async function resetRealTestState(database: MySQLConnection): Promise<voi
 
   await database.query('UPDATE user_wallet SET balance=? WHERE user_id=?', [walletBalance, userId]);
   await database.query(
-    'UPDATE shop_listing SET price=?, stock=?, active=TRUE WHERE pokemon_source_id=?',
+    'UPDATE listings SET price=?, stock=?, active=TRUE WHERE pokemon_source_id=?',
     [pokemonPrice, pokemonStock, pokemonId],
   );
   await database.query(

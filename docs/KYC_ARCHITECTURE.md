@@ -309,12 +309,7 @@ throw new AppError(503, 'DEPENDENCY_UNAVAILABLE', 'KYC service is temporarily un
 
 ### Database Schema
 
-**shop_listing**
-```sql
-required_kyc_level INT (0, 1, or 2)
-```
-
-**item_listing**
+**listings** (Pokémon and item rows)
 ```sql
 required_kyc_level INT (0, 1, or 2)
 ```

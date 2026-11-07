@@ -71,7 +71,7 @@ The client-generated `purchaseId` is the primary key of the purchase row. A retr
 
 `/ready` returns `200` only when:
 - a trivial query against MySQL succeeds, and
-- the `shop_listing` and `users` tables exist and contain baseline rows (guards against running against an uninitialized or unmigrated volume).
+- the `listings` and `users` tables exist and contain baseline rows (at least one Pokémon listing) (guards against running against an uninitialized or unmigrated volume).
 
 Otherwise it returns `503` with `checks.mysql` set to `"unavailable"` or `"uninitialized"`.
 

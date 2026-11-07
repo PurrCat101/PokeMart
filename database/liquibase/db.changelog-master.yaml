@@ -132,3 +132,15 @@ databaseChangeLog:
             relativeToChangelogFile: true
             splitStatements: true
             endDelimiter: ;
+
+  - changeSet:
+      id: 011-merge-listings
+      author: pokemart
+      context: schema
+      comment: Schema audit part 2 - fold shop_listing and item_listing into listings (migration 009)
+      changes:
+        - sqlFile:
+            path: ../migrations/009_merge_listings.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            endDelimiter: ;

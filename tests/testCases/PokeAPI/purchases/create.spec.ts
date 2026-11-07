@@ -18,7 +18,7 @@ test('INT-PURCHASE-CREATE-001 POST purchase commits once, exposes service DTO, a
   try {
     snapshot = await snapshotPurchaseState(database, testEnvironment.userId, testEnvironment.pokemonId);
     const [listingRows] = await database.query<RowDataPacket[]>(
-      'SELECT l.price, r.name FROM shop_listing l JOIN pokemon_reference r ON r.source_id=l.pokemon_source_id WHERE l.pokemon_source_id=? AND l.active=TRUE',
+      'SELECT l.price, r.name FROM listings l JOIN pokemon_reference r ON r.source_id=l.pokemon_source_id WHERE l.pokemon_source_id=? AND l.active=TRUE',
       [testEnvironment.pokemonId],
     );
     expect(listingRows).toHaveLength(1);
@@ -75,7 +75,7 @@ test('INT-PURCHASE-CREATE-001 POST purchase commits once, exposes service DTO, a
     });
 
     const [walletRows] = await database.query<RowDataPacket[]>('SELECT balance FROM user_wallet WHERE user_id=?', [testEnvironment.userId]);
-    const [stockRows] = await database.query<RowDataPacket[]>('SELECT stock FROM shop_listing WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
+    const [stockRows] = await database.query<RowDataPacket[]>('SELECT stock FROM listings WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
     const [inventoryRows] = await database.query<RowDataPacket[]>('SELECT quantity FROM user_inventory WHERE user_id=? AND pokemon_source_id=?', [testEnvironment.userId, testEnvironment.pokemonId]);
     expect(Number(walletRows[0].balance)).toBe(snapshot.walletBalance - price);
     expect(Number(stockRows[0].stock)).toBe(snapshot.stock - 1);
@@ -170,7 +170,7 @@ test('INT-PURCHASE-CREATE-003 POST purchase returns documented business errors w
   let originalActive: number | undefined;
   try {
     snapshot = await snapshotPurchaseState(database, testEnvironment.userId, testEnvironment.pokemonId);
-    const [listingRows] = await database.query<RowDataPacket[]>('SELECT active FROM shop_listing WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
+    const [listingRows] = await database.query<RowDataPacket[]>('SELECT active FROM listings WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
     originalActive = Number(listingRows[0].active);
 
     const cases: Array<{
@@ -191,9 +191,9 @@ test('INT-PURCHASE-CREATE-003 POST purchase returns documented business errors w
 
     for (const scenario of cases) {
       await restorePurchaseState(database, testEnvironment.userId, testEnvironment.pokemonId, snapshot);
-      await database.query('UPDATE shop_listing SET active=? WHERE pokemon_source_id=?', [originalActive, testEnvironment.pokemonId]);
-      if (scenario.deactivate) await database.query('UPDATE shop_listing SET active=FALSE WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
-      if (scenario.stock !== undefined) await database.query('UPDATE shop_listing SET stock=? WHERE pokemon_source_id=?', [scenario.stock, testEnvironment.pokemonId]);
+      await database.query('UPDATE listings SET active=? WHERE pokemon_source_id=?', [originalActive, testEnvironment.pokemonId]);
+      if (scenario.deactivate) await database.query('UPDATE listings SET active=FALSE WHERE pokemon_source_id=?', [testEnvironment.pokemonId]);
+      if (scenario.stock !== undefined) await database.query('UPDATE listings SET stock=? WHERE pokemon_source_id=?', [scenario.stock, testEnvironment.pokemonId]);
       if (scenario.balance !== undefined) await database.query('UPDATE user_wallet SET balance=? WHERE user_id=?', [scenario.balance, testEnvironment.userId]);
 
       const purchaseId = testEnvironment.purchaseId();
@@ -218,7 +218,7 @@ test('INT-PURCHASE-CREATE-003 POST purchase returns documented business errors w
   } finally {
     try {
       if (snapshot) await restorePurchaseState(database, testEnvironment.userId, testEnvironment.pokemonId, snapshot);
-      if (originalActive !== undefined) await database.query('UPDATE shop_listing SET active=? WHERE pokemon_source_id=?', [originalActive, testEnvironment.pokemonId]);
+      if (originalActive !== undefined) await database.query('UPDATE listings SET active=? WHERE pokemon_source_id=?', [originalActive, testEnvironment.pokemonId]);
     } finally {
       await database.close();
     }

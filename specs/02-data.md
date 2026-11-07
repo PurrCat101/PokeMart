@@ -28,13 +28,12 @@ The schema must support the shop listing/reference relationship, wallet, Pokémo
 
 - `pokemon_reference`: source ID (PK), name, types, sprite URL. Read-only during tests.
 - `users`: stable user ID (PK), unique email, display name, nullable scrypt `password_hash`, active flag, and creation timestamp. The password hash is NULL for legacy profiles until credentials are provisioned.
-- `shop_listing`: Pokémon source ID (PK/FK), price, stock, active flag, and `required_kyc_level` (0–2). Lab-owned.
+- `listings`: surrogate ID (PK), nullable Pokémon source ID (FK to `pokemon_reference`) and nullable item source ID (FK to `item_reference`) with a CHECK that exactly one is set, price, stock, active flag, and `required_kyc_level` (0–2). A unique key per product column gives at most one listing per product. Lab-owned.
 - `item_reference`: source ID (PK), name, PokéAPI cost, category, and sprite URL. Read-only snapshot.
-- `item_listing`: item source ID (PK/FK), price, stock, active flag, and `required_kyc_level` (0–2). Lab-owned.
 - `user_wallet`: user ID (PK/FK to `users`), balance. Balance must never go negative; at most one wallet per user.
 - `user_inventory`: surrogate ID (PK), user ID (FK to `users`), nullable pokemon source ID (FK to `pokemon_reference`) and nullable item source ID (FK to `item_reference`) with a CHECK that exactly one is set, quantity. Unique keys `(user_id, pokemon_source_id)` and `(user_id, item_source_id)` give one row per user per product. Pokémon and item ownership share one table; the foreign keys keep each product type-safe.
 - `purchases`: client-generated purchase UUID (PK), user ID (FK to `users`), nullable Pokémon source ID (FK to `pokemon_reference`) and nullable item source ID (FK to `item_reference`) with a CHECK that exactly one is set, a generated `kind` column (`POKEMON`/`ITEM`), quantity, unit price, total price (CHECK `total_price = unit_price * quantity`), created timestamp. The primary key prevents a successfully processed purchase ID from being used a second time, across both kinds.
-- KYC levels are **not** stored in MySQL. They are owned by the KYC API (see [`12-kyc.md`](12-kyc.md)); only the listing's `required_kyc_level` (0–2) lives in `shop_listing` and `item_listing`.
+- KYC levels are **not** stored in MySQL. They are owned by the KYC API (see [`12-kyc.md`](12-kyc.md)); only the listing's `required_kyc_level` (0–2) lives in `listings`.
 - `top_ups`: client-generated UUID (PK), user ID, integer THB amount, payment state, provider payment ID, recovery fields, and timestamps. `COMPLETED` is the only state that credits the wallet.
 There is no idempotency-key table. A client creates a UUID purchase ID before its first attempt and sends that same ID in the JSON body for retries of the same attempt. A committed `purchases.id` is the duplicate guard for both purchase endpoints. Failed transactions roll back the purchase row and all wallet/stock/inventory changes, so the ID remains usable on retry.
 

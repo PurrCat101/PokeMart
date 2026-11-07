@@ -120,7 +120,7 @@ test-items: ## Item order history and item inventory (API and web UI)
 	$(NPM) run test:items
 
 db-seed: ## Confirm baseline data is present in the local lab
-	$(COMPOSE) exec -T mysql sh -c 'mysql -u"$$MYSQL_USER" -p"$$MYSQL_PASSWORD" "$$MYSQL_DATABASE" -e "SELECT COUNT(*) AS catalog_records FROM shop_listing;"'
+	$(COMPOSE) exec -T mysql sh -c 'mysql -u"$$MYSQL_USER" -p"$$MYSQL_PASSWORD" "$$MYSQL_DATABASE" -e "SELECT COUNT(*) AS catalog_records FROM listings;"'
 
 db-migrate: ## Apply pending Liquibase changesets (safe to repeat)
 	$(COMPOSE) run --rm liquibase

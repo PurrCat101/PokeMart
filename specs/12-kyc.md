@@ -24,7 +24,7 @@ Status ของระดับ: `ACTIVE`, `PENDING_REVIEW`, `REJECTED` — เ�
 
 ## 3. Product gating
 
-`shop_listing` และ `item_listing` มี `required_kyc_level` (0, 1, หรือ 2). **ระดับ 0 ไม่มีสิทธิ์ซื้ออะไรเลย** จึงไม่มี listing ใดในข้อมูลเริ่มต้นที่ต้องการระดับ 0:
+ตาราง `listings` (ทั้ง Pokémon และ item) มี `required_kyc_level` (0, 1, หรือ 2). **ระดับ 0 ไม่มีสิทธิ์ซื้ออะไรเลย** จึงไม่มี listing ใดในข้อมูลเริ่มต้นที่ต้องการระดับ 0:
 
 | `required_kyc_level` | สินค้า | ผู้ซื้อที่ต้องมี |
 |---|---|---|
