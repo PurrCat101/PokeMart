@@ -15,9 +15,6 @@ const DELIVERY_STATUSES = [
   'DELIVERY_FAILED',
 ] as const;
 
-// Pokémon and item orders each have their own shipment table.
-const SHIPMENT_TABLES = ['shipments', 'item_shipments'] as const;
-
 function usage(): never {
   console.error('Usage: npm run update-shipment-status -- <purchaseId> <status>');
   console.error('Status: 1=LABEL_CREATED, 2=IN_TRANSIT, 3=OUT_FOR_DELIVERY, 4=DELIVERED, 5=DELIVERY_FAILED');
@@ -59,25 +56,18 @@ async function main() {
     const mockData = (await mockResponse.json()) as { providerShipmentId: string };
     console.log(`✅ Shipping-mock updated: ${mockData.providerShipmentId}`);
 
-    // 2. Database: whichever table holds this order
+    // 2. Database: one shipments table holds Pokémon and item orders alike
     console.log('Updating database...');
-    let updatedIn: string | null = null;
-    for (const table of SHIPMENT_TABLES) {
-      const [result] = await pool.query<mysql.ResultSetHeader>(
-        `UPDATE ${table} SET delivery_status = ?, updated_at = NOW(3) WHERE purchase_id = ?`,
-        [newStatus, purchaseId],
-      );
-      if (result.affectedRows > 0) {
-        updatedIn = table;
-        break;
-      }
-    }
-    if (!updatedIn) {
+    const [result] = await pool.query<mysql.ResultSetHeader>(
+      'UPDATE shipments SET delivery_status = ?, updated_at = NOW(3) WHERE purchase_id = ?',
+      [newStatus, purchaseId],
+    );
+    if (result.affectedRows === 0) {
       console.error(`❌ No shipment found in the database for ${purchaseId}`);
       process.exit(1);
     }
 
-    console.log(`✅ Database updated (${updatedIn})`);
+    console.log('✅ Database updated');
     console.log(`\n🎉 Order ${purchaseId} is now ${newStatus}`);
   } catch (error) {
     console.error('❌ Error:', error instanceof Error ? error.message : error);

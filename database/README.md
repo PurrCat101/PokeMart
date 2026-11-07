@@ -42,27 +42,20 @@ The copyable DBML source is [`schema/pokemart.dbml`](schema/pokemart.dbml). In d
 | | `required_kyc_level` | `TINYINT UNSIGNED` | No | CHECK 0–2 |
 | `user_wallet` | `user_id` | `VARCHAR(64)` | No | PK, FK → `users.user_id` (one-to-one) |
 | | `balance` | `INT` | No | CHECK `balance >= 0` |
-| `user_inventory` | `user_id` | `VARCHAR(64)` | No | Composite PK, FK → `users.user_id` |
-| | `pokemon_source_id` | `INT` | No | Composite PK, FK → `pokemon_reference.source_id` |
+| `user_inventory` | `id` | `BIGINT UNSIGNED` | No | PK, auto-increment (a nullable product column cannot be in a primary key) |
+| | `user_id` | `VARCHAR(64)` | No | FK → `users.user_id` |
+| | `pokemon_source_id` / `item_source_id` | `INT` | Yes | FK → `pokemon_reference` / `item_reference`; CHECK exactly one is set. Unique `(user_id, pokemon_source_id)` and `(user_id, item_source_id)` give one row per user per product |
 | | `quantity` | `INT` | No | CHECK `quantity > 0` |
 | `purchases` | `id` | `CHAR(36)` | No | PK; client-generated UUID |
-| | `user_id` | `VARCHAR(64)` | No | FK → `users.user_id`; included in `idx_purchase_user_created` |
-| | `pokemon_source_id` | `INT` | No | FK → `pokemon_reference.source_id` |
+| | `user_id` | `VARCHAR(64)` | No | FK → `users.user_id`; leads `idx_purchase_user_kind_created` |
+| | `pokemon_source_id` / `item_source_id` | `INT` | Yes | FK → `pokemon_reference` / `item_reference`; CHECK exactly one is set |
+| | `kind` | `ENUM('POKEMON','ITEM')` | No | STORED generated column, derived from which product column is set |
 | | `quantity` | `INT` | No | CHECK 1–99 |
 | | `unit_price` | `INT` | No | Price snapshot |
-| | `total_price` | `INT` | No | Price snapshot |
+| | `total_price` | `INT` | No | Price snapshot; CHECK `total_price = unit_price * quantity` |
 | | `created_at` | `TIMESTAMP(3)` | No | DEFAULT `CURRENT_TIMESTAMP(3)` |
-| `user_item_inventory` | `user_id`, `item_source_id` | `VARCHAR(64)`, `INT` | No | Composite PK; FK → users/item_reference |
-| | `quantity` | `INT` | No | CHECK `> 0` |
-| `item_purchases` | `id` | `CHAR(36)` | No | PK; client-generated UUID |
-| | `user_id`, `item_source_id` | `VARCHAR(64)`, `INT` | No | FK → users/item_reference |
-| | `quantity` | `INT` | No | CHECK 1–99 |
-| | `unit_price`, `total_price` | `INT` | No | Price snapshots |
-| `item_shipments` | `purchase_id` | `CHAR(36)` | No | PK and FK → `item_purchases.id` (`ON DELETE CASCADE`); one shipment per item order |
-| | `processing_status`, `delivery_status` | `ENUM` | No | Same values as `shipments`: worker lifecycle and customer-facing delivery status |
-| | `provider_shipment_id`, `tracking_number`, `attempt_count`, `next_attempt_at`, `claimed_until`, `last_error_*`, `created_at`, `updated_at` | | | Same columns and indexes as `shipments` (the Pokémon equivalent, linked to `purchases.id`) |
 
-The remaining index columns are `created_at DESC, id DESC` in `idx_purchase_user_created`. The composite inventory primary key is `(user_id, pokemon_source_id)`.
+The remaining index columns are `kind, created_at DESC, id DESC` in `idx_purchase_user_kind_created`. Pokémon and item orders, shipments and inventory share one table each (`purchases`, `shipments`, `user_inventory`); see migration 008.
 
 The fresh-volume seed provisions the demo account `lab-user-001@example.test`, its wallet, and KYC `level` 1 (the KYC service seeds it; level 1 can shop). Changeset `007-seed-kyc-test-users` adds 29 `lab-kyc-*` accounts, one per KYC test case, each with its own wallet and the same demo password; their KYC level and status are set by the tests themselves. Sign in with password `PokeMartLab!2026` for local practice only. It also creates `lab-empty-user-001`, a test-only active profile with no wallet or password. Passwords are stored as scrypt hashes, never plaintext. The schema does not include a public registration or password-reset endpoint; legacy profiles have a NULL password hash and cannot sign in until credentials are provisioned.
 
@@ -101,5 +94,16 @@ Existing volumes needed `database/migrations/003_add_users_and_foreign_keys.sql`
 Existing volumes created before item catalog, KYC, or payment support needed `database/migrations/005_add_catalog_items_payment_and_kyc.sql`, and `database/migrations/006_add_item_purchases.sql` for item checkout. The baseline schema already contains all of these tables.
 
 `database/migrations/007_create_item_shipments_table.sql` adds `item_shipments` (item orders are shipped like Pokémon orders) and creates a shipment for every existing item purchase. Unlike 001-006 it is **not** in the baseline file: Liquibase applies it as changeset `009-item-shipments`, so `make db-migrate` brings an existing volume up to date and a fresh volume gets it automatically.
+
+`database/migrations/008_unify_orders_shipments_inventory.sql` (schema audit, Liquibase changeset `010`) folds `item_purchases` into `purchases`, `item_shipments` into `shipments` and `user_item_inventory` into `user_inventory`, then drops the three twin tables (13 → 10 tables). Existing rows are copied over. A purchase ID is now unique across both kinds. DDL commits implicitly in MySQL, so the file is not atomic: a failure part-way leaves a half-migrated database. Back up first and restore if it fails:
+
+```
+# before: make db-migrate
+podman compose exec -T mysql sh -c 'mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' > backup-before-008.sql
+# on failure: restore, fix the cause, then run make db-migrate again
+podman compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < backup-before-008.sql
+```
+
+The migration also stops (and the backup is the way back) if a purchase ID exists in both `purchases` and `item_purchases`, because the merged table's primary key rejects the duplicate. After a successful run, `make up` recreates `pokemart-api`, `shipping-worker` and `bff` so they run code that matches the new schema.
 
 `make db-reset` deletes the local Compose volume, then re-applies every Liquibase changeset, and is destructive. It must never be used for shared or production data.

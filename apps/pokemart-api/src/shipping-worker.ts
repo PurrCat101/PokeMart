@@ -14,17 +14,6 @@ export interface ShippingWorkerOptions {
   logger?: (fields: Record<string, unknown>) => void;
 }
 
-/** Pokémon and item purchases each have their own shipment table; both follow the same lifecycle. */
-type ShipmentKind = 'pokemon' | 'item';
-const SHIPMENT_KINDS: ShipmentKind[] = ['pokemon', 'item'];
-// Fixed names only (never user input), so interpolating them into SQL is safe.
-const SHIPMENT_TABLE: Record<ShipmentKind, string> = { pokemon: 'shipments', item: 'item_shipments' };
-
-interface ClaimedShipment {
-  purchaseId: string;
-  kind: ShipmentKind;
-}
-
 export class ShippingWorker {
   private readonly pool: Pool;
   private readonly baseUrl: string;
@@ -139,8 +128,8 @@ export class ShippingWorker {
         return 0;
       }
 
-      for (const { purchaseId, kind } of claimedPurchases) {
-        await this.processSingleShipment(purchaseId, kind);
+      for (const purchaseId of claimedPurchases) {
+        await this.processSingleShipment(purchaseId);
       }
 
       return claimedPurchases.length;
@@ -155,16 +144,7 @@ export class ShippingWorker {
   /**
    * Short transaction to lease eligible rows.
    */
-  private async claimDueShipments(): Promise<ClaimedShipment[]> {
-    const claimed: ClaimedShipment[] = [];
-    for (const kind of SHIPMENT_KINDS) {
-      const ids = await this.claimDueShipmentsFrom(SHIPMENT_TABLE[kind]);
-      claimed.push(...ids.map((purchaseId) => ({ purchaseId, kind })));
-    }
-    return claimed;
-  }
-
-  private async claimDueShipmentsFrom(table: string): Promise<string[]> {
+  private async claimDueShipments(): Promise<string[]> {
     const conn = await this.pool.getConnection();
     try {
       await conn.beginTransaction();
@@ -174,7 +154,7 @@ export class ShippingWorker {
       // 2) or (status = PROCESSING and claimed_until < NOW(3)) -> crash recovery
       const [rows] = await conn.query<RowDataPacket[]>(
         `SELECT purchase_id
-         FROM ${table}
+         FROM shipments
          WHERE (
            (processing_status IN ('PENDING', 'RETRY_WAIT', 'UNKNOWN') AND next_attempt_at <= NOW(3) AND (claimed_until IS NULL OR claimed_until < NOW(3)))
            OR (processing_status = 'PROCESSING' AND claimed_until < NOW(3))
@@ -190,7 +170,7 @@ export class ShippingWorker {
         // Lease them
         const placeholders = purchaseIds.map(() => '?').join(',');
         await conn.query(
-          `UPDATE ${table}
+          `UPDATE shipments
            SET processing_status = 'PROCESSING',
                claimed_until = DATE_ADD(NOW(3), INTERVAL ? SECOND),
                updated_at = NOW(3)
@@ -212,22 +192,17 @@ export class ShippingWorker {
   /**
    * Process a single shipment outside DB transaction.
    */
-  private async processSingleShipment(purchaseId: string, kind: ShipmentKind): Promise<void> {
-    const table = SHIPMENT_TABLE[kind];
+  private async processSingleShipment(purchaseId: string): Promise<void> {
+    // One order holds either a Pokémon or an item; exactly one of the two LEFT JOINs matches.
     const [rows] = await this.pool.query<RowDataPacket[]>(
-      kind === 'pokemon'
-        ? `SELECT s.*, p.pokemon_source_id AS productId, r.name AS productName, p.quantity, u.display_name AS userName
-           FROM shipments s
-           JOIN purchases p ON p.id = s.purchase_id
-           JOIN pokemon_reference r ON r.source_id = p.pokemon_source_id
-           JOIN users u ON u.user_id = p.user_id
-           WHERE s.purchase_id = ?`
-        : `SELECT s.*, p.item_source_id AS productId, r.name AS productName, p.quantity, u.display_name AS userName
-           FROM item_shipments s
-           JOIN item_purchases p ON p.id = s.purchase_id
-           JOIN item_reference r ON r.source_id = p.item_source_id
-           JOIN users u ON u.user_id = p.user_id
-           WHERE s.purchase_id = ?`,
+      `SELECT s.*, p.kind, COALESCE(p.pokemon_source_id, p.item_source_id) AS productId,
+              COALESCE(pr.name, ir.name) AS productName, p.quantity, u.display_name AS userName
+       FROM shipments s
+       JOIN purchases p ON p.id = s.purchase_id
+       LEFT JOIN pokemon_reference pr ON pr.source_id = p.pokemon_source_id
+       LEFT JOIN item_reference ir ON ir.source_id = p.item_source_id
+       JOIN users u ON u.user_id = p.user_id
+       WHERE s.purchase_id = ?`,
       [purchaseId]
     );
 
@@ -242,7 +217,7 @@ export class ShippingWorker {
         address: '1 Test Street',
       },
       items: [
-        kind === 'pokemon'
+        item.kind === 'POKEMON'
           ? { pokemonId: item.productId, pokemonName: item.productName, quantity: item.quantity }
           : { itemId: item.productId, itemName: item.productName, quantity: item.quantity },
       ],
@@ -267,7 +242,7 @@ export class ShippingWorker {
       if (response.status === 202) {
         const data = (await response.json()) as { providerShipmentId: string; status: string; trackingNumber: string };
         await this.pool.query(
-          `UPDATE ${table}
+          `UPDATE shipments
            SET processing_status = 'LABEL_CREATED',
                delivery_status = 'LABEL_CREATED',
                provider_shipment_id = ?,
@@ -309,7 +284,7 @@ export class ShippingWorker {
       if (isClientErrorNonRetryable || currentAttempt >= this.maxAttempts) {
         // Exceeded attempts or non-retryable 4xx
         await this.pool.query(
-          `UPDATE ${table}
+          `UPDATE shipments
            SET processing_status = 'FAILED',
                attempt_count = ?,
                claimed_until = NULL,
@@ -324,7 +299,7 @@ export class ShippingWorker {
         // Retryable
         const delayMs = retryAfterMs ?? this.calculateBackoff(currentAttempt);
         await this.pool.query(
-          `UPDATE ${table}
+          `UPDATE shipments
            SET processing_status = 'RETRY_WAIT',
                attempt_count = ?,
                next_attempt_at = DATE_ADD(NOW(3), INTERVAL ? MICROSECOND),
@@ -345,7 +320,7 @@ export class ShippingWorker {
 
       if (currentAttempt >= this.maxAttempts) {
         await this.pool.query(
-          `UPDATE ${table}
+          `UPDATE shipments
            SET processing_status = 'FAILED',
                attempt_count = ?,
                claimed_until = NULL,
@@ -360,7 +335,7 @@ export class ShippingWorker {
         const delayMs = this.calculateBackoff(currentAttempt);
         const statusToSet = isTimeout ? 'UNKNOWN' : 'RETRY_WAIT';
         await this.pool.query(
-          `UPDATE ${table}
+          `UPDATE shipments
            SET processing_status = ?,
                attempt_count = ?,
                next_attempt_at = DATE_ADD(NOW(3), INTERVAL ? MICROSECOND),
@@ -395,12 +370,10 @@ export class ShippingWorker {
 
     try {
       let updatedCount = 0;
-      for (const kind of SHIPMENT_KINDS) {
-      const table = SHIPMENT_TABLE[kind];
       // Find shipments where provider_shipment_id is present and delivery_status is not terminal (DELIVERED or DELIVERY_FAILED)
       const [rows] = await this.pool.query<RowDataPacket[]>(
         `SELECT purchase_id, provider_shipment_id, delivery_status
-         FROM ${table}
+         FROM shipments
          WHERE provider_shipment_id IS NOT NULL
            AND delivery_status NOT IN ('DELIVERED', 'DELIVERY_FAILED')
            ${purchaseId === undefined ? '' : 'AND purchase_id = ?'}
@@ -422,7 +395,7 @@ export class ShippingWorker {
             const data = (await res.json()) as { status: string };
             if (data.status && data.status !== item.delivery_status) {
               await this.pool.query(
-                `UPDATE ${table}
+                `UPDATE shipments
                  SET delivery_status = ?, updated_at = NOW(3)
                  WHERE purchase_id = ?`,
                 [data.status, item.purchase_id]
@@ -436,7 +409,6 @@ export class ShippingWorker {
           // Provider outage leaves last known delivery status intact
           this.log({ severity: 'warn', action: 'sync_error', providerShipmentId: item.provider_shipment_id, error: err?.message });
         }
-      }
       }
 
       return updatedCount;

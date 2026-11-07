@@ -14,7 +14,7 @@
 | KYC API | `http://localhost:4005` | ตรวจ KYC level 0/1/2 ก่อนขายสินค้า มี test-only routes |
 | Payment Mock | `http://localhost:4004` | Stripe-style PaymentIntent สำหรับ wallet top-up |
 | Shipping Mock | `http://localhost:4002` | จำลอง shipping provider ภายนอก |
-| Shipping Worker | container | อ่านคิว `shipments` / `item_shipments` ยิง provider และ sync delivery status |
+| Shipping Worker | container | อ่านคิว `shipments` (ทั้ง Pokémon และ item) ยิง provider และ sync delivery status |
 | WireMock | `http://localhost:8080` | จำลอง public API สำหรับ contract tests |
 | Scalar | `http://localhost:8081` | เปิดดู OpenAPI ของทุก service |
 | Grafana (ทางเลือก) | `http://localhost:4300` | `make observe`: metric, log และค้น request ID ข้าม BFF → API |
@@ -156,7 +156,7 @@ npm run update-shipment-status -- <purchaseId> <status>
 
 `status`: 1 = LABEL_CREATED, 2 = IN_TRANSIT, 3 = OUT_FOR_DELIVERY, 4 = DELIVERED, 5 = DELIVERY_FAILED ตัวอย่าง: `npm run update-shipment-status -- <purchaseId> 2`
 
-คำสั่งนี้อัปเดตทั้ง shipping-mock (`http://localhost:4002`) และ `delivery_status` ในฐานข้อมูล (หาตาราง `shipments` หรือ `item_shipments` ให้เอง) shipping-mock บังคับลำดับสถานะ ต้องไล่ทีละขั้น (2 → 3 → 4) และ order ต้องผ่านการสร้าง label โดย worker ก่อน (สถานะอย่างน้อย `LABEL_CREATED`) ถึงจะอัปเดตได้ ถ้าเพิ่งรีเซ็ต shipping-mock order เก่าจะหาไม่เจอ
+คำสั่งนี้อัปเดตทั้ง shipping-mock (`http://localhost:4002`) และ `delivery_status` ในฐานข้อมูล (ตาราง `shipments` เก็บทั้ง Pokémon และ item order) shipping-mock บังคับลำดับสถานะ ต้องไล่ทีละขั้น (2 → 3 → 4) และ order ต้องผ่านการสร้าง label โดย worker ก่อน (สถานะอย่างน้อย `LABEL_CREATED`) ถึงจะอัปเดตได้ ถ้าเพิ่งรีเซ็ต shipping-mock order เก่าจะหาไม่เจอ
 
 ## เอกสารเพิ่มเติม
 

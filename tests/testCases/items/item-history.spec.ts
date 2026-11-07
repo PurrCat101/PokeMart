@@ -18,7 +18,7 @@ interface ItemOrder {
 
 test('ITEM-HIS-001 bought items show up in the item order list and the item inventory, newest first and paged', async ({ kycAccount }) => {
   const { api, database, userId } = await kycAccount('basic-item');
-  await database.query('DELETE FROM item_purchases WHERE user_id=?', [userId]);
+  await database.query('DELETE FROM purchases WHERE user_id=? AND kind="ITEM"', [userId]);
 
   const first = newPurchaseId();
   const second = newPurchaseId();
@@ -58,12 +58,12 @@ test('ITEM-HIS-001 bought items show up in the item order list and the item inve
 
 test('ITEM-HIS-002 a user never sees another user\'s item orders or items', async ({ kycAccount }) => {
   const buyer = await kycAccount('basic-item');
-  await buyer.database.query('DELETE FROM item_purchases WHERE user_id=?', [buyer.userId]);
+  await buyer.database.query('DELETE FROM purchases WHERE user_id=? AND kind="ITEM"', [buyer.userId]);
   const purchaseId = newPurchaseId();
   expect((await buyer.api.post('/api/items/purchases', { data: { purchaseId, itemId: kycCatalog.itemId, quantity: 1 } })).status()).toBe(201);
 
   const other = await kycAccount('basic-pokemon');
-  await other.database.query('DELETE FROM item_purchases WHERE user_id=?', [other.userId]);
+  await other.database.query('DELETE FROM purchases WHERE user_id=? AND kind="ITEM"', [other.userId]);
 
   const otherOrders = await (await other.api.get('/api/items/purchases')).json() as { totalCount: number; items: ItemOrder[] };
   expect(otherOrders.totalCount).toBe(0);
