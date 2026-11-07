@@ -340,7 +340,43 @@ paths:
           description: Item categories
           content: { application/json: { schema: { type: object, required: [categories], properties: { categories: { type: array, items: { type: string } } } } } }
         '503': { $ref: '#/components/responses/Error' }
+  /api/items/inventory:
+    get:
+      tags: [Item Purchases]
+      summary: Get the authenticated user's item inventory
+      security: [{ bearerAuth: [] }]
+      description: Items only. Pokémon are listed by `GET /api/inventory`. Errors 500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE`.
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdRequest'
+      responses:
+        '200':
+          description: Item inventory
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content: { application/json: { schema: { $ref: '#/components/schemas/ItemInventory' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
   /api/items/purchases:
+    get:
+      tags: [Item Purchases]
+      summary: List the authenticated user's item purchases
+      security: [{ bearerAuth: [] }]
+      description: Newest first. Item orders have no shipment. Errors 400 `VALIDATION_ERROR` or `UNKNOWN_QUERY_PARAMETER`; 500 `INTERNAL_ERROR`; 503 `DEPENDENCY_UNAVAILABLE`.
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdRequest'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Page of item purchases
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content: { application/json: { schema: { $ref: '#/components/schemas/ItemPurchasePage' } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
     post:
       tags: [Item Purchases]
       summary: Purchase one item listing
@@ -601,6 +637,27 @@ components:
         quantity: { type: integer }
         pricing: { type: object, required: [unitPrice, totalPrice], properties: { unitPrice: { type: integer }, totalPrice: { type: integer } } }
         createdAt: { type: string, format: date-time }
+    ItemPurchasePage:
+      type: object
+      required: [totalCount, page, items]
+      properties:
+        totalCount: { type: integer }
+        page: { $ref: '#/components/schemas/Page' }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ItemPurchase' }
+    ItemInventory:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [item, quantity]
+            properties:
+              item: { type: object, required: [id, name], properties: { id: { type: integer }, name: { type: string } } }
+              quantity: { type: integer, minimum: 1 }
     TopUp:
       type: object
       required: [topUpId, amount, status, createdAt, updatedAt]

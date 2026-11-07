@@ -19,7 +19,7 @@
 ## ความต้องการก่อนเริ่ม
 
 - Node.js และ npm (ใช้เวอร์ชัน LTS ที่รองรับ)
-- Docker Desktop พร้อม Docker Compose
+- Podman พร้อม podman-compose และ GNU Make (ดูขั้นตอนใน README หัวข้อ Prerequisites)
 - GNU Make เป็นตัวเลือก หากต้องการใช้คำสั่ง `make`
 
 ## เริ่มใช้งานบน Windows
@@ -29,13 +29,13 @@
 ```powershell
 Copy-Item .env.example .env
 npm install
-docker compose up -d --build
+make up
 ```
 
 ตรวจสอบสถานะและ readiness:
 
 ```powershell
-docker compose ps
+make ps
 Invoke-RestMethod http://localhost:4001/health
 Invoke-RestMethod http://localhost:4001/ready
 Invoke-RestMethod http://localhost:4000/ready
@@ -150,5 +150,5 @@ npm run test:e2e
 ## คำเตือน
 
 - `.env` ใช้สำหรับ local development เท่านั้น ห้ามใส่ credentials จริงหรือ commit secret
-- `docker compose down -v` และ `make db-reset` เป็นคำสั่งทำลายข้อมูลใน local database volume ใช้เฉพาะเมื่อต้องการลบข้อมูลทดสอบทั้งหมด ห้ามใช้กับ shared/production environment
+- `make fresh` และ `make db-reset` เป็นคำสั่งทำลายข้อมูลใน local database volume ใช้เฉพาะเมื่อต้องการลบข้อมูลทดสอบทั้งหมด ห้ามใช้กับ shared/production environment
 - Authentication ปัจจุบันเป็น fixed development identity ไม่เหมาะกับ production

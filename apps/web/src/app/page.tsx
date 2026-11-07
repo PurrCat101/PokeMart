@@ -851,8 +851,8 @@ export default function PokeMartApp() {
         kyc={kyc}
         onExecuteCheckout={handleExecuteCheckout}
         onCheckoutSuccess={(completed) => {
-          // Only Pokémon land in the inventory view.
-          if (completed.some((r) => r.kind === "pokemon")) setActiveTab("inventory");
+          // Pokémon and items both land in the inventory view (items in their own section).
+          if (completed.length > 0) setActiveTab("inventory");
         }}
       />
 

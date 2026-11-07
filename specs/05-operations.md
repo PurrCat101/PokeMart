@@ -2,7 +2,7 @@
 
 ## 11. Docker Compose requirements
 
-Compose defines `mysql`, `liquibase` (one-shot: applies the schema and seed data, then exits; the API, BFF and worker start only after it succeeds), `wiremock`, `pokemart-api`, `shipping-worker` (also runs the payment recovery sweep and serves `/metrics`), `shipping-mock`, `payment-mock`, `kyc-api`, `bff`, and `api-reference` (Scalar). The optional profile `observability` adds `loki`, `alloy`, `prometheus` and `grafana`. `docker compose down` does not stop profile services; use `make down` (it passes `--profile '*'`).
+Compose defines `mysql`, `liquibase` (one-shot: applies the schema and seed data, then exits; the API, BFF and worker start only after it succeeds), `wiremock`, `pokemart-api`, `shipping-worker` (also runs the payment recovery sweep and serves `/metrics`), `shipping-mock`, `payment-mock`, `kyc-api`, `bff`, and `api-reference` (Scalar). The optional profile `observability` adds `loki`, `prometheus` and `grafana`. `docker compose down` does not stop profile services; use `make down` (it passes `--profile '*'`).
 
 ## 11.1 Service ports (single source of truth)
 
@@ -41,7 +41,7 @@ Observability is introduced incrementally. The first application version must be
 - Health and readiness endpoints with documented meanings:
   - `/health` (liveness): the process is running. No dependency checks.
   - `/ready` (readiness): MySQL and the PokéMart API are reachable. Returns `503` otherwise.
-- Structured JSON logs to stdout/stderr so Docker can collect them.
+- Structured JSON logs to stdout/stderr so the container runtime can collect them.
 - Each log line includes timestamp, severity, service name, environment, request ID, HTTP method, route template, status code, and request duration where applicable.
 - Propagate the request ID from BFF to PokéMart API. Generate an ID if the incoming request does not provide a valid one.
 - Log purchase outcomes (committed, rolled back, duplicate) without logging credentials, authorization headers, secrets, or unnecessary personal data.
@@ -57,7 +57,7 @@ Start it with `make observe` (a Compose profile named `observability`, off by de
 |---|---|
 | Grafana | One provisioned dashboard, *PokéMart overview*, plus Explore. Anonymous admin access is enabled, which is why the port is bound to `127.0.0.1` only. |
 | Prometheus | Scrapes `GET /metrics` from the BFF (4001), PokéMart API (4000) and shipping worker (4010) every 15 s. |
-| Loki + Alloy | Alloy reads every container's stdout through the Docker socket (mounted read-only) and ships it to Loki. `severity` becomes the label `level`. |
+| Loki | Receives logs pushed directly by the BFF, PokéMart API, shipping worker, shipping mock, KYC API and payment mock (`LOKI_URL=http://loki:3100`). Each service keeps writing stdout as before and also sends each line to Loki in batches. Labels: `service` and `level` (from `severity`). No Docker socket is involved, so it works the same under Podman. |
 
 **Metrics.** BFF and API record `http_request_duration_seconds` (method, route, status). `route` is the Express route pattern, for example `/api/pokemon/:id`, never the raw URL, and unmatched paths collapse into `unmatched`, so the number of time series stays bounded. The BFF also records `upstream_request_duration_seconds` and `upstream_request_failures_total` for its calls to the API. The worker has no API, so it reads the database at scrape time and reports `shipments_by_processing_status`, `shipments_by_delivery_status`, `top_ups_by_status`, a heartbeat, and `shipping_worker_metrics_db_up` (0 means the counts are stale because MySQL is unreachable). `/metrics` is an operational endpoint, not part of the OpenAPI contract, and is not logged.
 
@@ -67,7 +67,7 @@ Start it with `make observe` (a Compose profile named `observability`, off by de
 
 **Tests.** `make test-observability` (or `npm run test:observability`). The `OBS-MET-*` tests read `/metrics` directly and need only the services. The `OBS-STK-*` and `OBS-LOG-*` tests query Prometheus and Loki through Grafana and are **skipped automatically** when Grafana is not reachable, so a plain `npm test` stays green without the profile. Log tests poll, because lines reach Loki a few seconds after the request. One test proves that signing in never writes the password or the token to any log.
 
-**Known limits.** Alloy needs the Docker socket, which gives it a view of every container on the machine: local lab only. Alloy keeps only this lab's service names because the Compose project name depends on the folder name. There is no alerting, no traces and no MySQL or container metrics yet.
+**Known limits.** If Loki is down, the sender drops batches and prints one warning; the service keeps running. To trace a shipping outage, start from the worker's `shipment_retry_scheduled` line (warn, with `status` and `reason`), copy its `purchaseId`, then search `{service="shipping-mock"} |= "<purchaseId>"` to see the `provider_request` line: the path, the `mode` the provider was in, and the status it returned. There is no alerting, no traces and no MySQL or container metrics yet.
 
 ### Observability roadmap
 
@@ -118,7 +118,7 @@ The JWT secret and demo credentials above are local-only practice values. Tests 
 
 ## 14. Makefile command interface
 
-The Makefile is the documented entry point for common local workflows. It wraps real scripts and Docker Compose commands and contains no application logic. `make help` lists commands and describes destructive actions.
+The Makefile is the documented entry point for common local workflows. It wraps real scripts and Podman Compose commands and contains no application logic. `make help` lists commands and describes destructive actions.
 
 | Command | Intended behavior |
 |---|---|

@@ -134,7 +134,7 @@ export class ShippingWorker {
 
       return claimedPurchases.length;
     } catch (err: any) {
-      this.log({ action: 'processDueShipments', error: err?.message });
+      this.log({ severity: 'error', action: 'processDueShipments', error: err?.message });
       return 0;
     } finally {
       this.isProcessingBatch = false;
@@ -293,7 +293,7 @@ export class ShippingWorker {
            WHERE purchase_id = ?`,
           [currentAttempt, `HTTP_${response.status}`, errorMsg, purchaseId]
         );
-        this.log({ action: 'shipment_failed', purchaseId, currentAttempt, status: response.status, errorMsg });
+        this.log({ severity: 'error', action: 'shipment_failed', purchaseId, currentAttempt, status: response.status, reason: errorMsg });
       } else {
         // Retryable
         const delayMs = retryAfterMs ?? this.calculateBackoff(currentAttempt);
@@ -309,7 +309,7 @@ export class ShippingWorker {
            WHERE purchase_id = ?`,
           [currentAttempt, delayMs * 1000, `HTTP_${response.status}`, errorMsg, purchaseId]
         );
-        this.log({ action: 'shipment_retry_scheduled', purchaseId, currentAttempt, status: response.status });
+        this.log({ severity: 'warn', action: 'shipment_retry_scheduled', purchaseId, currentAttempt, status: response.status, reason: errorMsg, retryInMs: delayMs });
       }
     } catch (err: any) {
       clearTimeout(timeout);
@@ -346,7 +346,7 @@ export class ShippingWorker {
           [statusToSet, currentAttempt, delayMs * 1000, errorCode, errorMsg, purchaseId]
         );
       }
-      this.log({ action: 'shipment_error', purchaseId, currentAttempt, errorCode, errorMsg });
+      this.log({ severity: 'error', action: 'shipment_error', purchaseId, currentAttempt, errorCode, errorMsg });
     }
   }
 
@@ -406,13 +406,13 @@ export class ShippingWorker {
         } catch (err: any) {
           clearTimeout(timeout);
           // Provider outage leaves last known delivery status intact
-          this.log({ action: 'sync_error', providerShipmentId: item.provider_shipment_id, error: err?.message });
+          this.log({ severity: 'warn', action: 'sync_error', providerShipmentId: item.provider_shipment_id, error: err?.message });
         }
       }
 
       return updatedCount;
     } catch (err: any) {
-      this.log({ action: 'syncDeliveryStatus', error: err?.message });
+      this.log({ severity: 'error', action: 'syncDeliveryStatus', error: err?.message });
       return 0;
     } finally {
       this.isSyncingStatus = false;

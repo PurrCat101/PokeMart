@@ -13,10 +13,10 @@
 | Web frontend | `http://localhost:4003` | Next.js UI (เริ่มแยกด้วย `npm run dev`) สำหรับ catalog, cart/checkout, wallet, inventory และ purchase history |
 | BFF | `http://localhost:4001` | Public API สำหรับ client และแปลง response เป็น DTO ฝั่ง public |
 | PokéMart API | `http://localhost:4000` | Internal service สำหรับ business rules และการเข้าถึงข้อมูล |
-| KYC API | `http://localhost:4005` (Docker) | Internal service ระดับ KYC 3 ระดับ (`level` 0/1/2) ที่ PokéMart API เรียกก่อนขายสินค้าที่ต้องยืนยันตัวตน; มี test-only routes สำหรับตั้งระดับและจำลองความล้มเหลว |
-| Payment Mock | `http://localhost:4004` (Docker) | Stripe-style PaymentIntent mock สำหรับ wallet top-up (idempotency + recovery) |
-| Shipping Mock | `http://localhost:4002` (Docker) | Express Mock จำลองระบบจัดส่งบุคคลที่สาม (3rd-party shipping provider) |
-| Shipping Worker | Background process / Docker | Worker อ่านคิวงาน `shipments` จาก MySQL ยิง provider HTTP และ sync delivery status |
+| KYC API | `http://localhost:4005` (container) | Internal service ระดับ KYC 3 ระดับ (`level` 0/1/2) ที่ PokéMart API เรียกก่อนขายสินค้าที่ต้องยืนยันตัวตน; มี test-only routes สำหรับตั้งระดับและจำลองความล้มเหลว |
+| Payment Mock | `http://localhost:4004` (container) | Stripe-style PaymentIntent mock สำหรับ wallet top-up (idempotency + recovery) |
+| Shipping Mock | `http://localhost:4002` (container) | Express Mock จำลองระบบจัดส่งบุคคลที่สาม (3rd-party shipping provider) |
+| Shipping Worker | Background process / container | Worker อ่านคิวงาน `shipments` จาก MySQL ยิง provider HTTP และ sync delivery status |
 | WireMock | `http://localhost:8080` | จำลอง public API สำหรับ contract tests |
 | Scalar API reference | `http://localhost:8081` | เลือกดู OpenAPI ของ BFF, internal API, KYC, Payment และ Shipping mock |
 | Grafana (ทางเลือก) | `http://localhost:4300` | เปิดด้วย `make observe` ดู metric, log และค้น request ID ข้ามชั้น (BFF → API) เปิดเฉพาะ `127.0.0.1` |
@@ -27,18 +27,24 @@
 จำเป็นต้องมี:
 
 1. **Node.js 22 LTS และ npm**
-2. **Docker Desktop** (Windows/macOS) หรือ Docker Engine ที่มี Docker Compose v2 (Linux)
-3. **Git** เฉพาะเมื่อต้อง clone repository
+2. **Podman** พร้อม `podman machine` (บน Windows ใช้ชนิด WSL) และ **podman-compose** (`python -m pip install --user podman-compose`)
+3. **GNU Make** (บน Windows ใช้ตัวของ MSYS2) เพราะการ build image ต้องผ่าน `make` (ดูหมายเหตุด้านล่าง)
+4. **Git** เฉพาะเมื่อต้อง clone repository
 
-GNU Make เป็นทางเลือกเท่านั้น คู่มือนี้ใช้ `npm` และ `docker compose` ซึ่งใช้ได้ทั้ง Windows และ macOS โดยไม่ต้องติดตั้ง Make เพิ่ม
+โปรเจกต์นี้ใช้ Podman แทน Docker ตั้งค่าครั้งเดียวบน Windows:
 
-เปิด Docker Desktop ให้ทำงานก่อนเริ่ม แล้วตรวจสอบใน terminal:
+- ตั้ง user environment variable `PODMAN_COMPOSE_PROVIDER` เป็น path เต็มของ `podman-compose.exe` เช่น `C:\Users\<ชื่อ>\AppData\Roaming\Python\Python310\Scripts\podman-compose.exe` แล้วเปิด terminal ใหม่ ถ้าไม่ตั้ง `podman compose` จะส่งต่อไปที่ `docker-compose.exe` ของ Docker Desktop ซึ่งต่อกับ Podman ไม่ได้
+- ใช้ `make` จาก **PowerShell** (หรือ terminal ของ Windows) ไม่ใช่ Git Bash: `make` ของ MSYS2 ที่ถูกเรียกจาก Git Bash จะทิ้ง environment variable ส่วนใหญ่ (เช่น `USERPROFILE`) ทำให้ `podman` หา config ไม่เจอ
+- `podman compose up --build` ใช้ไม่ได้บน Windows (podman-compose 1.6 มองว่า path แบบ `C:\...` เป็น URL แล้วข้าม `-f`) จึงต้องใช้ `make up` ซึ่ง build image ด้วย `podman build` ก่อน แล้วค่อยให้ compose เริ่ม container
+
+เปิด Podman machine ให้ทำงานก่อนเริ่ม (`podman machine start`) แล้วตรวจสอบใน terminal:
 
 ```text
 node --version       # ควรเป็น v22.x
 npm --version
-docker --version
-docker compose version
+podman --version
+podman compose version   # ต้องแสดง podman-compose ไม่ใช่ Docker Compose
+make --version
 ```
 
 ใช้ **PowerShell** บน Windows หรือ **Terminal (zsh)** บน macOS แล้วเปิด terminal ที่ root ของ repository (โฟลเดอร์ที่มี `package.json` และ `docker-compose.yml`)
@@ -58,13 +64,13 @@ docker compose version
    ```powershell
    npm ci
    npm run build
-   docker compose up -d --build
+   make up
    ```
 
 3. ตรวจสถานะและ readiness ก่อนทดสอบ:
 
    ```powershell
-   docker compose ps
+   make ps
    curl.exe -fsS http://localhost:4001/health
    curl.exe -fsS http://localhost:4001/ready
    curl.exe -fsS http://localhost:4000/ready
@@ -83,13 +89,13 @@ docker compose version
    ```zsh
    npm ci
    npm run build
-   docker compose up -d --build
+   make up
    ```
 
 3. ตรวจสถานะและ readiness ก่อนทดสอบ:
 
    ```zsh
-   docker compose ps
+   make ps
    curl --fail --silent --show-error http://localhost:4001/health
    curl --fail --silent --show-error http://localhost:4001/ready
    curl --fail --silent --show-error http://localhost:4000/ready
@@ -101,7 +107,7 @@ service `liquibase` จะสร้าง schema และ seed data ให้�
 
 ## เริ่มเว็บแอป
 
-เว็บแอปไม่รวมอยู่ใน Docker Compose ให้เปิด terminal อีกหน้าที่ root หลังจาก BFF พร้อม แล้วรัน:
+เว็บแอปไม่รวมอยู่ใน Compose ให้เปิด terminal อีกหน้าที่ root หลังจาก BFF พร้อม แล้วรัน:
 
 ```powershell
 npm run dev
@@ -120,6 +126,44 @@ Playwright จะเปิดเว็บบน `http://localhost:4003` ให�
 | PokéMart Lab User (`lab-user-001`) | `lab-user-001@example.test` | `PokeMartLab!2026` | ทดลองเว็บและเรียก API ใน local lab เท่านั้น |
 
 ผู้ใช้ `empty-user-001@example.invalid` เป็น test profile ที่ไม่มี wallet และไม่มี password จึงใช้ล็อกอินไม่ได้ เว็บจะไม่กรอกข้อมูลบัญชีให้อัตโนมัติ ให้ป้อน demo credentials ข้างต้นด้วยตนเองในหน้า sign in บัญชีและ password นี้เป็นข้อมูลสาธิตสำหรับ local lab เท่านั้น ห้ามนำไปใช้กับระบบ shared หรือ production
+
+### บัญชี KYC สำหรับทดสอบ
+
+seed [database/seed/014_seed_kyc_test_users.sql](database/seed/014_seed_kyc_test_users.sql) สร้างบัญชี `lab-kyc-<key>` (email `lab-kyc-<key>@example.test`) ให้ 1 บัญชีต่อ 1 test case ทุกบัญชีใช้ password hash เดียวกับ `lab-user-001` จึงล็อกอินด้วย `PokeMartLab!2026` ได้ รายการเดียวกันอยู่ใน [tests/support/data/kycUsers.ts](tests/support/data/kycUsers.ts)
+
+Level และ status ของ KYC ไม่ได้เก็บในตาราง `users` แต่ตั้งผ่าน `PUT /__test/users/{userId}` ของ KYC service (บัญชีที่ไม่ถูกตั้งค่าจะเป็น level 0 / ACTIVE)
+
+| Key | Level | Status | ใช้ทดสอบ |
+|---|---|---|---|
+| `none-pokemon` | 0 | ACTIVE | level 0 ซื้อ Pokémon ไม่ได้ |
+| `none-item` | 0 | ACTIVE | level 0 ซื้อ item ทั่วไปไม่ได้ |
+| `basic-pokemon` | 1 | ACTIVE | level 1 ซื้อ Pokémon ได้ |
+| `basic-item` | 1 | ACTIVE | level 1 ซื้อ item ทั่วไปได้ |
+| `basic-master` | 1 | ACTIVE | level 1 ซื้อ Master item ไม่ได้ |
+| `full-master` | 2 | ACTIVE | level 2 ซื้อ Master item ได้ |
+| `pending-pokemon` | 0 | PENDING_REVIEW | อยู่ระหว่างตรวจสอบ ซื้อ Pokémon ไม่ได้ |
+| `pending-item` | 0 | PENDING_REVIEW | อยู่ระหว่างตรวจสอบ ซื้อ item ไม่ได้ |
+| `basic-pending` | 1 | PENDING_REVIEW | สถานะตรวจสอบมีผลเหนือ level ที่เพียงพอ |
+| `rejected-pokemon` | 0 | REJECTED | บัญชีที่ถูกปฏิเสธซื้อ Pokémon ไม่ได้ |
+| `status-none` | 0 | ACTIVE | GET status / account-info ของ level 0 |
+| `status-basic` | 1 | ACTIVE | GET status / account-info ของ level 1 |
+| `status-full` | 2 | ACTIVE | GET status / account-info ของ level 2 |
+| `status-pending` | 0 | PENDING_REVIEW | GET status / account-info ระหว่างตรวจสอบ |
+| `status-rejected` | 0 | REJECTED | GET status / account-info หลังถูกปฏิเสธ |
+| `submit-valid` | 0 | ACTIVE | ส่งข้อมูลถูกต้อง แล้วเป็น PENDING_REVIEW |
+| `submit-invalid` | 0 | ACTIVE | ส่งข้อมูลไม่ถูกต้อง ได้ field errors |
+| `submit-malformed` | 0 | ACTIVE | field ที่ไม่รู้จักหรือ type ผิดถูกปฏิเสธ |
+| `submit-duplicate` | 0 | PENDING_REVIEW | ส่งซ้ำระหว่างรอตรวจสอบถูกปฏิเสธ |
+| `submit-verified` | 1 | ACTIVE | บัญชีที่ยืนยันแล้วส่งซ้ำไม่ได้ |
+| `submit-resubmit` | 0 | REJECTED | บัญชีที่ถูกปฏิเสธส่งใหม่ได้ |
+| `approve-flow` | 0 | PENDING_REVIEW | อนุมัติแล้วซื้อของได้ |
+| `down-purchase` | 1 | ACTIVE | KYC ล่ม การซื้อต้อง fail closed |
+| `down-account` | 1 | ACTIVE | KYC ล่ม account-info ได้ `kyc` เป็น null |
+| `ui-later` | 0 | ACTIVE | UI: กด "Maybe later" ปิด popup ได้ |
+| `ui-verify` | 0 | ACTIVE | UI: "Verify now" ไปหน้าฟอร์มและส่งได้ |
+| `ui-validation` | 0 | ACTIVE | UI: ฟอร์มแสดง validation errors |
+| `ui-pending` | 0 | PENDING_REVIEW | UI: แสดง banner กำลังตรวจสอบ |
+| `ui-rejected` | 0 | REJECTED | UI: แสดง banner ถูกปฏิเสธและปุ่ม Send again |
 
 เมื่อระบบพร้อมแล้ว สามารถทดลอง login ด้วย demo account ได้:
 
@@ -205,22 +249,22 @@ TEST_ENV=sit npm run test:api
 
 กำหนดค่า SIT/STG จริงใน `tests/configs/.env.sit` หรือ `.env.stg` ก่อนใช้งาน ไฟล์ตัวอย่างมี URL placeholder และห้ามใส่ credentials จริงลงใน Git การรัน real-system project จะ reset เฉพาะ wallet และ listing ที่ระบุ พร้อมลบ inventory row ของ user/โปเกมอนที่เลือก ดังนั้นต้องใช้ user และ MySQL database ที่แยกไว้สำหรับ test โดยเฉพาะ ห้ามชี้ไปยัง production หรือข้อมูล shared ที่ไม่อนุญาตให้แก้ไข ใน environment ที่ไม่ใช่ `test` การเชื่อมต่อฐานข้อมูลจะ fail หากไม่ได้กำหนด `MYSQL_HOST`, `MYSQL_DATABASE`, `MYSQL_USER` และ `MYSQL_PASSWORD` ไว้ชัดเจน
 
-`MYSQL_HOST_PORT` ใน `.env` คือ port ที่ Docker เปิดบน host ส่วน `MYSQL_PORT` ในไฟล์ `tests/configs/.env.*` คือ port ที่ test runner ใช้เชื่อมต่อจาก host ทั้งสองค่าต้องตรงกัน เช่น `MYSQL_HOST_PORT=4306` ต้องคู่กับ `MYSQL_PORT=4306`
+`MYSQL_HOST_PORT` ใน `.env` คือ port ที่ container เปิดบน host ส่วน `MYSQL_PORT` ในไฟล์ `tests/configs/.env.*` คือ port ที่ test runner ใช้เชื่อมต่อจาก host ทั้งสองค่าต้องตรงกัน เช่น `MYSQL_HOST_PORT=4306` ต้องคู่กับ `MYSQL_PORT=4306`
 
 ## Build, stop และจัดการฐานข้อมูล
 
 ```bash
 npm run build
 npm run build:web
-docker compose ps
-docker compose logs -f
-docker compose down
+make ps
+make logs
+make down
 ```
 
-- `docker compose logs -f` แสดง logs ต่อเนื่อง กด `Ctrl+C` เพื่อหยุดการติดตาม logs (ไม่ได้หยุด containers)
-- `docker compose down` หยุด containers โดยไม่ลบ database volume
-- `docker compose down` **ไม่หยุด** service ของ profile `observability` (Grafana, Loki, Prometheus, Alloy) ถ้าเปิดไว้ ให้ใช้ `make down` หรือ `docker compose --profile '*' down`
-- GNU Make ยังคงใช้ได้เป็นทางเลือก: `make help` แสดง targets ทั้งหมด คำสั่งที่ใช้บ่อย:
+- `make logs` แสดง logs ต่อเนื่อง กด `Ctrl+C` เพื่อหยุดการติดตาม logs (ไม่ได้หยุด containers)
+- `make down` หยุด containers ทั้งหมดรวม profile `observability` (Grafana, Loki, Prometheus) โดยไม่ลบ database volume ถ้าเห็น `ssh: handshake failed: EOF` ระหว่างหยุด (การเชื่อมต่อกับ podman machine หลุดชั่วคราว) ให้รัน `make down` ซ้ำอีกครั้ง
+- ห้ามใช้ `podman compose down` เปล่าๆ เพราะจะไม่หยุด service ของ profile `observability`
+- `make help` แสดง targets ทั้งหมด คำสั่งที่ใช้บ่อย:
 
   | คำสั่ง | ทำอะไร |
   |---|---|
@@ -233,7 +277,7 @@ docker compose down
   | `make db-reset` | **ลบข้อมูลฐานข้อมูล** แล้วสร้างใหม่ด้วย Liquibase |
 
   `make fresh` และ `make db-reset` ห้ามใช้กับ SIT, shared หรือ production data
-- ถ้าไดร์ C: เต็ม Docker จะเขียนไม่ได้และพัง (`input/output error`) ย้ายที่เก็บของ Docker ได้ที่ Docker Desktop → Settings → Resources → Advanced → **Disk image location** แล้วกด Apply & restart ตัวนี้ไม่คืนพื้นที่ที่ Docker ใช้ไปแล้ว
+- ถ้าไดร์ C: เต็ม Podman จะเขียนไม่ได้และพัง ที่เก็บ image และ container อยู่ใน WSL distro ของ podman machine (ไฟล์ `ext4.vhdx`) ย้ายไปไดร์อื่นได้โดย `podman machine stop` แล้ว `wsl --export podman-machine-default <ไฟล์>.tar`, `wsl --unregister podman-machine-default`, `wsl --import podman-machine-default <โฟลเดอร์ปลายทาง> <ไฟล์>.tar --version 2` แล้ว `podman machine start`
 
 ## แบบฝึกหัด: สร้าง WireMock และ tests เอง
 

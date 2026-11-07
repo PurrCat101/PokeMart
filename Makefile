@@ -1,4 +1,20 @@
-.PHONY: help install build lint up down ps logs docs swagger test test-all test-kyc test-observability test-mocked test-api test-pokeapi test-purchase-retry test-e2e db-seed db-migrate db-status db-adopt db-reset fresh observe
+.PHONY: help install build build-images lint up down ps logs docs swagger test test-all test-kyc test-items test-observability test-mocked test-api test-pokeapi test-purchase-retry test-e2e db-seed db-migrate db-status db-adopt db-reset fresh observe
+
+# Container engine: Podman only. `podman compose` must use podman-compose as its provider (set the user
+# environment variable PODMAN_COMPOSE_PROVIDER to the podman-compose.exe path). Without it, `podman compose`
+# hands off to Docker Desktop's docker-compose.exe, which cannot reach the Podman machine on Windows.
+COMPOSE ?= podman compose
+
+# A terminal or editor that was already open when PODMAN_COMPOSE_PROVIDER was set does not see it (environment
+# variables are copied at start-up), and `podman compose` would silently fall back to Docker Desktop. So when the
+# variable is missing, look for podman-compose.exe in the pip --user scripts folder and use that.
+ifndef PODMAN_COMPOSE_PROVIDER
+PIP_USER_SCRIPTS := $(shell python -c "import sysconfig; print(sysconfig.get_path('scripts', 'nt_user').replace(chr(92), '/'))" 2>/dev/null)
+PODMAN_COMPOSE_EXE := $(shell test -f "$(PIP_USER_SCRIPTS)/podman-compose.exe" && echo "$(PIP_USER_SCRIPTS)/podman-compose.exe")
+ifneq ($(PODMAN_COMPOSE_EXE),)
+export PODMAN_COMPOSE_PROVIDER := $(PODMAN_COMPOSE_EXE)
+endif
+endif
 
 help: ## Show available local-lab commands (db-reset deletes local data)
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-20s %s\n", $$1, $$2}'
@@ -13,28 +29,49 @@ lint: ## Lint the web app (ESLint) and type-check every service
 	npm run lint:web
 	npm run build
 
-up: ## Start the core stack and wait for it to become ready
-	docker compose up -d --build --wait --remove-orphans
-	docker compose exec -T bff curl -s http://localhost:4001/ready
+# podman-compose 1.6 cannot resolve `dockerfile: apps/<svc>/Dockerfile` on Windows ("no Containerfile ...
+# found in context directory"), so images are built with `podman build` and compose only starts them.
+# Tags match what compose expects: localhost/<project>_<service>:latest (project = labplaywrightapi).
+IMAGE_PREFIX ?= localhost/labplaywrightapi_
 
-observe: ## Start everything plus Grafana, Loki and Prometheus (profile observability)
-	docker compose --profile observability up -d --build --wait --remove-orphans
-	docker compose exec -T bff curl -s http://localhost:4001/ready
+build-images: ## Build every service image with podman (compose --build does not work on Windows)
+	podman build -t $(IMAGE_PREFIX)liquibase:latest database/liquibase
+	podman build -f apps/pokemart-api/Dockerfile -t $(IMAGE_PREFIX)pokemart-api:latest -t $(IMAGE_PREFIX)shipping-worker:latest .
+	podman build -f apps/payment-mock/Dockerfile -t $(IMAGE_PREFIX)payment-mock:latest .
+	podman build -f apps/kyc-api/Dockerfile -t $(IMAGE_PREFIX)kyc-api:latest .
+	podman build -f apps/bff/Dockerfile -t $(IMAGE_PREFIX)bff:latest .
+	podman build -f apps/shipping-mock/Dockerfile -t $(IMAGE_PREFIX)shipping-mock:latest .
+
+# podman-compose's `up --wait` never returns while any service lacks a healthcheck (kyc-api, shipping-worker)
+# or has exited (liquibase), so readiness is polled through the BFF /ready endpoint instead (up to ~2 minutes).
+WAIT_READY = for i in $$(seq 1 60); do $(COMPOSE) exec -T bff curl -sf http://localhost:4001/ready && exit 0; sleep 2; done; echo "BFF did not become ready in time"; exit 1
+
+up: build-images ## Build images, start the core stack and wait for it to become ready
+	$(COMPOSE) up -d --remove-orphans
+	@$(WAIT_READY)
+
+observe: build-images ## Build images, start everything plus Grafana, Loki and Prometheus (profile observability)
+	$(COMPOSE) --profile observability up -d --remove-orphans
+	@$(WAIT_READY)
 	@echo ""
 	@echo "Grafana: http://localhost:4300 (change with GRAFANA_HOST_PORT)"
 
+# podman-compose does not understand the `--profile '*'` wildcard (it left Loki, Prometheus and Grafana
+# running), so the observability profile is named explicitly. Add new profiles here if the file gets any.
+PROFILES = --profile observability
+
 down: ## Stop everything, including Grafana/Loki/Prometheus, without deleting volumes
-	docker compose --profile '*' down
+	$(COMPOSE) $(PROFILES) down
 
 fresh: ## DESTRUCTIVE: wipe all local data, then start everything clean (down -v + up)
-	docker compose --profile '*' down -v
+	$(COMPOSE) $(PROFILES) down -v
 	$(MAKE) up
 
 ps: ## Show container status
-	docker compose ps
+	$(COMPOSE) ps
 
 logs: ## Follow logs for the local core stack
-	docker compose logs -f
+	$(COMPOSE) logs -f
 
 docs: ## Print the Scalar API reference URL (BFF, PokéMart, KYC, Payment, Shipping specs)
 	@echo http://localhost:8081
@@ -70,20 +107,23 @@ test-e2e: ## Run real BFF-to-MySQL journeys
 test-kyc: ## KYC levels, review status and verification form (one account per test case)
 	npm run test:kyc
 
+test-items: ## Item order history and item inventory (API and web UI)
+	npm run test:items
+
 db-seed: ## Confirm baseline data is present in the local lab
-	docker compose exec -T mysql sh -c 'mysql -u"$$MYSQL_USER" -p"$$MYSQL_PASSWORD" "$$MYSQL_DATABASE" -e "SELECT COUNT(*) AS catalog_records FROM shop_listing;"'
+	$(COMPOSE) exec -T mysql sh -c 'mysql -u"$$MYSQL_USER" -p"$$MYSQL_PASSWORD" "$$MYSQL_DATABASE" -e "SELECT COUNT(*) AS catalog_records FROM shop_listing;"'
 
 db-migrate: ## Apply pending Liquibase changesets (safe to repeat)
-	docker compose run --rm liquibase
+	$(COMPOSE) run --rm liquibase
 
 db-status: ## Show which Liquibase changesets are applied or pending
-	docker compose run --rm liquibase status --verbose
+	$(COMPOSE) run --rm liquibase status --verbose
 
 db-adopt: ## One time, for a volume created before Liquibase: record the baseline as already applied
-	docker compose up -d --wait mysql
-	docker compose run --rm liquibase changelog-sync
+	$(COMPOSE) up -d --wait mysql
+	$(COMPOSE) run --rm liquibase changelog-sync
 
 db-reset: ## DESTRUCTIVE: recreate the local database volume and re-apply every changeset
-	docker compose down -v
-	docker compose up -d --wait mysql
-	docker compose run --rm liquibase
+	$(COMPOSE) down -v
+	$(COMPOSE) up -d --wait mysql
+	$(COMPOSE) run --rm liquibase

@@ -34,7 +34,8 @@ The BFF and its downstream services must be running for API-backed features to w
 - **Identity verification flow:** a signed-in account that is not verified (`level` 0, `status` `ACTIVE`) sees a popup, "Verify your identity", once per browser session (remembered per account in `sessionStorage`). "Maybe later" or the close button dismisses it; "Verify now" opens a full-page form (not a route; it replaces the tab content). The form asks for full name, 13-digit national ID, date of birth (18+), 10-digit phone, address and a confirmation checkbox, validates on submit with the same rules as the API (see [`12-kyc.md`](12-kyc.md) section 10), and shows server `details` next to the matching fields. A successful `POST /api/kyc/submissions` returns the user to the shop with a toast, and every tab then shows a banner: *Your verification is under review* (`PENDING_REVIEW`; browsing works, purchases are rejected by the API) or *We couldn't verify your identity* with a **Send again** button (`REJECTED`). The popup does not open while sign-in, checkout or the form is open. Approval or rejection happens out of band (test-only `PUT /__test/users/{userId}` on the KYC service); the UI picks it up the next time account info is loaded (page load or sign-in).
 - **Trainer sign-in:** use the demo login endpoint to establish a session. The access token is stored in browser `localStorage` and attached as a bearer token to authenticated API requests.
 - **Wallet:** display the signed-in trainer's balance and refresh it after purchase activity.
-- **Inventory:** display the signed-in trainer's owned Pokémon and refresh the view after checkout.
+- **Inventory:** display the signed-in trainer's owned Pokémon and, in a separate **Items** section, their owned items. Refresh the view after checkout (an item-only checkout also opens Inventory).
+- **Orders:** the Pokémon order table (with delivery status) is followed by an **Item orders** table. Item orders have no shipment, so they show no delivery status or order-detail dialog.
 - **Purchase history:** show the signed-in trainer's purchase ledger with paginated results. Each order row/card displays a compact customer-facing delivery status and tracking number when available, without requiring navigation into the order.
 - **Order detail:** selecting an order opens a dedicated detail view with purchased Pokémon, totals, purchase timestamp, tracking number, current delivery status, and a chronological shipment timeline.
 
@@ -57,7 +58,7 @@ The shared API client in `apps/web/src/lib/api.ts` sends an `X-Request-Id`, adds
 - Keep the access token in `pokemart_token` in browser `localStorage`; signing out clears the token.
 - Order history status is read from the public purchase/shipment APIs. The browser must never call Shipping Mock test-control endpoints.
 - Refresh or re-fetch shipment status when opening order detail and when the user activates refresh; do not assume status changes only while the page is open. Optional short polling may be used while the detail view is visible, with a bounded interval and cleanup on navigation.
-- If shipping is waiting for a label, show `รอจัดส่ง` and an explanatory message; do not show `จัดส่งแล้ว` merely because the provider accepted the shipment or generated a tracking number.
+- If shipping is waiting for a label, show `Preparing shipment` and an explanatory message; do not show `Delivered` merely because the provider accepted the shipment or generated a tracking number.
 - When the provider is unavailable, retain the last known status and show a non-blocking notice if the latest status cannot be refreshed. Purchase history and order detail should still render from local PokéMart API state.
 - Do not treat browser-held cart data, token state, prices, or stock as trusted server-side state.
 
@@ -107,6 +108,8 @@ QA can use this mapping from requirements or a Figma screen to design a test bef
 | Sign in | Email/password, submit, validation error | `login-dialog`, `login-email`, `login-password`, `login-submit`, `login-error` | `page.getByTestId('login-email')` |
 | Complete checkout | Confirm, successful state, created purchase ID | `checkout-dialog`, `checkout-confirm`, `checkout-success`, `checkout-purchase-{purchaseId}` | `page.getByTestId('checkout-confirm')` |
 | Verify inventory | Inventory entry and quantity by Pokémon | `inventory-view`, `inventory-item-{pokemonId}` | `page.getByTestId('inventory-item-25')` |
+| Verify item inventory | Owned item and quantity | `item-inventory`, `item-inventory-item-{itemId}`, `item-inventory-empty` | `page.getByTestId('item-inventory-item-17')` |
+| Verify item orders | Row, item name and quantity of an item order | `item-order-row-{purchaseId}`, `item-order-item-{purchaseId}`, `item-order-quantity-{purchaseId}`, `item-orders-empty` | `page.getByTestId('item-order-row-' + id)` |
 | Verify purchase history | Purchase row and its item/quantity | `purchases-table`, `purchase-row-{purchaseId}`, `purchase-item-{purchaseId}`, `purchase-quantity-{purchaseId}` | `page.getByTestId(\`purchase-quantity-${purchaseId}\`)` |
 | Verify failure or feedback | Error alert or toast by outcome | `login-error`, `checkout-errors`, `catalog-service-error`, `toast-{success|error|info}` | `page.getByTestId('checkout-errors')` |
 
@@ -170,14 +173,16 @@ Each purchase row/card must show a compact delivery-status label without requiri
 
 | API status | Display label |
 |---|---|
-| `WAITING_FOR_SHIPMENT` | รอจัดส่ง |
-| `LABEL_CREATED` | ออกเลขพัสดุแล้ว |
-| `IN_TRANSIT` | อยู่ระหว่างจัดส่ง |
-| `OUT_FOR_DELIVERY` | กำลังนำจ่าย |
-| `DELIVERED` | จัดส่งสำเร็จ |
-| `DELIVERY_FAILED` | จัดส่งไม่สำเร็จ |
+| `WAITING_FOR_SHIPMENT` | Preparing shipment |
+| `LABEL_CREATED` | Awaiting shipment |
+| `IN_TRANSIT` | In transit |
+| `OUT_FOR_DELIVERY` | Out for delivery |
+| `DELIVERED` | Delivered |
+| `DELIVERY_FAILED` | Delivery failed |
 
-The order itself may also display the order milestone `ORDER_PLACED` (สั่งซื้อแล้ว), but this must not replace the shipment status. When there is no shipment record because of a legacy order, show a safe neutral fallback rather than treating the order as delivered. Show the tracking number only after one has been issued.
+UI copy is English. The order detail timeline reads `Order placed` → `Tracking number issued` → `Awaiting shipment` → `In transit` → `Out for delivery` → `Delivered` (`Delivery failed` replaces the remaining steps on failure). `Tracking number issued` and `Awaiting shipment` are both reached at `LABEL_CREATED`; `WAITING_FOR_SHIPMENT` (no tracking number yet) leaves `Order placed` as the latest step.
+
+The order itself may also display the order milestone `ORDER_PLACED` (Order placed), but this must not replace the shipment status. When there is no shipment record because of a legacy order, show a safe neutral fallback rather than treating the order as delivered. Show the tracking number only after one has been issued.
 
 ### Order detail
 
@@ -187,8 +192,8 @@ Use accessible text in addition to any color/icon status treatment. Loading and 
 
 ### UI acceptance scenarios
 
-1. After checkout, the purchase appears in history with `รอจัดส่ง` while shipment label creation is pending.
-2. After the worker recovers from a simulated provider outage and creates a tracking number, the history row updates to `ออกเลขพัสดุแล้ว` without opening the order; the detail view shows the tracking number.
+1. After checkout, the purchase appears in history with `Preparing shipment` while shipment label creation is pending.
+2. After the worker recovers from a simulated provider outage and creates a tracking number, the history row updates to `Awaiting shipment` without opening the order; the detail view shows the tracking number.
 3. After a test operator advances provider status to `IN_TRANSIT`, `OUT_FOR_DELIVERY`, and `DELIVERED`, the reconciliation worker updates PokéMart state; history quick status and the order detail timeline show the latest status.
 4. If Shipping is down, history and detail remain available and display the last known state plus a non-blocking notice when appropriate.
 5. Verify loading, no-tracking-number, failed shipment creation, delivery failure, and refresh-error states.

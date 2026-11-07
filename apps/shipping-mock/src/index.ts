@@ -1,5 +1,8 @@
 import crypto from 'node:crypto';
 import express, { Request, Response } from 'express';
+import { installLogShipper } from './log-shipper.js';
+
+installLogShipper('shipping-mock');
 
 const port = Number(process.env.PORT ?? 4002);
 const app = express();
@@ -51,6 +54,31 @@ const validTransitions: Record<DeliveryStatus, DeliveryStatus[]> = {
 const validUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 app.use(express.json());
+
+// One line per provider call, with the mode that produced the answer, so a failed worker call can be
+// traced back here. Health checks are skipped to keep the log readable.
+app.use((req, res, next) => {
+  if (req.path === '/health') return next();
+  const started = Date.now();
+  const mode = currentMode;
+  const purchaseId = typeof req.body?.purchaseId === 'string' ? req.body.purchaseId : undefined;
+  res.on('finish', () => {
+    const severity = res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info';
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      service: 'shipping-mock',
+      severity,
+      action: 'provider_request',
+      method: req.method,
+      path: req.path,
+      statusCode: res.statusCode,
+      mode,
+      purchaseId,
+      durationMs: Date.now() - started,
+    }));
+  });
+  next();
+});
 
 // CORS support for the Scalar API reference
 app.use((req, res, next) => {
@@ -166,7 +194,7 @@ app.post('/v1/shipments', async (req: Request, res: Response) => {
 
 // GET /v1/shipments/:providerShipmentId
 app.get('/v1/shipments/:providerShipmentId', (req: Request, res: Response) => {
-  const { providerShipmentId } = req.params;
+  const providerShipmentId = String(req.params.providerShipmentId);
   const shipment = shipmentsByProviderId.get(providerShipmentId);
   if (!shipment) {
     res.status(404).json({ error: 'Shipment not found' });
@@ -191,12 +219,14 @@ app.put('/v1/admin/mode', (req: Request, res: Response) => {
     return;
   }
   currentMode = mode;
+  // A fault mode is worth a warning in Grafana: it explains every failure that follows until the mode returns to success.
+  console.log(JSON.stringify({ timestamp: new Date().toISOString(), service: 'shipping-mock', severity: currentMode === 'success' ? 'info' : 'warn', action: 'mode_changed', mode: currentMode }));
   res.json({ mode: currentMode });
 });
 
 // PATCH /v1/admin/shipments/:providerShipmentId/status (local/test only)
 app.patch('/v1/admin/shipments/:providerShipmentId/status', (req: Request, res: Response) => {
-  const { providerShipmentId } = req.params;
+  const providerShipmentId = String(req.params.providerShipmentId);
   const newStatus = req.body?.status as DeliveryStatus;
   const allowedStatuses: DeliveryStatus[] = [
     'LABEL_CREATED',
@@ -233,7 +263,7 @@ app.patch('/v1/admin/shipments/:providerShipmentId/status', (req: Request, res: 
 
 // POST /v1/admin/shipments/by-purchase-id/:purchaseId/status (local/test only - convenience endpoint)
 app.post('/v1/admin/shipments/by-purchase-id/:purchaseId/status', (req: Request, res: Response) => {
-  const { purchaseId } = req.params;
+  const purchaseId = String(req.params.purchaseId);
   const newStatus = req.body?.status as DeliveryStatus;
   const allowedStatuses: DeliveryStatus[] = [
     'LABEL_CREATED',

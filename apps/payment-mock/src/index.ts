@@ -1,4 +1,7 @@
 import express, { Request, Response } from 'express';
+import { installLogShipper } from './log-shipper.js';
+
+installLogShipper('payment-mock');
 
 type Fault = 'http_500' | 'timeout_before_charge' | 'charged_response_lost' | 'decline';
 type Payment = { id: string; status: 'succeeded' | 'canceled'; amount: number; currency: string; key: string; body: string };
@@ -23,6 +26,27 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ strict: false }));
+
+// One line per call (health checks skipped), so a failed top-up can be traced to what the provider answered.
+app.use((req, res, next) => {
+  if (req.path === '/health') return next();
+  const started = Date.now();
+  res.on('finish', () => {
+    const severity = res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info';
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      service: 'payment-mock',
+      severity,
+      action: 'provider_request',
+      method: req.method,
+      path: req.path,
+      statusCode: res.statusCode,
+      fault: res.locals.fault, // the injected fault that produced this answer, if any
+      durationMs: Date.now() - started,
+    }));
+  });
+  next();
+});
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 app.post('/v1/payment_intents', async (req: Request, res: Response) => {
   const key = req.header('idempotency-key');
@@ -35,6 +59,7 @@ app.post('/v1/payment_intents', async (req: Request, res: Response) => {
     return res.json({ id: existing.id, object: 'payment_intent', status: existing.status, amount: existing.amount, currency: existing.currency });
   }
   const fault = faults.get(key); faults.delete(key);
+  res.locals.fault = fault;
   if (fault === 'http_500') return res.status(500).json({ error: { type: 'api_error', code: 'simulated_error' } });
   if (fault === 'timeout_before_charge') { await new Promise((resolve) => setTimeout(resolve, 6000)); return res.status(504).end(); }
   const payment: Payment = { id: `pi_${key.replaceAll('-', '')}`, status: fault === 'decline' ? 'canceled' : 'succeeded', amount: body.amount, currency: 'thb', key, body: canonical };
@@ -51,7 +76,14 @@ app.get('/v1/payment_intents/:id', (req, res) => {
 app.put('/__test/faults', (req, res) => {
   const { topUpId, fault } = req.body as Record<string, unknown>;
   if (typeof topUpId !== 'string' || !uuid.test(topUpId) || !['http_500', 'timeout_before_charge', 'charged_response_lost', 'decline'].includes(String(fault))) return res.status(400).json({ error: 'invalid fault' });
-  faults.set(topUpId, fault as Fault); return res.status(204).end();
+  faults.set(topUpId, fault as Fault);
+  // A pending fault explains the failure that follows for this top-up, so it is worth a warning in Grafana.
+  console.log(JSON.stringify({ timestamp: new Date().toISOString(), service: 'payment-mock', severity: 'warn', action: 'fault_changed', fault, topUpId }));
+  return res.status(204).end();
 });
-app.delete('/__test/faults', (_req, res) => { faults.clear(); payments.clear(); res.status(204).end(); });
+app.delete('/__test/faults', (_req, res) => {
+  faults.clear(); payments.clear();
+  console.log(JSON.stringify({ timestamp: new Date().toISOString(), service: 'payment-mock', severity: 'info', action: 'faults_cleared' }));
+  res.status(204).end();
+});
 app.listen(port, () => console.log(JSON.stringify({ service: 'payment-mock', port })));

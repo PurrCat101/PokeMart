@@ -99,7 +99,7 @@ Add a `shipments` table with at least:
 
 Required indexes: due-work lookup on `(status, next_attempt_at)`, lease recovery on `(status, claimed_until)`, and unique relation to the purchase. Add checks for non-negative attempt count and allowed status values where supported.
 
-Schema changes are Liquibase changesets (`database/liquibase/db.changelog-master.yaml`): add a numbered changeset and keep the canonical schema file equal to the end result. `make up` or `make db-migrate` applies it once and Liquibase records it, so it is safe to repeat. Do not use `docker compose down -v` as a migration.
+Schema changes are Liquibase changesets (`database/liquibase/db.changelog-master.yaml`): add a numbered changeset and keep the canonical schema file equal to the end result. `make up` or `make db-migrate` applies it once and Liquibase records it, so it is safe to repeat. Do not use `make fresh` as a migration.
 
 ## 5. Purchase and shipment lifecycle
 
@@ -122,15 +122,15 @@ Keep the internal retry/processing state separate from the customer-visible deli
 
 Customer-facing delivery statuses and display labels:
 
-| API status | Thai UI label | Meaning |
+| API status | UI label | Meaning |
 |---|---|---|
-| `ORDER_PLACED` | สั่งซื้อแล้ว | Purchase exists; used as the order-level milestone |
-| `WAITING_FOR_SHIPMENT` | รอจัดส่ง | Purchase committed, but no tracking number has been issued yet |
-| `LABEL_CREATED` | ออกเลขพัสดุแล้ว | Provider accepted the request and returned a tracking number |
-| `IN_TRANSIT` | อยู่ระหว่างจัดส่ง | Parcel has entered transit |
-| `OUT_FOR_DELIVERY` | กำลังนำจ่าย | Parcel is out for final delivery |
-| `DELIVERED` | จัดส่งสำเร็จ | Provider confirms delivery |
-| `DELIVERY_FAILED` | จัดส่งไม่สำเร็จ | Delivery attempt failed; distinct from failure to create a shipment |
+| `ORDER_PLACED` | Order placed | Purchase exists; used as the order-level milestone |
+| `WAITING_FOR_SHIPMENT` | Preparing shipment | Purchase committed, but no tracking number has been issued yet |
+| `LABEL_CREATED` | Awaiting shipment | Provider accepted the request and returned a tracking number |
+| `IN_TRANSIT` | In transit | Parcel has entered transit |
+| `OUT_FOR_DELIVERY` | Out for delivery | Parcel is out for final delivery |
+| `DELIVERED` | Delivered | Provider confirms delivery |
+| `DELIVERY_FAILED` | Delivery failed | Delivery attempt failed; distinct from failure to create a shipment |
 
 `processing_status` is operational state (`PENDING`, `PROCESSING`, `RETRY_WAIT`, `LABEL_CREATED`, `FAILED`, `UNKNOWN`) and must not be shown as if it were the delivery timeline. `ORDER_PLACED` comes from the purchase; the shipment status response may expose it as `orderStatus` alongside `deliveryStatus`.
 

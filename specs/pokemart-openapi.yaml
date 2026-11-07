@@ -383,7 +383,42 @@ paths:
       responses:
         '200': { description: Account information }
         '401': { $ref: '#/components/responses/Unauthorized' }
+  /pokemart/v1/items/inventory:
+    get:
+      tags: [Inventory]
+      summary: Owned items of the caller
+      description: Items only. Pokémon are listed by `GET /pokemart/v1/inventory`.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdRequest'
+      responses:
+        '200':
+          description: Item inventory
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content: { application/json: { schema: { $ref: '#/components/schemas/ItemInventory' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /pokemart/v1/items/purchases:
+    get:
+      tags: [Purchases]
+      summary: List the caller's item purchases, newest first
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdRequest'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Page of item purchases
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content: { application/json: { schema: { $ref: '#/components/schemas/ItemPurchasePage' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
     post:
       tags: [Purchases]
       summary: Purchase an item and add it to the authenticated user's item inventory
@@ -758,6 +793,46 @@ components:
           type: string
           format: date-time
 
+    ItemPurchaseRecord:
+      type: object
+      required: [purchaseId, itemId, itemName, quantity, unitPrice, totalPrice, createdAt]
+      additionalProperties: false
+      properties:
+        purchaseId: { type: string, format: uuid }
+        itemId: { type: integer, minimum: 1 }
+        itemName: { type: string }
+        quantity: { type: integer, minimum: 1 }
+        unitPrice: { type: integer, minimum: 0 }
+        totalPrice: { type: integer, minimum: 0 }
+        createdAt: { type: string, format: date-time }
+    ItemPurchasePage:
+      type: object
+      required: [count, limit, offset, results]
+      additionalProperties: false
+      properties:
+        count: { type: integer, minimum: 0 }
+        limit: { type: integer }
+        offset: { type: integer }
+        results:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/ItemPurchaseRecord' }
+    ItemInventory:
+      type: object
+      required: [count, results]
+      additionalProperties: false
+      properties:
+        count: { type: integer, minimum: 0 }
+        results:
+          type: array
+          items:
+            type: object
+            required: [itemId, name, quantity]
+            additionalProperties: false
+            properties:
+              itemId: { type: integer, minimum: 1 }
+              name: { type: string }
+              quantity: { type: integer, minimum: 1 }
     PurchasePage:
       type: object
       required: [count, limit, offset, results]

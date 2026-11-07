@@ -19,6 +19,7 @@ export const testConfig = {
   pokemartApiBaseUrl: process.env.POKEMART_API_BASE_URL ?? 'http://localhost:4000',
   wiremockBaseUrl: process.env.WIREMOCK_BASE_URL ?? 'http://localhost:8080',
   kycBaseUrl: process.env.KYC_BASE_URL ?? 'http://localhost:4005',
+  paymentMockBaseUrl: process.env.PAYMENT_MOCK_BASE_URL ?? 'http://localhost:4004',
   shippingMockBaseUrl: process.env.SHIPPING_MOCK_BASE_URL ?? 'http://localhost:4002',
   grafanaBaseUrl: process.env.GRAFANA_BASE_URL ?? 'http://localhost:4300',
   auth: {

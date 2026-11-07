@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import express, { NextFunction, Request, Response } from 'express';
 import { registry, observeRequest } from './metrics.js';
+import { installLogShipper } from './log-shipper.js';
 import mysql from 'mysql2/promise';
 
 type Row = Record<string, any>;
@@ -13,6 +14,7 @@ class AppError extends Error {
 
 const port = Number(process.env.PORT ?? 4000);
 const serviceName = 'pokemart-api';
+installLogShipper(serviceName);
 const jwtSecret = process.env.AUTH_JWT_SECRET ?? '';
 if (!jwtSecret || Buffer.byteLength(jwtSecret) < 32) {
   throw new Error('AUTH_JWT_SECRET must be configured with at least 32 bytes');
@@ -153,6 +155,7 @@ function isDuplicateEntry(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ER_DUP_ENTRY';
 }
 function asPokemon(row: Row) { return { id: row.id, name: row.name, types: typeof row.types === 'string' ? JSON.parse(row.types) : row.types, spriteUrl: row.spriteUrl, price: row.price, stock: row.stock }; }
+function asItemPurchase(row: Row) { return { purchaseId: row.purchaseId, itemId: row.itemId, itemName: row.itemName, quantity: Number(row.quantity), unitPrice: Number(row.unitPrice), totalPrice: Number(row.totalPrice), createdAt: new Date(row.createdAt).toISOString() }; }
 function asPurchase(row: Row) { return { id: row.id, pokemonId: row.pokemonId, pokemonName: row.pokemonName, quantity: row.quantity, unitPrice: row.unitPrice, totalPrice: row.totalPrice, createdAt: new Date(row.createdAt).toISOString() }; }
 // level: 0 = not verified, 1 = basic, 2 = full
 type Kyc = { level: number; status: string; updatedAt: string };
@@ -489,13 +492,28 @@ app.post('/pokemart/v1/items/purchases', authenticate, async (req, res, next) =>
     next(error);
   } finally { connection?.release(); }
 });
+app.get('/pokemart/v1/items/purchases', authenticate, async (req, res, next) => {
+  try {
+    const id = userId(res); const { limit, offset } = pageParams(req);
+    const [countRows] = await pool.query('SELECT COUNT(*) AS count FROM item_purchases WHERE user_id=?', [id]);
+    const [rows] = await pool.query('SELECT p.id AS purchaseId, p.item_source_id AS itemId, r.name AS itemName, p.quantity, p.unit_price AS unitPrice, p.total_price AS totalPrice, p.created_at AS createdAt FROM item_purchases p JOIN item_reference r ON r.source_id=p.item_source_id WHERE p.user_id=? ORDER BY p.created_at DESC, p.id DESC LIMIT ? OFFSET ?', [id, limit, offset]);
+    res.json({ count: Number((countRows as Row[])[0].count), limit, offset, results: (rows as Row[]).map(asItemPurchase) });
+  } catch (error) { next(error); }
+});
+app.get('/pokemart/v1/items/inventory', authenticate, async (req, res, next) => {
+  try {
+    const [rows] = await pool.query('SELECT i.item_source_id AS itemId, r.name, i.quantity FROM user_item_inventory i JOIN item_reference r ON r.source_id=i.item_source_id WHERE i.user_id=? ORDER BY i.item_source_id', [userId(res)]);
+    const results = (rows as Row[]).map((row) => ({ ...row, quantity: Number(row.quantity) }));
+    res.json({ count: results.length, results });
+  } catch (error) { next(error); }
+});
 app.get('/pokemart/v1/items/purchases/:id', authenticate, async (req, res, next) => {
   try {
     if (!validUuid.test(String(req.params.id))) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'id', message: 'must be a UUID' }]);
     const [rows] = await pool.query('SELECT p.id AS purchaseId, p.item_source_id AS itemId, r.name AS itemName, p.quantity, p.unit_price AS unitPrice, p.total_price AS totalPrice, p.created_at AS createdAt FROM item_purchases p JOIN item_reference r ON r.source_id=p.item_source_id WHERE p.id=? AND p.user_id=?', [req.params.id, userId(res)]);
     const row = (rows as Row[])[0];
     if (!row) throw new AppError(404, 'PURCHASE_NOT_FOUND', 'Purchase not found');
-    res.json({ ...row, quantity: Number(row.quantity), unitPrice: Number(row.unitPrice), totalPrice: Number(row.totalPrice), createdAt: new Date(row.createdAt).toISOString() });
+    res.json(asItemPurchase(row));
   } catch (error) { next(error); }
 });
 

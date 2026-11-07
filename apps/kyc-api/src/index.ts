@@ -1,4 +1,7 @@
 import express, { NextFunction, Request, Response } from 'express';
+import { installLogShipper } from './log-shipper.js';
+
+installLogShipper('kyc-api');
 
 // Internal KYC provider simulation. It owns its own data (in memory, seeded at start-up) and never
 // shares PokéMart's database. PokéMart calls it over HTTP, outside any database transaction.
