@@ -112,11 +112,13 @@ Schema changes are Liquibase changesets (`database/liquibase/db.changelog-master
 5. Worker calls `POST /v1/shipments` outside the DB transaction with `purchaseId` in the body. Once the label exists, a separate reconciliation loop calls `GET /v1/shipments/:providerShipmentId` to synchronize delivery progress.
 6. On provider acceptance, persist `processing_status = LABEL_CREATED`, provider ID and tracking number, clear error/lease, and stop label-creation retries. Set customer-facing `delivery_status = LABEL_CREATED` (shipping label / tracking number created). This does not mean the parcel has been picked up or delivered.
 7. On transient failure, persist `processing_status = RETRY_WAIT`, increment attempt count, set `next_attempt_at` using bounded exponential backoff with jitter, clear or expire the lease, and log the attempt. Keep `delivery_status = WAITING_FOR_SHIPMENT` until a tracking number is actually issued.
-8. After the configured maximum attempts, persist `processing_status = FAILED` and stop automatic retries. The row remains available for diagnosis and a future manual retry mechanism; customer-facing status remains `WAITING_FOR_SHIPMENT` and the UI must also show a non-blocking issue/retry message so it does not imply delivery has started.
+8. After the configured maximum attempts, persist `processing_status = FAILED`; the regular sweep stops retrying it. A separate recovery sweep (`SHIPPING_RECOVERY_INTERVAL_MS`, default 60000) revives `FAILED` rows whose last error was transient (timeout, network error, 408, 429, 5xx) and never created a provider shipment: it sends one probe row after `SHIPPING_RECOVERY_COOLDOWN_MS` (default 60000), and only when that probe gets a label does it requeue the rest with fresh attempts in bounded batches. Permanent 4xx failures stay `FAILED` for diagnosis. No manual step is needed to recover from an outage; a manual retry action may exist as an extra but is not required.
+
+   Customer-facing status remains `WAITING_FOR_SHIPMENT` for the whole time (`RETRY_WAIT`, `UNKNOWN`, `FAILED` and recovery included), so the UI keeps showing "Preparing shipment" and does not imply delivery has started. Decision: the customer is not told about the provider problem; they simply wait, and the tracking number appears once the label is created.
 9. On ambiguous timeout, use the same purchaseId and reconcile with provider status where possible. Do not create a new purchaseId or blindly create a second shipment. Persist `UNKNOWN` only when the result cannot yet be determined; schedule reconciliation rather than treating it as a confirmed failure.
 10. When a worker crashes while a row is `PROCESSING`, an expired `claimed_until` makes the work eligible for recovery. A restart must not lose pending work.
 
-Initial retry policy is configurable, with documented defaults (suggested: max 5 attempts; exponential backoff capped at 60 seconds). Tests should use short deterministic delays. Do not retry non-transient provider validation errors (4xx other than explicitly retryable 429); retry 429 according to `Retry-After` when valid, and retry 5xx/network errors/timeouts within the configured limit.
+Initial retry policy is configurable, with documented defaults (suggested: max 5 attempts; exponential backoff capped at 60 seconds). Tests should use short deterministic delays. Do not retry non-transient provider validation errors (4xx other than explicitly retryable 408 and 429); retry 429 according to `Retry-After` when valid, and retry 5xx/network errors/timeouts within the configured limit. Running out of attempts on a transient error is not final: see the recovery sweep in step 8.
 
 ## 6. Shipment creation vs delivery progress
 
@@ -147,7 +149,7 @@ The Express Shipping Mock supports test-only endpoints under `/v1/admin/`:
 - Invalid statuses return `400`; unknown provider shipment IDs return `404`.
 - Status changes must follow valid forward transitions, except the test reset endpoint may clear state. Reject impossible transitions such as `DELIVERED -> IN_TRANSIT`.
 - These endpoints are only for local/test use and must never be exposed through the public BFF or enabled in a production profile.
-- A separate worker reconciliation loop periodically reads provider status and persists it in PokéMart MySQL. The UI never reads mock state directly. Provider outages leave the last known delivery status intact while label creation/retry and reconciliation resume when the provider recovers.
+- A separate worker reconciliation loop periodically reads provider status and persists it in PokéMart MySQL. The UI never reads mock state directly. Provider outages leave the last known delivery status intact while label creation/retry and reconciliation resume when the provider recovers. Each reconciliation tick reads at most `SHIPPING_BATCH_SIZE` shipments, least recently checked first, and marks every shipment it checks (changed, unchanged or unreachable) as checked, so the rotation reaches every open shipment and none is starved behind the first batch.
 
 ### One-minute recovery/batch exercise
 
@@ -205,6 +207,8 @@ Configuration (example names; all values validated on startup):
 - `SHIPPING_STATUS_SYNC_INTERVAL_MS=15000` (provider delivery-status reconciliation; tests may override this separately)
 - `SHIPPING_BACKOFF_BASE_MS=500`
 - `SHIPPING_BACKOFF_MAX_MS=60000`
+- `SHIPPING_RECOVERY_INTERVAL_MS=60000` (how often the worker looks for `FAILED` shipments to revive; tests call the recovery sweep directly)
+- `SHIPPING_RECOVERY_COOLDOWN_MS=60000` (a `FAILED` row is probed again only after it has been `FAILED` this long)
 
 ## 8. Playwright automation scope
 
@@ -224,6 +228,10 @@ Minimum scenarios:
 11. A user cannot query another user's shipment.
 12. Missing/invalid token, malformed UUID, unknown purchase, response schema, request IDs, and sanitized error output are validated.
 13. Test cleanup resets mock state and restores only test-owned PokéMart data; never depend on a previous test's worker timing.
+14. Outage outlasts max attempts and shipments become `FAILED`; a regular sweep does not pick them up, but once the provider recovers one recovery sweep gives every one of them a tracking number without a new purchase.
+15. Provider still down while shipments are `FAILED`; the recovery sweep sends a single probe request (not one per stranded shipment) and leaves every row `FAILED` and recoverable.
+16. A permanent failure (4xx other than 408/429) stays `FAILED` and is not revived.
+17. Delivery-status reconciliation with a batch smaller than the number of open shipments still reaches every shipment over successive ticks.
 
 Assertions must distinguish purchase outcome from shipping outcome. A shipping failure is not a purchase failure in this async design. Poll for state with a bounded timeout rather than using fixed sleeps.
 
@@ -231,7 +239,7 @@ Assertions must distinguish purchase outcome from shipping outcome. A shipping f
 
 - **Phase 1 — Contract + asynchronous worker loop:** add provider mock, DB state, a single worker, success/500/timeout, status endpoint, and Playwright assertions.
 - **Phase 2 — Resilience:** bounded retries/backoff, 429, ambiguous timeout, idempotency, leases, restart recovery, and batch-size tests.
-- **Phase 3 — Observability and operations:** metrics/logs, queue-age monitoring, worker heartbeat, manual recovery procedure, and optional dashboard.
+- **Phase 3 — Observability and operations:** metrics/logs, queue-age monitoring, worker heartbeat, and optional dashboard. Recovery after an outage is automatic (section 5, step 8); a manual retry action is an optional extra.
 
 ## 10. Decisions and non-goals
 
