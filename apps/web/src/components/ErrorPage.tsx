@@ -3,16 +3,18 @@
 import React from "react";
 import { AlertCircleIcon, RefreshIcon } from "./icons";
 import { Button, cx } from "./ui";
+import { ErrorReference } from "./ErrorReference";
 
 export interface ErrorPageProps {
   /** Short headline, e.g. "Catalog unavailable". */
   title: string;
   /** What happened and, if known, what the user can do. */
   message?: string;
-  /** HTTP status and/or API error code, shown as diagnostics. */
-  status?: number;
-  code?: string;
-  requestId?: string;
+  /**
+   * The only diagnostic shown: a reference to quote to support (request ID, or the error digest for a crash).
+   * HTTP status and error codes are deliberately not shown; support finds them in the logs from this value.
+   */
+  reference?: string;
   /** Primary recovery action. Omit when retrying cannot help. */
   onRetry?: () => void;
   retryLabel?: string;
@@ -33,9 +35,7 @@ export interface ErrorPageProps {
 export function ErrorPage({
   title,
   message,
-  status,
-  code,
-  requestId,
+  reference,
   onRetry,
   retryLabel = "Try again",
   retryTestId = "error-retry",
@@ -44,11 +44,6 @@ export function ErrorPage({
   testId = "error-page",
   className,
 }: ErrorPageProps) {
-  const diagnostics: Array<[string, string]> = [];
-  if (status) diagnostics.push(["Status", String(status)]);
-  if (code) diagnostics.push(["Code", code]);
-  if (requestId) diagnostics.push(["Request ID", requestId]);
-
   return (
     <section
       role="alert"
@@ -80,18 +75,11 @@ export function ErrorPage({
         </div>
       )}
 
-      {diagnostics.length > 0 && (
-        <dl
-          data-testid={`${testId}-details`}
-          className="mt-8 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-lg border border-line bg-surface px-4 py-3 text-left text-xs"
-        >
-          {diagnostics.map(([label, value]) => (
-            <React.Fragment key={label}>
-              <dt className="text-fg-subtle">{label}</dt>
-              <dd className="font-mono tabular-nums text-fg-muted">{value}</dd>
-            </React.Fragment>
-          ))}
-        </dl>
+      {reference && (
+        <div data-testid={`${testId}-details`} className="mt-8 rounded-lg border border-line bg-surface px-4 py-3">
+          <p className="mb-1 text-xs text-fg-subtle">If this keeps happening, tell support this reference.</p>
+          <ErrorReference value={reference} className="justify-center" data-testid={`${testId}-reference`} />
+        </div>
       )}
     </section>
   );

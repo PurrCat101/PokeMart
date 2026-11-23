@@ -8,7 +8,6 @@ export default function NotFound() {
       fullScreen
       title="Page not found"
       message="The page you are looking for does not exist."
-      status={404}
       testId="not-found-page"
       actions={
         <Link href="/" className={buttonClass("secondary")}>

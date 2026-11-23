@@ -13,7 +13,7 @@ export default function RouteError({ error, retry }: { error: Error & { digest?:
       fullScreen
       title="Something went wrong"
       message="An unexpected error stopped this page from loading. Try again, or come back in a moment."
-      code={error.digest}
+      reference={error.digest}
       onRetry={retry}
     />
   );
