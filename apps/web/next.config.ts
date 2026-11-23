@@ -3,6 +3,9 @@ import type { NextConfig } from "next";
 const bffUrl = process.env.NEXT_PUBLIC_BFF_URL || process.env.BFF_INTERNAL_URL || "http://localhost:4001";
 
 const nextConfig: NextConfig = {
+  experimental: {
+    agentUpgrade: "security",
+  },
   images: {
     remotePatterns: [
       {
