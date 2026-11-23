@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { api, ApiError } from "../lib/api";
+import { api, ApiError, errorReference } from "../lib/api";
 import { lineKey, lineMaxQuantity, lineRequiredKyc, normalizeCart, verificationNameTh } from "../lib/cart";
 import type { AuthUser, CartItem, CheckoutFailure, CheckoutReceipt, KycStatus, WalletData } from "../types/api";
 import { Header } from "../components/Header";
@@ -225,7 +225,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             : err instanceof Error && err.message
               ? err.message
               : "Purchase rejected by server.";
-        errors.push({ key: lineKey(line), name, error: message });
+        // A 503, a timeout or a lost connection on a purchase can mean the order went through.
+        const uncertain = err instanceof ApiError && (err.status === 503 || err.code === "NETWORK_ERROR");
+        errors.push({ key: lineKey(line), name, error: message, reference: errorReference(err), uncertain });
       }
     }
 

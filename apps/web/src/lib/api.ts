@@ -19,17 +19,59 @@ import {
   KycSubmission,
 } from "../types/api";
 
+/** Codes the user can act on themselves (fix input, add funds, sign in, verify). Everything else is a system fault. */
+const USER_ACTIONABLE_CODES = new Set([
+  "VALIDATION_ERROR",
+  "UNKNOWN_QUERY_PARAMETER",
+  "INVALID_JSON",
+  "UNAUTHORIZED",
+  "INVALID_CREDENTIALS",
+  "INSUFFICIENT_FUNDS",
+  "INSUFFICIENT_STOCK",
+  "PURCHASE_DUPLICATE",
+  "POKEMON_NOT_FOR_SALE",
+  "ITEM_NOT_FOR_SALE",
+  "POKEMON_NOT_FOUND",
+  "ITEM_NOT_FOUND",
+  "KYC_LEVEL_REQUIRED",
+  "KYC_PENDING_REVIEW",
+  "KYC_ALREADY_PENDING",
+  "KYC_ALREADY_VERIFIED",
+  "PAYMENT_FAILED",
+  "TOP_UP_DUPLICATE",
+]);
+
 export class ApiError extends Error {
   constructor(
     public status: number,
     public code: string,
     message: string,
     public requestId?: string,
-    public details: Array<{ field?: string; message: string }> = []
+    public details: Array<{ field?: string; message: string }> = [],
+    public retryable: boolean = false
   ) {
     super(message);
     this.name = "ApiError";
   }
+
+  /** The user did nothing wrong and cannot fix it: 5xx, or a code the app does not recognise. */
+  get isSystemFault(): boolean {
+    if (this.code === "NETWORK_ERROR") return false; // never reached the server; nothing to look up
+    return this.status >= 500 || !USER_ACTIONABLE_CODES.has(this.code);
+  }
+
+  /**
+   * The only diagnostic a person needs: a reference to quote to support. Present for system faults
+   * only. Business errors (wallet, stock, KYC, sign-in) are explained in plain words instead.
+   */
+  get reference(): string | undefined {
+    return this.isSystemFault ? this.requestId : undefined;
+  }
+}
+
+/** Reference to show next to an error message, or undefined when the user does not need one. */
+export function errorReference(err: unknown): string | undefined {
+  return err instanceof ApiError ? err.reference : undefined;
 }
 
 function userMessage(code: string, fallback: string): string {
@@ -44,6 +86,8 @@ function userMessage(code: string, fallback: string): string {
     KYC_ALREADY_VERIFIED: "This account is already verified.",
     UNAUTHORIZED: "Please sign in to continue.",
     INVALID_CREDENTIALS: "Incorrect email or password.",
+    NETWORK_ERROR: "We can't reach the server. Check your connection and try again.",
+    HTTP_ERROR: "Something went wrong. Please try again later.",
   };
   return messages[code] ?? fallback;
 }
@@ -82,10 +126,17 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers["Content-Type"] = "application/json";
   }
 
-  const response = await fetch(path, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      ...options,
+      headers,
+    });
+  } catch {
+    // Offline, DNS failure or the browser blocked the call. The request never reached the BFF,
+    // so there is no log line to look up and no reference to show.
+    throw new ApiError(0, "NETWORK_ERROR", userMessage("NETWORK_ERROR", ""), undefined, [], true);
+  }
 
   const resRequestId = response.headers.get("x-request-id") || requestId;
 
@@ -103,15 +154,19 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
         payload.error.code || "REQUEST_FAILED",
         userMessage(payload.error.code || "REQUEST_FAILED", payload.error.message || `Request failed with status ${response.status}`),
         payload.error.requestId || resRequestId,
-        payload.error.details || []
+        payload.error.details || [],
+        payload.error.retryable === true
       );
     }
 
+    // Not our error envelope (a proxy page, a crash). Never show the raw status text to the user.
     throw new ApiError(
       response.status,
       "HTTP_ERROR",
-        `Request failed with status ${response.status} (${response.statusText})`,
-      resRequestId
+      userMessage("HTTP_ERROR", ""),
+      resRequestId,
+      [],
+      response.status >= 500
     );
   }
 

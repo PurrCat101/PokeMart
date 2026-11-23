@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { api, ApiError } from "../lib/api";
+import { api, errorReference } from "../lib/api";
 import { CatalogItem, ItemCatalogItem } from "../types/api";
 import { useApp } from "../contexts/AppContext";
 import { PokemonCard } from "../components/PokemonCard";
@@ -52,7 +52,7 @@ export default function CatalogPage() {
   const [sortBy, setSortBy] = useState<"id-asc" | "id-desc" | "price-asc" | "price-desc" | "name-asc">("id-asc");
   const [currentPage, setCurrentPage] = useState(1);
 
-  const [catalogError, setCatalogError] = useState<{ message: string; status?: number; code?: string; requestId?: string } | null>(null);
+  const [catalogError, setCatalogError] = useState<{ message: string; reference?: string } | null>(null);
 
   // 3. Fetch just the current server-filtered catalog page.
   const fetchFullCatalog = useCallback(async () => {
@@ -70,15 +70,10 @@ export default function CatalogPage() {
         setCatalogTotal(page.count);
       }
     } catch (err) {
-      const apiErr = err instanceof ApiError ? err : null;
       setCatalogError({
-        message:
-          apiErr?.code === "DEPENDENCY_UNAVAILABLE"
-            ? "BFF service or upstream PokéMart API is currently offline. Ensure docker containers or bff/api are running."
-            : (err instanceof Error && err.message) || "Failed to load shop catalog.",
-        status: apiErr?.status,
-        code: apiErr?.code,
-        requestId: apiErr?.requestId,
+        // The message is already plain language (see userMessage in lib/api.ts); never name internal services here.
+        message: (err instanceof Error && err.message) || "We could not load the shop. Please try again.",
+        reference: errorReference(err),
       });
     } finally {
       setIsCatalogLoading(false);
@@ -191,9 +186,7 @@ export default function CatalogPage() {
         <ErrorPage
           title="Catalog unavailable"
           message={catalogError.message}
-          status={catalogError.status}
-          code={catalogError.code}
-          requestId={catalogError.requestId}
+          reference={catalogError.reference}
           onRetry={fetchFullCatalog}
           retryTestId="catalog-retry"
           testId="catalog-service-error"

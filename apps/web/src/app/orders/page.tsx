@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { api } from "../../lib/api";
+import { api, errorReference } from "../../lib/api";
 import { orderRow, type OrderKind, type OrderRow } from "../../lib/orders";
 import { useApp } from "../../contexts/AppContext";
 import { OrdersView } from "../../components/OrdersView";
@@ -24,6 +24,7 @@ export default function OrdersRoute() {
   const [page, setPage] = useState<OrdersPage>(EMPTY);
   const [isLoading, setIsLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
+  const [errorRef, setErrorRef] = useState<string | undefined>();
   const signedIn = !!user;
 
   const load = useCallback(
@@ -37,9 +38,11 @@ export default function OrdersRoute() {
         const data = await api.getPurchases(PAGE_SIZE, offset, kind === "pokemon" ? "POKEMON" : "ITEM");
         setPage({ rows: data.items.map(orderRow), totalCount: data.totalCount, offset: data.page.offset });
         setHasError(false);
-      } catch {
+        setErrorRef(undefined);
+      } catch (err) {
         // Keep the rows already on screen; the view shows a non-blocking notice.
         setHasError(true);
+        setErrorRef(errorReference(err));
       } finally {
         setIsLoading(false);
       }
@@ -57,6 +60,7 @@ export default function OrdersRoute() {
     if (next === kind) return;
     setPage(EMPTY);
     setHasError(false);
+    setErrorRef(undefined);
     setKind(next);
   };
 
@@ -96,6 +100,7 @@ export default function OrdersRoute() {
       offset={page.offset}
       isLoading={isLoading}
       hasError={hasError}
+      errorReference={errorRef}
       onRefresh={() => load(page.offset)}
       onPageChange={(offset) => load(offset)}
     />

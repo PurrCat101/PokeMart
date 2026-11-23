@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { api, ApiError } from "../lib/api";
+import { api, ApiError, errorReference } from "../lib/api";
+import { ErrorReference } from "./ErrorReference";
 import type { KycStatus, KycSubmission } from "../types/api";
 import { ChevronLeftIcon } from "./icons";
 import { Alert, Button, Field, cx, inputClass } from "./ui";
@@ -47,6 +48,7 @@ export function KycVerificationView({ onBack, onSubmitted }: Props) {
   const [values, setValues] = useState<FormValues>(EMPTY);
   const [errors, setErrors] = useState<Errors>({});
   const [formError, setFormError] = useState<string | null>(null);
+  const [formReference, setFormReference] = useState<string | undefined>();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const set = <K extends keyof FormValues>(field: K, value: FormValues[K]) => {
@@ -59,6 +61,7 @@ export function KycVerificationView({ onBack, onSubmitted }: Props) {
     const found = validate(values);
     setErrors(found);
     setFormError(null);
+    setFormReference(undefined);
     if (Object.keys(found).length > 0) return;
     setIsSubmitting(true);
     try {
@@ -77,6 +80,7 @@ export function KycVerificationView({ onBack, onSubmitted }: Props) {
         setErrors(fromServer);
       }
       setFormError(err instanceof Error && err.message ? err.message : "We could not send your details. Please try again.");
+      setFormReference(errorReference(err));
     } finally {
       setIsSubmitting(false);
     }
@@ -112,6 +116,7 @@ export function KycVerificationView({ onBack, onSubmitted }: Props) {
       {formError && (
         <Alert tone="danger" title="Couldn't send your details" data-testid="kyc-form-error">
           {formError}
+          {formReference && <ErrorReference value={formReference} className="mt-1" />}
         </Alert>
       )}
 
