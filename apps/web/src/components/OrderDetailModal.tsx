@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import type { OrderRow } from "../lib/orders";
 import { AlertCircleIcon, CheckIcon, LedgerIcon, RefreshIcon } from "./icons";
+import { CopyButton } from "./CopyButton";
 import { DeliveryBadge, usePurchaseShipment } from "./ShipmentStatus";
 import { Alert, Button, Modal, ModalHeader, Skeleton, cx, money } from "./ui";
 import { DELIVERY_LABELS, ORDER_PLACED_LABEL, TIMELINE_STEPS, timelineIndex } from "../lib/shipping";
@@ -52,7 +53,12 @@ export function OrderDetailModal({ order, onClose }: OrderDetailModalProps) {
             </div>
             <p className="shrink-0 font-mono text-xl font-bold tabular-nums">{money(order.totalPrice)}</p>
           </div>
-          <p className="mt-2 break-all font-mono text-xs text-fg-subtle">Order ID {order.purchaseId}</p>
+          <div className="mt-2 flex items-center gap-1 text-fg-subtle">
+            <p className="min-w-0 break-all font-mono text-xs">
+              Order ID <span data-testid="order-detail-order-id" className="select-all">{order.purchaseId}</span>
+            </p>
+            <CopyButton value={order.purchaseId} label="order ID" data-testid="order-detail-copy-order-id" />
+          </div>
         </section>
 
         {/* Shipment */}
@@ -103,8 +109,11 @@ export function OrderDetailModal({ order, onClose }: OrderDetailModalProps) {
                   <dt className="text-xs text-fg-subtle">Tracking number</dt>
                   <dd className="mt-1.5 font-mono text-sm tabular-nums">
                     {shipment.trackingNumber ? (
-                      <span data-testid="order-detail-tracking-number" className="select-all">
-                        {shipment.trackingNumber}
+                      <span className="flex items-center gap-1">
+                        <span data-testid="order-detail-tracking-number" className="min-w-0 break-all select-all">
+                          {shipment.trackingNumber}
+                        </span>
+                        <CopyButton value={shipment.trackingNumber} label="tracking number" data-testid="order-detail-copy-tracking-number" />
                       </span>
                     ) : (
                       <span className="font-sans text-fg-muted">Not issued yet</span>

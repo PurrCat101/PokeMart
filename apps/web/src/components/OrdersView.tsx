@@ -64,8 +64,7 @@ function OrderTableRow({ order, refreshToken, onOpen }: { order: OrderRow; refre
   return (
     <tr
       data-testid={`${ids.row}-${order.purchaseId}`}
-      onClick={() => onOpen(order)}
-      className="block cursor-pointer border-b border-line py-2 transition-colors last:border-b-0 hover:bg-surface-2 md:table-row md:py-0"
+      className="block border-b border-line py-2 last:border-b-0 md:table-row md:py-0"
     >
       <td data-label="Date" className={`${CELL} whitespace-nowrap text-fg-muted`}>
         {new Date(order.createdAt).toLocaleString()}
@@ -96,10 +95,7 @@ function OrderTableRow({ order, refreshToken, onOpen }: { order: OrderRow; refre
           size="sm"
           data-testid={`${ids.detail}-${order.purchaseId}`}
           aria-label={`View order details for ${order.name}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpen(order);
-          }}
+          onClick={() => onOpen(order)}
         >
           Details
         </Button>
