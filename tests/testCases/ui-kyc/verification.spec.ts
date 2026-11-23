@@ -21,7 +21,7 @@ async function signIn(page: Page, scenario: KycScenario): Promise<void> {
   await page.getByTestId('login-password').fill(testConfig.auth.password);
   await page.getByTestId('login-submit').click();
   await expect(page.getByTestId('login-dialog')).toBeHidden();
-  await expect(page.getByTestId('wallet-balance')).toBeVisible();
+  await expect(page.getByTestId('wallet-menu-button')).toBeVisible();
 }
 
 test('KYC-UI-001 an unverified account sees the popup and can dismiss it with Maybe later for the session', async ({ page, kycAccount }) => {
@@ -35,7 +35,7 @@ test('KYC-UI-001 an unverified account sees the popup and can dismiss it with Ma
 
   // The dismissal is remembered for the browser session, so a reload does not bring it back.
   await page.reload();
-  await expect(page.getByTestId('wallet-balance')).toBeVisible();
+  await expect(page.getByTestId('wallet-menu-button')).toBeVisible();
   await expect(page.getByTestId('kyc-prompt-dialog')).toBeHidden();
 });
 
