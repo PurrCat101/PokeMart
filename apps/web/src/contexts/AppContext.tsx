@@ -1,7 +1,8 @@
 "use client";
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, errorReference } from "../lib/api";
+import { PurchaseAttempts } from "../lib/purchase-attempts";
 import { lineKey, lineMaxQuantity, lineRequiredKyc, normalizeCart, verificationNameTh } from "../lib/cart";
 import type { AuthUser, CartItem, CheckoutFailure, CheckoutReceipt, KycStatus, WalletData } from "../types/api";
 import { Header } from "../components/Header";
@@ -62,6 +63,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  // One purchaseId per bag line until its outcome is known, so a retry after a lost answer cannot charge twice.
+  const purchaseAttempts = useRef(new PurchaseAttempts());
 
   // Load the bag from localStorage after mount, so server and client markup match.
   useEffect(() => {
@@ -151,6 +154,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const handleLogin = async (credentials: { email: string; password: string }) => {
     const res = await api.login(credentials);
+    purchaseAttempts.current.clear(); // ids belong to one account
     setUser(res.user);
     const account = await api.getAccountInfo();
     setWallet(account.wallet);
@@ -169,6 +173,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const handleLogout = () => {
     api.logout();
+    purchaseAttempts.current.clear();
     setUser(null);
     setWallet(null);
     setKyc(null);
@@ -190,10 +195,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const name = lineName(line);
       onProgress(i + 1, lines.length, name);
 
+      // Same id as an earlier try that ended without an answer, so a retry can never charge twice.
+      const { purchaseId, isRetry } = purchaseAttempts.current.begin(line);
+
       try {
         if (line.kind === "pokemon") {
           const purchase = await api.createPurchase({
-            purchaseId: crypto.randomUUID(),
+            purchaseId,
             pokemonId: line.item.pokemon.id,
             quantity: line.quantity,
           });
@@ -206,7 +214,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           });
         } else {
           const purchase = await api.createItemPurchase({
-            purchaseId: crypto.randomUUID(),
+            purchaseId,
             itemId: line.item.id,
             quantity: line.quantity,
           });
@@ -218,16 +226,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             totalPrice: purchase.totalPrice,
           });
         }
-      } catch (err) {
+        purchaseAttempts.current.settle(line);
+        continue;
+      } catch (purchaseErr) {
+        let failure: unknown = purchaseErr;
+
+        // The earlier try did commit; its answer was just lost. Read the order back instead of reporting a failure.
+        if (isRetry && purchaseErr instanceof ApiError && purchaseErr.code === "PURCHASE_DUPLICATE") {
+          try {
+            const purchase = await api.getPurchase(purchaseId);
+            completed.push({
+              purchaseId: purchase.purchaseId,
+              kind: line.kind,
+              name: (line.kind === "pokemon" ? purchase.pokemon?.name : purchase.item?.name.replaceAll("-", " ")) ?? name,
+              quantity: purchase.quantity,
+              totalPrice: purchase.pricing.totalPrice,
+            });
+            purchaseAttempts.current.settle(line);
+            continue;
+          } catch (readErr) {
+            failure = readErr; // could not confirm either: keep the id and report it as uncertain
+          }
+        }
+
+        // A 5xx, a timeout or a lost connection on a purchase can mean the order went through.
+        // Only a clear rejection frees the id; an uncertain result keeps it for the next try.
+        const uncertain = failure instanceof ApiError && (failure.status >= 500 || failure.code === "NETWORK_ERROR");
+        if (!uncertain) purchaseAttempts.current.settle(line);
+
         const message =
-          err instanceof ApiError && err.code === "KYC_LEVEL_REQUIRED"
+          failure instanceof ApiError && failure.code === "KYC_LEVEL_REQUIRED"
             ? `ต้อง${verificationNameTh(lineRequiredKyc(line))}ก่อนจึงจะซื้อได้`
-            : err instanceof Error && err.message
-              ? err.message
+            : failure instanceof Error && failure.message
+              ? failure.message
               : "Purchase rejected by server.";
-        // A 503, a timeout or a lost connection on a purchase can mean the order went through.
-        const uncertain = err instanceof ApiError && (err.status === 503 || err.code === "NETWORK_ERROR");
-        errors.push({ key: lineKey(line), name, error: message, reference: errorReference(err), uncertain });
+        errors.push({ key: lineKey(line), name, error: message, reference: errorReference(failure), uncertain });
       }
     }
 

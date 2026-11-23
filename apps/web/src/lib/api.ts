@@ -264,6 +264,11 @@ export const api = {
     });
   },
 
+  /** Reads one purchase back. Used to confirm a purchase whose first answer was lost. */
+  async getPurchase(purchaseId: string): Promise<PurchaseItem> {
+    return request<PurchaseItem>(`/api/purchases/${encodeURIComponent(purchaseId)}`);
+  },
+
   // Items have their own inventory; their orders live in the same purchase history and ship like Pokémon orders.
   async getItemInventory(): Promise<ItemInventoryEntry[]> {
     const result = await request<{ items: Array<{ item: { id: number; name: string }; quantity: number }> }>("/api/items/inventory");
