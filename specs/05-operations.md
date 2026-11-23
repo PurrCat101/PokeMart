@@ -63,6 +63,8 @@ Start it with `make observe` (a Compose profile named `observability`, off by de
 
 **Logs.** Every Node service writes one JSON object per line. Search by request ID in the dashboard (the *Request ID* box) or in Explore: `{service=~".+"} |= "<id>"`. The `X-Request-Id` response header of any call is the value to use; it appears in the BFF line, the BFF-to-API line and the API line, so one ID follows a request across layers. Never put a request ID, user or other per-request value in a Loki label: it would create one stream per request.
 
+**Support lookups.** The web app shows a *Reference* on errors the user cannot fix (service outage, unexpected error, an unconfirmed purchase). It is the `X-Request-Id` of the failed call: paste it into the *Request ID* box and the BFF, BFF-to-API and API lines appear together. Business errors such as insufficient funds show no reference, so a missing reference is expected there ([`09-frontend.md`](09-frontend.md), "Error disclosure").
+
 **Practice ideas.** Make `payment-mock` fail (`/__test/faults`), buy something, then find that request ID in Grafana. Stop `pokemart-api` and watch *Upstream failures* and the BFF 503s. Stop MySQL and watch `shipping_worker_metrics_db_up`.
 
 **Tests.** `make test-observability` (or `npm run test:observability`). The `OBS-MET-*` tests read `/metrics` directly and need only the services. The `OBS-STK-*` and `OBS-LOG-*` tests query Prometheus and Loki through Grafana and are **skipped automatically** when Grafana is not reachable, so a plain `npm test` stays green without the profile. Log tests poll, because lines reach Loki a few seconds after the request. One test proves that signing in never writes the password or the token to any log.
