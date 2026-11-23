@@ -78,13 +78,12 @@ test('trainer purchases one Pokémon and sees wallet, stock, and order history u
     throw new Error(`Unexpected checkout purchase test ID: ${purchaseTestId}`);
   }
 
-  // A successful checkout takes the trainer to their orders.
+  // Closing the receipt leaves the trainer on the page they were on.
   await page.getByTestId('checkout-close').click();
-  await expect(page).toHaveURL(/\/orders$/);
-  await expect(page.getByTestId('purchases-view')).toBeVisible();
+  await expect(page.getByTestId('checkout-dialog')).toBeHidden();
+  await expect(page).not.toHaveURL(/\/orders$/);
   await expect(page.getByTestId('wallet-balance')).toHaveText(`₽ ${(initialBalance - price).toLocaleString()}`);
 
-  await page.getByTestId('nav-catalog').click();
   const expectedStock = stock - 1;
   await expect(page.getByTestId(`pokemon-stock-${id}`)).toHaveText(
     expectedStock === 0 ? 'Out of Stock' : `${expectedStock} in stock`

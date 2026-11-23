@@ -51,7 +51,10 @@ test('ITEM-UI-001 an item bought in the web UI appears in Orders with its delive
   if (!purchaseId || purchaseId === purchaseTestId) throw new Error(`Unexpected checkout purchase test ID: ${purchaseTestId}`);
   await page.getByTestId('checkout-close').click();
 
-  // Closing the receipt opens Orders; item orders live on their own tab next to Pokémon orders.
+  // Closing the receipt keeps the trainer on the catalog; item orders live on their own tab in Orders.
+  await expect(page.getByTestId('checkout-dialog')).toBeHidden();
+  await expect(page).not.toHaveURL(/\/orders$/);
+  await page.getByTestId('nav-orders').click();
   await expect(page).toHaveURL(/\/orders$/);
   await page.getByTestId('orders-kind-items').click();
   await expect(page.getByTestId(`item-order-row-${purchaseId}`)).toBeVisible();

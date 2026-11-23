@@ -1,7 +1,6 @@
 "use client";
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { api, ApiError } from "../lib/api";
 import { lineKey, lineMaxQuantity, lineRequiredKyc, normalizeCart, verificationNameTh } from "../lib/cart";
 import type { AuthUser, CartItem, CheckoutFailure, CheckoutReceipt, KycStatus, WalletData } from "../types/api";
@@ -36,7 +35,6 @@ export function useApp(): AppState {
 
 /** Session, bag, checkout, login and verification, plus the header and modals around every page. */
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
 
   const [user, setUser] = useState<AuthUser | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
@@ -335,10 +333,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           wallet={wallet}
           kyc={kyc}
           onExecuteCheckout={executeCheckout}
-          onCheckoutSuccess={(completed) => {
-            // Every purchase, Pokémon or item, is delivered, so the order history is where to look next.
-            if (completed.length > 0) router.push("/orders");
-          }}
         />
 
         {isLoginOpen && (

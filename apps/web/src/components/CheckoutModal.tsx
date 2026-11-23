@@ -16,10 +16,9 @@ interface CheckoutModalProps {
     lines: CartItem[],
     onProgress: (current: number, total: number, itemName: string) => void,
   ) => Promise<{ completed: CheckoutReceipt[]; errors: CheckoutFailure[] }>;
-  onCheckoutSuccess: (completed: CheckoutReceipt[]) => void;
 }
 
-export function CheckoutModal({ isOpen, onClose, lines, wallet, kyc, onExecuteCheckout, onCheckoutSuccess }: CheckoutModalProps) {
+export function CheckoutModal({ isOpen, onClose, lines, wallet, kyc, onExecuteCheckout }: CheckoutModalProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number; name: string } | null>(null);
   const [completed, setCompleted] = useState<CheckoutReceipt[]>([]);
@@ -48,7 +47,6 @@ export function CheckoutModal({ isOpen, onClose, lines, wallet, kyc, onExecuteCh
     setCompleted(result.completed);
     setFailures(result.errors);
     setIsFinished(true);
-    if (result.completed.length > 0) onCheckoutSuccess(result.completed);
   };
 
   const handleClose = () => {
