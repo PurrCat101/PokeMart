@@ -85,6 +85,8 @@
 - A real Express mock service is used for provider success and fault scenarios; the Shipping integration does not depend on WireMock.
 - Provider HTTP 500, 429, timeout, and connection failure do not roll back a valid purchase or crash the core API.
 - Retries are bounded, scheduled with backoff, and persisted across worker restarts; exhausted attempts become inspectable `FAILED` rows.
+- `FAILED` rows caused by a transient provider failure are revived automatically after the provider recovers, with no manual step; permanent 4xx failures stay `FAILED`.
+- The customer sees "Preparing shipment" throughout an outage and is not shown an error; the tracking number appears once the label is created.
 - Provider calls reuse `purchaseId` as an idempotency key, preventing duplicate provider shipments after ambiguous timeouts.
 - Worker batch/lease handling prevents simultaneous workers from processing the same shipment and recovers expired claims.
 - `GET /api/purchases/{id}/shipment` is authenticated, owner-scoped, reads local state, and remains usable while the provider is down.

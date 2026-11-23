@@ -15,6 +15,47 @@ const DELIVERY_STATUSES = [
   'DELIVERY_FAILED',
 ] as const;
 
+type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
+
+// Mirrors validTransitions in apps/shipping-mock/src/index.ts
+const NEXT_STATUSES: Record<DeliveryStatus, DeliveryStatus[]> = {
+  LABEL_CREATED: ['IN_TRANSIT'],
+  IN_TRANSIT: ['OUT_FOR_DELIVERY', 'DELIVERY_FAILED'],
+  OUT_FOR_DELIVERY: ['DELIVERED', 'DELIVERY_FAILED'],
+  DELIVERED: [],
+  DELIVERY_FAILED: [],
+};
+
+// Shortest forward path from `from` to `to` (excluding `from`), or null if unreachable.
+function findPath(from: DeliveryStatus, to: DeliveryStatus): DeliveryStatus[] | null {
+  const queue: DeliveryStatus[][] = [[from]];
+  const seen = new Set<DeliveryStatus>([from]);
+  while (queue.length > 0) {
+    const path = queue.shift()!;
+    const last = path[path.length - 1];
+    if (last === to) return path.slice(1);
+    for (const next of NEXT_STATUSES[last]) {
+      if (!seen.has(next)) {
+        seen.add(next);
+        queue.push([...path, next]);
+      }
+    }
+  }
+  return null;
+}
+
+type MockResult = { ok: boolean; status: number; error?: string; providerShipmentId?: string };
+
+async function postMockStatus(purchaseId: string, status: DeliveryStatus): Promise<MockResult> {
+  const response = await fetch(`${SHIPPING_MOCK_URL}/v1/admin/shipments/by-purchase-id/${purchaseId}/status`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }),
+  });
+  const body = (await response.json().catch(() => ({}))) as { error?: string; providerShipmentId?: string };
+  return { ok: response.ok, status: response.status, error: body.error, providerShipmentId: body.providerShipmentId };
+}
+
 function usage(): never {
   console.error('Usage: npm run update-shipment-status -- <purchaseId> <status>');
   console.error('Status: 1=LABEL_CREATED, 2=IN_TRANSIT, 3=OUT_FOR_DELIVERY, 4=DELIVERED, 5=DELIVERY_FAILED');
@@ -43,18 +84,30 @@ async function main() {
   try {
     // 1. Shipping mock (the provider's view of the shipment)
     console.log(`Updating shipping-mock to ${newStatus}...`);
-    const mockResponse = await fetch(`${SHIPPING_MOCK_URL}/v1/admin/shipments/by-purchase-id/${purchaseId}/status`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: newStatus }),
-    });
-    if (!mockResponse.ok) {
-      const error = (await mockResponse.json().catch(() => ({}))) as { error?: string };
-      console.error(`❌ Failed to update shipping-mock: ${error.error ?? mockResponse.status}`);
+    let mockResult = await postMockStatus(purchaseId, newStatus);
+
+    // Out-of-order request: read the current status from the error and walk the steps in order
+    const transition = mockResult.error?.match(/Invalid status transition from (\w+) to (\w+)/);
+    if (!mockResult.ok && mockResult.status === 400 && transition) {
+      const current = transition[1] as DeliveryStatus;
+      const steps = findPath(current, newStatus);
+      if (!steps) {
+        console.error(`❌ Cannot move from ${current} to ${newStatus} (no valid forward path)`);
+        process.exit(1);
+      }
+      console.log(`Current status is ${current}, stepping in order: ${steps.join(' -> ')}`);
+      for (const step of steps) {
+        console.log(`  -> ${step}`);
+        mockResult = await postMockStatus(purchaseId, step);
+        if (!mockResult.ok) break;
+      }
+    }
+
+    if (!mockResult.ok) {
+      console.error(`❌ Failed to update shipping-mock: ${mockResult.error ?? mockResult.status}`);
       process.exit(1);
     }
-    const mockData = (await mockResponse.json()) as { providerShipmentId: string };
-    console.log(`✅ Shipping-mock updated: ${mockData.providerShipmentId}`);
+    console.log(`✅ Shipping-mock updated: ${mockResult.providerShipmentId}`);
 
     // 2. Database: one shipments table holds Pokémon and item orders alike
     console.log('Updating database...');
