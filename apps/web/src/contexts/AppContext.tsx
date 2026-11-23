@@ -20,6 +20,11 @@ interface AppState {
   cartQuantityMap: Map<string, number>;
   /** Bumps after every checkout so the catalog can reload its stock. */
   purchaseVersion: number;
+  wallet: WalletData | null;
+  /** null = unknown (signed out, or the KYC service is unavailable). */
+  kyc: KycStatus | null;
+  /** Opens the verification form in place of the current page. */
+  startVerification: () => void;
   addLine: (line: CartItem) => void;
   buyNow: (line: CartItem) => void;
   openLogin: () => void;
@@ -262,10 +267,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const value = useMemo<AppState>(
-    () => ({ user, sessionReady, cartQuantityMap, purchaseVersion, addLine, buyNow, openLogin: () => setIsLoginOpen(true) }),
+    () => ({
+      user,
+      sessionReady,
+      cartQuantityMap,
+      purchaseVersion,
+      wallet,
+      kyc,
+      startVerification: () => setIsVerifying(true),
+      addLine,
+      buyNow,
+      openLogin: () => setIsLoginOpen(true),
+    }),
     // addLine and buyNow close over the bag and the signed-in user, so they change with them.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [user, sessionReady, cartQuantityMap, purchaseVersion, cart],
+    [user, sessionReady, cartQuantityMap, purchaseVersion, wallet, kyc, cart],
   );
 
   const showVerification = isVerifying && !!user;
