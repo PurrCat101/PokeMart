@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { api, ApiError, errorReference } from "../lib/api";
+import { api, ApiError, clearToken, errorReference, hasStoredToken } from "../lib/api";
 import { PurchaseAttempts } from "../lib/purchase-attempts";
 import { lineKey, lineMaxQuantity, lineRequiredKyc, normalizeCart, verificationNameTh } from "../lib/cart";
 import type { AuthUser, CartItem, CheckoutFailure, CheckoutReceipt, KycStatus, WalletData } from "../types/api";
@@ -12,12 +12,15 @@ import { KycBanner } from "../components/KycBanner";
 import { KycPromptModal } from "../components/KycPromptModal";
 import { KycVerificationView } from "../components/KycVerificationView";
 import { LoginModal } from "../components/LoginModal";
+import { SessionBanner } from "../components/SessionBanner";
 import { Toast, ToastMessage } from "../components/Toast";
 
 interface AppState {
   user: AuthUser | null;
   /** False until the first session check answers, so pages do not flash a "sign in" prompt on reload. */
   sessionReady: boolean;
+  /** True when the saved sign-in could not be checked (service unavailable). Pages must not show "sign in" then. */
+  sessionUnavailable: boolean;
   cartQuantityMap: Map<string, number>;
   /** Bumps after every checkout so the catalog can reload its stock. */
   purchaseVersion: number;
@@ -44,6 +47,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const [user, setUser] = useState<AuthUser | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
+  // Set when the saved sign-in could not be checked because the service was unavailable (not a 401).
+  const [sessionError, setSessionError] = useState<{ reference?: string } | null>(null);
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
 
@@ -95,10 +100,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setUser(account.user);
       setWallet(account.wallet);
       setKyc(account.kyc);
-    } catch {
-      setUser(null);
-      setWallet(null);
-      setKyc(null);
+      setSessionError(null);
+    } catch (err) {
+      if (err instanceof ApiError && err.status !== 401 && hasStoredToken()) {
+        // The service is unavailable, so we do not know whether the saved sign-in is still good.
+        // Keep whatever we already show; do not pretend the user signed out.
+        setSessionError({ reference: err.reference });
+      } else {
+        // 401 (expired or missing token), or nothing saved to check: signed out.
+        if (err instanceof ApiError && err.status === 401) clearToken();
+        setUser(null);
+        setWallet(null);
+        setKyc(null);
+        setSessionError(null);
+      }
     } finally {
       setSessionReady(true);
     }
@@ -305,6 +320,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     () => ({
       user,
       sessionReady,
+      sessionUnavailable: sessionError !== null,
       cartQuantityMap,
       purchaseVersion,
       wallet,
@@ -316,7 +332,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }),
     // addLine and buyNow close over the bag and the signed-in user, so they change with them.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [user, sessionReady, cartQuantityMap, purchaseVersion, wallet, kyc, cart],
+    [user, sessionReady, sessionError, cartQuantityMap, purchaseVersion, wallet, kyc, cart],
   );
 
   const showVerification = isVerifying && !!user;
@@ -336,6 +352,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         {/* pb-24 clears the fixed mobile tab bar */}
         <main id="main" tabIndex={-1} data-testid="app-main" className="mx-auto w-full max-w-7xl flex-1 px-4 pb-24 pt-6 outline-none sm:px-6 md:pb-10 lg:px-8">
+          {sessionError && <SessionBanner reference={sessionError.reference} onRetry={() => void syncSession()} />}
           {user && !showVerification && <KycBanner kyc={kyc} onRetry={() => setIsVerifying(true)} />}
 
           {showVerification ? (

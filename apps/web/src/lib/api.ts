@@ -97,6 +97,10 @@ function getStoredToken(): string | null {
   return localStorage.getItem("pokemart_token");
 }
 
+export function hasStoredToken(): boolean {
+  return getStoredToken() !== null;
+}
+
 export function saveToken(token: string): void {
   if (typeof window !== "undefined") {
     localStorage.setItem("pokemart_token", token);

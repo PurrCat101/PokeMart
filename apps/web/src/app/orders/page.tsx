@@ -19,7 +19,7 @@ interface OrdersPage {
 const EMPTY: OrdersPage = { rows: [], totalCount: 0, offset: 0 };
 
 export default function OrdersRoute() {
-  const { user, sessionReady, openLogin, purchaseVersion } = useApp();
+  const { user, sessionReady, sessionUnavailable, openLogin, purchaseVersion } = useApp();
   const [kind, setKind] = useState<OrderKind>("pokemon");
   const [page, setPage] = useState<OrdersPage>(EMPTY);
   const [isLoading, setIsLoading] = useState(false);
@@ -72,6 +72,9 @@ export default function OrdersRoute() {
       </div>
     );
   }
+
+  // The app could not check the saved sign-in; the banner above says so. Do not claim the user is signed out.
+  if (!user && sessionUnavailable) return null;
 
   if (!user) {
     return (
