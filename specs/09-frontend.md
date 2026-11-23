@@ -62,6 +62,24 @@ The shared API client in `apps/web/src/lib/api.ts` sends an `X-Request-Id`, adds
 - When the provider is unavailable, retain the last known status and show a non-blocking notice if the latest status cannot be refreshed. Purchase history and order detail should still render from local PokéMart API state.
 - Do not treat browser-held cart data, token state, prices, or stock as trusted server-side state.
 
+### Error disclosure: the user sees only what they need
+
+The user gets a plain-language message and, only when they cannot fix the problem themselves, one **reference** to quote to support.
+
+- **Business and input errors** (`VALIDATION_ERROR`, `INSUFFICIENT_FUNDS`, `INSUFFICIENT_STOCK`, `INVALID_CREDENTIALS`, `UNAUTHORIZED`, `KYC_*`, and the other codes in `USER_ACTIONABLE_CODES` in `lib/api.ts`) show the message only. No reference, no status code, no error code.
+- **System faults** (any `5xx`, or an error code the app does not recognise, or a non-envelope response) show the message plus `Reference <requestId>` with a copy button. `ApiError.isSystemFault` and `ApiError.reference` are the single rule; screens call `errorReference(err)` and never decide on their own.
+- **Network failure** (the request never reached the BFF) shows "We can't reach the server" and no reference, because there is no log line to find.
+- HTTP status, error codes, internal service names and `statusText` are never shown. A route-level crash shows the Next.js error digest as its reference. The 404 page shows none.
+- A failed purchase line with `503` or a network failure is **uncertain**: the order may have been taken before the answer was lost. The checkout dialog says "We could not confirm this order" and asks the user to check My orders before paying again. The reference is shown next to that line.
+- Toasts accept an optional `reference`; one with a reference stays on screen for 15 s so it can be copied.
+
+### Purchase retry and session checks
+
+- **One `purchaseId` per bag line until the outcome is known** (`lib/purchase-attempts.ts`, keyed by line and quantity). An uncertain result (`5xx`, timeout, network loss) keeps the id, so paying again re-sends it. If the first try had committed, the API answers `409 PURCHASE_DUPLICATE`; the UI then reads the order back with `GET /api/purchases/{id}` and shows it as a receipt instead of an error. A clear rejection (`4xx`) or a success frees the id, and the next attempt is a new purchase. Ids are forgotten on sign-in and sign-out. They live in memory, so a full page reload starts fresh; the order history is the way to check after a reload.
+- **A failed session check is not a sign-out.** On load, `GET /api/account-info` answering `401` means signed out and the dead token is removed. Any other failure (`503`, network) with a saved token shows the `session-unavailable` notice with **Try again** and the reference, keeps whatever is already on screen, and makes `/orders` and `/profile` show nothing in place of the "Sign in" prompt, because the user may well still be signed in.
+
+Support finds the request in Grafana by pasting the reference into the *Request ID* box ([`05-operations.md`](05-operations.md)).
+
 ## 6. Limitations
 
 - Authentication is for the local lab only. A browser-stored bearer token is accessible to JavaScript and is not a production session design.
@@ -149,9 +167,11 @@ Known IDs should always use `page.getByTestId('pokemon-card-25')` directly. Do n
 | Catalog empty-state action | `catalog-reset-filters` |
 | Theme | `theme-toggle` |
 | Trainer wallet | `wallet-balance` (text is exactly `₽ {amount}`) |
-| Feedback | `toast-{success|error|info}` |
+| Feedback | `toast-{success|error|info}`, `toast-reference` |
+| Session check | `session-unavailable`, `session-retry` |
+| Error reference | `error-reference` (login, KYC form, orders notice), `checkout-error-reference`, `checkout-uncertain-note`, `toast-reference`, `{testId}-reference` on `ErrorPage` (for example `catalog-service-error-reference`) |
 
-UI tests belong in `tests/testCases/ui/` and run as Playwright project `ui`, independently of the real-state/database setup and other API test projects. The UI suite intentionally contains one complete successful-purchase E2E case: it signs in, chooses an affordable in-stock Pokémon, and verifies the wallet debit, stock reduction, inventory quantity increase, and purchase history entry against values observed before checkout. Configure the target origin with `WEB_BASE_URL`; it defaults to `http://localhost:4003`. Run with `npm run test:ui` after making the target web server reachable. For example:
+UI tests belong in `tests/testCases/ui/` and run as Playwright project `ui`, independently of the real-state/database setup and other API test projects. Error and retry behavior is covered by browser-stubbed specs that use the real sign-in and catalog and stub only the failing endpoint with `page.route`: `error-reference.spec.ts` (when a reference is shown), `purchase-retry.spec.ts` (same `purchaseId` after an uncertain result) and `session-outage.spec.ts` (a failed session check is not a sign-out). They change no database state. The UI suite intentionally contains one complete successful-purchase E2E case: it signs in, chooses an affordable in-stock Pokémon, and verifies the wallet debit, stock reduction, inventory quantity increase, and purchase history entry against values observed before checkout. Configure the target origin with `WEB_BASE_URL`; it defaults to `http://localhost:4003`. Run with `npm run test:ui` after making the target web server reachable. For example:
 
 ```powershell
 $env:WEB_BASE_URL = 'https://web-under-test.example'

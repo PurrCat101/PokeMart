@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import type { OrderKind, OrderRow } from "../lib/orders";
 import { LedgerIcon, RefreshIcon, ChevronLeftIcon, ChevronRightIcon } from "./icons";
+import { ErrorReference } from "./ErrorReference";
 import { OrderDetailModal } from "./OrderDetailModal";
 import { DeliveryBadge, usePurchaseShipment } from "./ShipmentStatus";
 import { Alert, Button, IconButton, Skeleton, cx, money } from "./ui";
@@ -17,6 +18,8 @@ interface OrdersViewProps {
   isLoading: boolean;
   /** The last refresh failed. Rows already on screen are kept. */
   hasError: boolean;
+  /** Reference to quote to support when the failure was a system fault. */
+  errorReference?: string;
   onRefresh: () => void;
   onPageChange: (newOffset: number) => void;
 }
@@ -104,7 +107,7 @@ function OrderTableRow({ order, refreshToken, onOpen }: { order: OrderRow; refre
   );
 }
 
-export function OrdersView({ kind, onKindChange, rows, totalCount, limit, offset, isLoading, hasError, onRefresh, onPageChange }: OrdersViewProps) {
+export function OrdersView({ kind, onKindChange, rows, totalCount, limit, offset, isLoading, hasError, errorReference, onRefresh, onPageChange }: OrdersViewProps) {
   const [selectedOrder, setSelectedOrder] = useState<OrderRow | null>(null);
   const [refreshToken, setRefreshToken] = useState(0);
   const ids = IDS[kind];
@@ -160,6 +163,7 @@ export function OrdersView({ kind, onKindChange, rows, totalCount, limit, offset
       {hasError && (
         <Alert tone="warn" title="Could not refresh your orders" data-testid="orders-error">
           {rows.length > 0 ? "Showing the last known list." : "Try refreshing again in a moment."}
+          {errorReference && <ErrorReference value={errorReference} className="mt-1" />}
         </Alert>
       )}
 

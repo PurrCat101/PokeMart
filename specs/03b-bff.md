@@ -115,6 +115,8 @@ Public error codes the BFF may produce itself (not from upstream): `VALIDATION_E
 
 Upstream codes the BFF passes through (status unchanged): `UNAUTHORIZED`, `INVALID_CREDENTIALS`, `POKEMON_NOT_FOUND`, `ITEM_NOT_FOUND`, `USER_NOT_FOUND`, `PURCHASE_NOT_FOUND`, `TOP_UP_NOT_FOUND`, `POKEMON_NOT_FOR_SALE`, `ITEM_NOT_FOR_SALE`, `INSUFFICIENT_STOCK`, `INSUFFICIENT_FUNDS`, `PURCHASE_DUPLICATE`, `TOP_UP_DUPLICATE`, `KYC_LEVEL_REQUIRED`, `KYC_PENDING_REVIEW`, `KYC_ALREADY_PENDING`, `KYC_ALREADY_VERIFIED`, `PAYMENT_FAILED`. Any other upstream 4xx code becomes `500 INTERNAL_ERROR`.
 
+The envelope's `requestId` is what a person quotes to support. The web app shows it as a "Reference" only for failures the user cannot fix (`5xx`, unrecognised codes, a non-envelope response), never for business or input errors, and never together with the HTTP status or error code ([`09-frontend.md`](09-frontend.md), "Error disclosure"). A business code added to the BFF must also be added to `USER_ACTIONABLE_CODES` in `apps/web/src/lib/api.ts`, or the app will treat it as a system fault.
+
 Note: `502 Bad Gateway` is deliberately not used in the public contract. Clients get `503` for any upstream failure, so the contract stays small.
 
 ## 7. Timeouts and retries

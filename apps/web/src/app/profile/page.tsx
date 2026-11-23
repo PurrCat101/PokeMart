@@ -40,7 +40,7 @@ function effectiveLevel(kyc: KycStatus | null): 0 | 1 | 2 {
 }
 
 export default function ProfileRoute() {
-  const { user, wallet, kyc, sessionReady, openLogin, startVerification } = useApp();
+  const { user, wallet, kyc, sessionReady, sessionUnavailable, openLogin, startVerification } = useApp();
   const [showBalance, setShowBalance] = useState(false);
 
   if (!sessionReady) {
@@ -51,6 +51,9 @@ export default function ProfileRoute() {
       </div>
     );
   }
+
+  // The app could not check the saved sign-in; the banner above says so. Do not claim the user is signed out.
+  if (!user && sessionUnavailable) return null;
 
   if (!user) {
     return (

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import Image from "next/image";
 import { CartItem, CheckoutFailure, CheckoutReceipt, WalletData, KycStatus } from "../types/api";
 import { BackpackIcon, PokeballIcon } from "./icons";
+import { ErrorReference } from "./ErrorReference";
 import { Alert, Button, Modal, ModalHeader, money, titleCase } from "./ui";
 import { kycIssue, lineKey, lineName, lineRequiredKyc, lineSprite, lineTotal, lineUnitPrice, verificationName } from "../lib/cart";
 
@@ -103,11 +104,18 @@ export function CheckoutModal({ isOpen, onClose, lines, wallet, kyc, onExecuteCh
                 <ul className="mt-1 list-disc space-y-0.5 pl-5">
                   {failures.map((err) => (
                     <li key={err.key}>
-                      <span className="font-medium capitalize text-fg">{err.name}</span>: {err.error}
+                      <span className="font-medium capitalize text-fg">{err.name}</span>: {err.uncertain ? "We could not confirm this order." : err.error}
+                      {err.reference && <ErrorReference value={err.reference} data-testid="checkout-error-reference" />}
                     </li>
                   ))}
                 </ul>
-                <p className="mt-2 text-xs">Items that failed are still in your bag so you can try again.</p>
+                {failures.some((f) => f.uncertain) ? (
+                  <p className="mt-2 text-xs" data-testid="checkout-uncertain-note">
+                    Check My orders before paying again, because the order may have gone through. Items that failed are still in your bag.
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs">Items that failed are still in your bag so you can try again.</p>
+                )}
               </Alert>
             )}
 

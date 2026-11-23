@@ -174,6 +174,7 @@ export interface ApiErrorResponse {
     code: string;
     message: string;
     requestId: string;
+    retryable?: boolean;
     details: ApiErrorDetail[];
   };
 }
@@ -196,4 +197,11 @@ export interface CheckoutFailure {
   key: string;
   name: string;
   error: string;
+  /** Set for system faults only: the reference to quote to support. */
+  reference?: string;
+  /**
+   * The server may have taken the order before the answer got lost (503, timeout, network).
+   * The user should look at their orders before paying again.
+   */
+  uncertain?: boolean;
 }

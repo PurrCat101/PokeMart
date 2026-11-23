@@ -113,6 +113,7 @@ The client generates a UUID `purchaseId` before sending `POST /api/purchases`. I
 - When a purchase with that ID has committed, another POST using it returns `409 PURCHASE_DUPLICATE`, even if the body differs. Use `GET /api/purchases/{purchaseId}` to inspect the completed purchase.
 - Pokémon and item purchases share one `purchases` table and one endpoint, so a committed `purchaseId` is a duplicate whichever product the second request names (`409 PURCHASE_DUPLICATE`). Clients should generate a fresh UUID per purchase attempt regardless of kind.
 - The purchase row's primary key is the final duplicate guard. The purchase row and wallet, stock, and inventory changes commit atomically.
+- Reference client behavior (the web app, [`09-frontend.md`](09-frontend.md)): it keeps one `purchaseId` per bag line (and quantity) after an uncertain result (`5xx`, timeout, lost connection) and re-sends it on the next try. A `409 PURCHASE_DUPLICATE` on such a retry is not shown as a failure: the client reads the order with `GET /api/purchases/{purchaseId}` and treats it as the committed purchase. A clear `4xx` rejection frees the ID.
 
 ## 7.5 Purchase history
 

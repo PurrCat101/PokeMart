@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { UserIcon } from "./icons";
+import { errorReference } from "../lib/api";
+import { ErrorReference } from "./ErrorReference";
 import { Alert, Button, Field, Modal, ModalHeader, inputClass } from "./ui";
 
 interface LoginModalProps {
@@ -14,6 +16,7 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps)
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reference, setReference] = useState<string | undefined>();
 
   if (!isOpen) return null;
 
@@ -21,11 +24,13 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps)
     e.preventDefault();
     setIsLoading(true);
     setError(null);
+    setReference(undefined);
     try {
       await onLoginSuccess({ email, password });
       onClose();
     } catch (err) {
       setError(err instanceof Error && err.message ? err.message : "Sign in failed. Check your email and password.");
+      setReference(errorReference(err));
     } finally {
       setIsLoading(false);
     }
@@ -46,6 +51,7 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps)
         {error && (
           <Alert tone="danger" title="Couldn't sign you in" data-testid="login-error">
             {error}
+            {reference && <ErrorReference value={reference} className="mt-1" />}
           </Alert>
         )}
 

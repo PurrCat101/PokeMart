@@ -1,12 +1,15 @@
 import React, { useEffect } from "react";
 import { CheckIcon, AlertCircleIcon, XIcon, ClockIcon } from "./icons";
 import { IconButton, cx } from "./ui";
+import { ErrorReference } from "./ErrorReference";
 
 export interface ToastMessage {
   id: string;
   type: "success" | "error" | "info";
   title: string;
   message?: string;
+  /** System faults only: shown with a copy button so the user can quote it to support. */
+  reference?: string;
 }
 
 interface ToastProps {
@@ -23,8 +26,8 @@ const STYLES = {
 export function Toast({ toast, onClose }: ToastProps) {
   useEffect(() => {
     if (!toast) return;
-    // Errors stay a little longer so they can actually be read.
-    const timer = setTimeout(onClose, toast.type === "error" ? 6000 : 4000);
+    // Errors stay a little longer so they can actually be read; a reference needs time to be copied.
+    const timer = setTimeout(onClose, toast.reference ? 15000 : toast.type === "error" ? 6000 : 4000);
     return () => clearTimeout(timer);
   }, [toast, onClose]);
 
@@ -45,6 +48,7 @@ export function Toast({ toast, onClose }: ToastProps) {
         <div className="min-w-0 flex-1 text-sm">
           <p className="font-semibold">{toast.title}</p>
           {toast.message && <p className="mt-0.5 break-words text-fg-muted">{toast.message}</p>}
+          {toast.reference && <ErrorReference value={toast.reference} className="mt-1" data-testid="toast-reference" />}
         </div>
         <IconButton label="Dismiss notification" onClick={onClose} className="-my-1">
           <XIcon className="h-4 w-4" />
