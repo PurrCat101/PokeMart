@@ -21,7 +21,7 @@ async function signIn(page: Page, email: string): Promise<void> {
   await page.getByTestId('login-password').fill(testConfig.auth.password);
   await page.getByTestId('login-submit').click();
   await expect(page.getByTestId('login-dialog')).toBeHidden();
-  await expect(page.getByTestId('wallet-balance')).toBeVisible();
+  await expect(page.getByTestId('wallet-menu-button')).toBeVisible();
 }
 
 test('ITEM-UI-001 an item bought in the web UI appears in Orders with its delivery status', async ({ page, kycAccount }) => {
@@ -40,6 +40,7 @@ test('ITEM-UI-001 an item bought in the web UI appears in Orders with its delive
   await page.getByTestId('nav-catalog').click();
   await page.getByTestId('catalog-kind-items').click();
   await page.getByTestId('catalog-search').fill('potion');
+  await page.getByTestId('catalog-search-submit').click();
   await expect(page.getByTestId(`item-card-${kycCatalog.itemId}`)).toBeVisible();
   await page.getByTestId(`item-buy-now-${kycCatalog.itemId}`).click();
   await expect(page.getByTestId('checkout-dialog')).toBeVisible();

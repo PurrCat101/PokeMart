@@ -198,4 +198,6 @@ See [`10-shipping-integration.md`](10-shipping-integration.md) for environment v
 - Pending work survives container restart because it is stored in MySQL. Expired leases are reclaimed after worker crashes.
 - A provider outage must not make the BFF/PokéMart API fail readiness when local purchase processing and durable queuing still work. Report provider health separately.
 - Retry count is bounded; exhausted work becomes `FAILED` and remains inspectable. Avoid infinite tight loops and avoid logging recipient addresses or secrets.
+- `FAILED` caused by the provider or network (timeout, network error, 408, 429, 5xx) is revived automatically by a recovery sweep once the provider answers again: one probe request per cooldown while it is down, then a bounded drain of the rest after the probe succeeds. Operators do not need to touch the database after an outage. `FAILED` from a permanent 4xx stays for diagnosis. Look for `recovery_probe_failed`, `recovery_provider_back` and `recovery_done` in the worker log.
+- Delivery-status reconciliation rotates through open shipments, least recently checked first, so a backlog larger than `SHIPPING_BATCH_SIZE` is still fully covered.
 - Provide a Makefile target to inspect worker/mock logs and a safe command to stop/start the mock for outage exercises. Stopping the mock must not delete MySQL data.

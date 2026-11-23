@@ -43,6 +43,8 @@ export default function CatalogPage() {
   const [catalogKind, setCatalogKind] = useState<"pokemon" | "items">("pokemon");
 
   // Filter & Search Controls
+  // searchInput is the draft the user is typing; searchQuery is what was submitted and drives the fetch.
+  const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedType, setSelectedType] = useState("all");
   const [selectedItemCategory, setSelectedItemCategory] = useState("all");
@@ -94,8 +96,15 @@ export default function CatalogPage() {
   }, [fetchFullCatalog, purchaseVersion]);
 
   // Reset pagination when filter criteria changes
-  const handleSearchChange = (query: string) => {
-    setSearchQuery(query);
+  const handleSearchSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    setSearchQuery(searchInput.trim());
+    setCurrentPage(1);
+  };
+
+  const handleSearchClear = () => {
+    setSearchInput("");
+    setSearchQuery("");
     setCurrentPage(1);
   };
 
@@ -111,6 +120,7 @@ export default function CatalogPage() {
 
   const handleCatalogKindChange = (kind: "pokemon" | "items") => {
     setCatalogKind(kind);
+    setSearchInput("");
     setSearchQuery("");
     setSelectedType("all");
     setSelectedItemCategory("all");
@@ -129,6 +139,7 @@ export default function CatalogPage() {
   };
 
   const handleClearFilters = () => {
+    setSearchInput("");
     setSearchQuery("");
     setSelectedType("all");
     setSelectedItemCategory("all");
@@ -224,7 +235,7 @@ export default function CatalogPage() {
           {/* One filter panel, identical controls for Pokemon and items:
               search on top, then Type/Category, Sort and Availability as equal labelled fields. */}
           <div className="space-y-4 rounded-xl border border-line bg-surface p-3 shadow-card sm:p-4">
-            <div className="flex items-center gap-2">
+            <form role="search" onSubmit={handleSearchSubmit} className="flex items-center gap-2">
               <div className="relative flex-1">
                 <label htmlFor="catalog-search" className="sr-only">
                   Search {kindLabel}
@@ -235,16 +246,19 @@ export default function CatalogPage() {
                   type="search"
                   data-testid="catalog-search"
                   placeholder={catalogKind === "pokemon" ? "Search by name or number" : "Search items by name or number"}
-                  value={searchQuery}
-                  onChange={(e) => handleSearchChange(e.target.value)}
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
                   className={`${inputClass} pl-9 pr-11 [&::-webkit-search-cancel-button]:appearance-none`}
                 />
-                {searchQuery && (
-                  <IconButton label="Clear search" onClick={() => handleSearchChange("")} className="absolute right-0 top-1/2 -translate-y-1/2">
+                {searchInput && (
+                  <IconButton label="Clear search" onClick={handleSearchClear} className="absolute right-0 top-1/2 -translate-y-1/2">
                     <XIcon className="h-4 w-4" />
                   </IconButton>
                 )}
               </div>
+              <Button type="submit" data-testid="catalog-search-submit" className="shrink-0">
+                Search
+              </Button>
               <IconButton
                 label="Refresh catalog"
                 onClick={fetchFullCatalog}
@@ -254,7 +268,7 @@ export default function CatalogPage() {
               >
                 <RefreshIcon className={cx("h-4 w-4", isCatalogLoading && "animate-spin motion-reduce:animate-none")} />
               </IconButton>
-            </div>
+            </form>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div>
@@ -318,7 +332,7 @@ export default function CatalogPage() {
                     aria-hidden="true"
                     className={cx("relative h-5 w-9 shrink-0 rounded-full transition-colors", stockOnly ? "bg-ok" : "bg-line-strong")}
                   >
-                    <span className={cx("absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-card transition-transform", stockOnly ? "translate-x-4.5" : "translate-x-0.5")} />
+                    <span className={cx("absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-card transition-transform", stockOnly ? "translate-x-4" : "translate-x-0")} />
                   </span>
                 </button>
               </div>

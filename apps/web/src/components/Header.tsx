@@ -3,10 +3,11 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { PokeballIcon, WalletIcon, LedgerIcon, CartIcon, SunIcon, MoonIcon, UserIcon } from "./icons";
+import { PokeballIcon, LedgerIcon, CartIcon, SunIcon, MoonIcon, UserIcon } from "./icons";
 import { AuthUser, WalletData } from "../types/api";
 import { useTheme } from "../contexts/ThemeContext";
-import { Button, IconButton, cx, money } from "./ui";
+import { Button, IconButton, cx } from "./ui";
+import { WalletMenu } from "./WalletMenu";
 
 interface HeaderProps {
   user: AuthUser | null;
@@ -35,7 +36,7 @@ export function Header({
 }: HeaderProps) {
   const { theme, toggleTheme } = useTheme();
   const pathname = usePathname();
-  const activeTab = pathname.startsWith("/orders") ? "orders" : "catalog";
+  const activeTab = pathname.startsWith("/orders") ? "orders" : pathname.startsWith("/profile") ? null : "catalog";
 
   return (
     <>
@@ -84,15 +85,7 @@ export function Header({
           </nav>
 
           <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
-            {user && (
-              <div className="flex items-center gap-2 rounded-md border border-line bg-surface-2 px-2.5 py-1.5">
-                <WalletIcon className="h-4 w-4 text-ok" />
-                <span className="hidden text-xs text-fg-muted sm:inline">Balance</span>
-                <span data-testid="wallet-balance" className="font-mono text-sm font-semibold tabular-nums">
-                  {wallet ? money(wallet.balance) : "₽ ---"}
-                </span>
-              </div>
-            )}
+            {user && <WalletMenu wallet={wallet} onNavigate={onNavigate} />}
 
             <button
               type="button"
@@ -121,10 +114,17 @@ export function Header({
 
             {user ? (
               <div className="flex items-center gap-2">
-                <span className="hidden max-w-32 items-center gap-1.5 truncate text-sm text-fg-muted lg:inline-flex">
+                <Link
+                  href="/profile"
+                  onClick={onNavigate}
+                  data-testid="nav-profile"
+                  aria-label="Profile"
+                  aria-current={pathname.startsWith("/profile") ? "page" : undefined}
+                  className="inline-flex h-11 items-center gap-2 rounded-md px-2 text-sm text-fg-muted transition-colors hover:bg-surface-2 hover:text-fg sm:h-9"
+                >
                   <UserIcon className="h-4 w-4 shrink-0" />
-                  <span className="truncate">{user.displayName}</span>
-                </span>
+                  <span className="hidden max-w-32 truncate lg:inline">{user.displayName}</span>
+                </Link>
                 <Button variant="secondary" size="sm" onClick={onLogout} data-testid="sign-out">
                   Sign out
                 </Button>

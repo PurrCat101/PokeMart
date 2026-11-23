@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test';
 import { expect, test } from '../../support/fixtures/apiFixtures';
 import { testConfig } from '../../index';
 
@@ -16,9 +17,11 @@ test('trainer purchases one Pokémon and sees wallet, stock, and order history u
   await page.getByTestId('login-password').fill(testConfig.auth.password);
   await page.getByTestId('login-submit').click();
   await expect(page.getByTestId('login-dialog')).toBeHidden();
-  await expect(page.getByTestId('wallet-balance')).toBeVisible();
+  await expect(page.getByTestId('wallet-menu-button')).toBeVisible();
+  // The balance is private: it is not on screen until the wallet menu is opened.
+  await expect(page.getByTestId('wallet-balance')).toHaveCount(0);
 
-  const initialBalance = parseDisplayedNumber(await page.getByTestId('wallet-balance').innerText());
+  const initialBalance = parseDisplayedNumber(await openWalletBalance(page));
   const cards = page.getByTestId('catalog-grid').locator('[data-testid^="pokemon-card-"]');
   await expect(cards.first()).toBeVisible();
 
@@ -82,7 +85,7 @@ test('trainer purchases one Pokémon and sees wallet, stock, and order history u
   await page.getByTestId('checkout-close').click();
   await expect(page.getByTestId('checkout-dialog')).toBeHidden();
   await expect(page).not.toHaveURL(/\/orders$/);
-  await expect(page.getByTestId('wallet-balance')).toHaveText(`₽ ${(initialBalance - price).toLocaleString()}`);
+  expect(await openWalletBalance(page)).toBe(`₽ ${(initialBalance - price).toLocaleString()}`);
 
   const expectedStock = stock - 1;
   await expect(page.getByTestId(`pokemon-stock-${id}`)).toHaveText(
@@ -97,6 +100,17 @@ test('trainer purchases one Pokémon and sees wallet, stock, and order history u
   await expect(page.getByTestId(`purchase-quantity-${purchaseId}`)).toHaveText('1');
   await expect(page.getByTestId(`purchase-delivery-status-${purchaseId}`)).toBeVisible();
 });
+
+/** Opens the wallet menu, reads the balance, and closes the menu again. */
+async function openWalletBalance(page: Page): Promise<string> {
+  await page.getByTestId('wallet-menu-button').click();
+  const balance = page.getByTestId('wallet-balance');
+  await expect(balance).toBeVisible();
+  const text = await balance.innerText();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('wallet-menu')).toBeHidden();
+  return text;
+}
 
 function parseDisplayedNumber(text: string): number {
   const value = Number(text.replace(/[^\d-]/g, ''));

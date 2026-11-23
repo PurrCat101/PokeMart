@@ -11,8 +11,17 @@ export interface ShippingWorkerOptions {
   backoffBaseMs?: number;
   backoffMaxMs?: number;
   workerLeaseSeconds?: number;
+  /** How often the loop looks for FAILED shipments that can be revived. */
+  recoveryIntervalMs?: number;
+  /** A FAILED shipment is only probed again after it has been FAILED for this long. */
+  recoveryCooldownMs?: number;
   logger?: (fields: Record<string, unknown>) => void;
 }
+
+// Failures caused by the provider or the network, not by the request itself. A shipment that ran out of
+// attempts because of one of these is revived automatically once the provider answers again.
+// Other 4xx responses mean the request is wrong, so retrying the same payload would never help.
+const TRANSIENT_FAILURE_SQL = `(last_error_code IN ('TIMEOUT', 'NETWORK_ERROR', 'HTTP_429', 'HTTP_408') OR last_error_code REGEXP '^HTTP_5[0-9][0-9]$')`;
 
 export class ShippingWorker {
   private readonly pool: Pool;
@@ -25,13 +34,17 @@ export class ShippingWorker {
   private readonly backoffBaseMs: number;
   private readonly backoffMaxMs: number;
   private readonly workerLeaseSeconds: number;
+  private readonly recoveryIntervalMs: number;
+  private readonly recoveryCooldownMs: number;
   private readonly log: (fields: Record<string, unknown>) => void;
   private readonly workerId: string;
 
   private pollTimer: NodeJS.Timeout | null = null;
   private syncTimer: NodeJS.Timeout | null = null;
+  private recoveryTimer: NodeJS.Timeout | null = null;
   private isProcessingBatch = false;
   private isSyncingStatus = false;
+  private isRecovering = false;
   private isRunning = false;
   private lastHeartbeatAt: Date = new Date();
 
@@ -45,6 +58,8 @@ export class ShippingWorker {
     this.backoffBaseMs = options.backoffBaseMs ?? Number(process.env.SHIPPING_BACKOFF_BASE_MS ?? 500);
     this.backoffMaxMs = options.backoffMaxMs ?? Number(process.env.SHIPPING_BACKOFF_MAX_MS ?? 60000);
     this.workerLeaseSeconds = options.workerLeaseSeconds ?? 30;
+    this.recoveryIntervalMs = options.recoveryIntervalMs ?? Number(process.env.SHIPPING_RECOVERY_INTERVAL_MS ?? 60000);
+    this.recoveryCooldownMs = options.recoveryCooldownMs ?? Number(process.env.SHIPPING_RECOVERY_COOLDOWN_MS ?? 60000);
     this.workerId = `worker-${Math.random().toString(36).substring(2, 9)}`;
 
     this.log = options.logger ?? ((fields) => {
@@ -88,6 +103,7 @@ export class ShippingWorker {
     // Run immediately, then start interval loops
     void this.processDueShipments();
     void this.syncDeliveryStatus();
+    void this.recoverFailedShipments();
 
     this.pollTimer = setInterval(() => {
       this.lastHeartbeatAt = new Date();
@@ -98,6 +114,11 @@ export class ShippingWorker {
       this.lastHeartbeatAt = new Date();
       void this.syncDeliveryStatus();
     }, this.statusSyncIntervalMs);
+
+    this.recoveryTimer = setInterval(() => {
+      this.lastHeartbeatAt = new Date();
+      void this.recoverFailedShipments();
+    }, this.recoveryIntervalMs);
   }
 
   public async stop(): Promise<void> {
@@ -110,7 +131,112 @@ export class ShippingWorker {
       clearInterval(this.syncTimer);
       this.syncTimer = null;
     }
+    if (this.recoveryTimer) {
+      clearInterval(this.recoveryTimer);
+      this.recoveryTimer = null;
+    }
     this.log({ action: 'stop' });
+  }
+
+  /**
+   * Revive shipments that ran out of attempts only because the provider was unreachable.
+   *
+   * A FAILED row is not picked up by processDueShipments, so a provider outage longer than
+   * maxAttempts sweeps would otherwise strand every shipment queued during it for good.
+   *
+   * 1. Canary: put the single oldest transient FAILED row back with one attempt left and send it.
+   *    If the provider is still down it goes straight back to FAILED, so a dead provider costs one
+   *    request per cooldown no matter how many shipments are stranded.
+   * 2. Drain: once the canary gets a label, put the rest back with fresh attempts and send them in
+   *    bounded batches, stopping at the first batch that does not fully succeed.
+   *
+   * Returns how many shipments received a label. Tests call this directly.
+   */
+  public async recoverFailedShipments(): Promise<number> {
+    if (this.isRecovering) return 0;
+    this.isRecovering = true;
+    this.lastHeartbeatAt = new Date();
+
+    try {
+      const canary = await this.requeueFailedShipments(1, Math.max(0, this.maxAttempts - 1), this.recoveryCooldownMs);
+      if (!canary.length) return 0;
+
+      await this.processDueShipments();
+      let recovered = await this.countLabelled(canary);
+      if (recovered === 0) {
+        this.log({ severity: 'warn', action: 'recovery_probe_failed', purchaseId: canary[0] });
+        return 0;
+      }
+      this.log({ action: 'recovery_provider_back', purchaseId: canary[0] });
+
+      // Bounded so one sweep can never loop forever; whatever is left is picked up on the next tick.
+      for (let round = 0; round < 20; round++) {
+        const batch = await this.requeueFailedShipments(this.batchSize, 0, 0);
+        if (!batch.length) break;
+        await this.processDueShipments();
+        const labelled = await this.countLabelled(batch);
+        recovered += labelled;
+        if (labelled < batch.length) break;
+      }
+
+      this.log({ action: 'recovery_done', recovered });
+      return recovered;
+    } catch (err: any) {
+      this.log({ severity: 'error', action: 'recoverFailedShipments', error: err?.message });
+      return 0;
+    } finally {
+      this.isRecovering = false;
+    }
+  }
+
+  private async requeueFailedShipments(limit: number, attemptCount: number, cooldownMs: number): Promise<string[]> {
+    const conn = await this.pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      const [rows] = await conn.query<RowDataPacket[]>(
+        `SELECT purchase_id
+         FROM shipments
+         WHERE processing_status = 'FAILED'
+           AND provider_shipment_id IS NULL
+           AND ${TRANSIENT_FAILURE_SQL}
+           AND updated_at <= DATE_SUB(NOW(3), INTERVAL ? MICROSECOND)
+         ORDER BY updated_at ASC
+         LIMIT ?
+         FOR UPDATE SKIP LOCKED`,
+        [cooldownMs * 1000, limit]
+      );
+      const purchaseIds = (rows as Array<{ purchase_id: string }>).map((r) => r.purchase_id);
+      if (purchaseIds.length > 0) {
+        const placeholders = purchaseIds.map(() => '?').join(',');
+        await conn.query(
+          `UPDATE shipments
+           SET processing_status = 'RETRY_WAIT',
+               attempt_count = ?,
+               next_attempt_at = NOW(3),
+               claimed_until = NULL,
+               updated_at = NOW(3)
+           WHERE purchase_id IN (${placeholders})`,
+          [attemptCount, ...purchaseIds]
+        );
+      }
+      await conn.commit();
+      return purchaseIds;
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+  }
+
+  private async countLabelled(purchaseIds: string[]): Promise<number> {
+    if (!purchaseIds.length) return 0;
+    const placeholders = purchaseIds.map(() => '?').join(',');
+    const [rows] = await this.pool.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS total FROM shipments WHERE processing_status = 'LABEL_CREATED' AND purchase_id IN (${placeholders})`,
+      purchaseIds
+    );
+    return Number((rows[0] as { total: number }).total);
   }
 
   /**
@@ -280,7 +406,7 @@ export class ShippingWorker {
         if (errorText) errorMsg += `: ${errorText.substring(0, 100)}`;
       }
 
-      const isClientErrorNonRetryable = response.status >= 400 && response.status < 500 && response.status !== 429;
+      const isClientErrorNonRetryable = response.status >= 400 && response.status < 500 && response.status !== 429 && response.status !== 408;
       if (isClientErrorNonRetryable || currentAttempt >= this.maxAttempts) {
         // Exceeded attempts or non-retryable 4xx
         await this.pool.query(
@@ -377,6 +503,7 @@ export class ShippingWorker {
          WHERE provider_shipment_id IS NOT NULL
            AND delivery_status NOT IN ('DELIVERED', 'DELIVERY_FAILED')
            ${purchaseId === undefined ? '' : 'AND purchase_id = ?'}
+         ORDER BY updated_at ASC
          LIMIT ?`,
         purchaseId === undefined ? [this.batchSize] : [purchaseId, this.batchSize]
       );
@@ -402,6 +529,7 @@ export class ShippingWorker {
               );
               updatedCount += 1;
               this.log({ action: 'delivery_status_synced', purchaseId: item.purchase_id, oldStatus: item.delivery_status, newStatus: data.status });
+              continue;
             }
           }
         } catch (err: any) {
@@ -409,6 +537,9 @@ export class ShippingWorker {
           // Provider outage leaves last known delivery status intact
           this.log({ severity: 'warn', action: 'sync_error', providerShipmentId: item.provider_shipment_id, error: err?.message });
         }
+        // Checked but unchanged (or unreachable): move it to the back of the line. Without this the same
+        // first `batchSize` shipments are polled on every tick and the ones behind them are never synced.
+        await this.pool.query('UPDATE shipments SET updated_at = NOW(3) WHERE purchase_id = ?', [item.purchase_id]);
       }
 
       return updatedCount;

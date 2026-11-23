@@ -500,4 +500,181 @@ test.describe('Shipping Integration and Resilience Suite', () => {
       await database.query('DELETE FROM purchases WHERE id=?', [purchaseId]);
     }
   });
+
+  // Scenarios 14-17: an outage longer than maxAttempts parks shipments in FAILED. The recovery sweep must
+  // bring them back on its own once the provider answers, without touching the ones that can never succeed.
+  test.describe('Automatic recovery of FAILED shipments', () => {
+    // No cooldown, so the test does not have to wait for the production default.
+    const newRecoveryWorker = () =>
+      new ShippingWorker({
+        shippingBaseUrl: 'http://localhost:4002',
+        requestTimeoutMs: 1000,
+        maxAttempts: 3,
+        batchSize: 10,
+        backoffBaseMs: 50,
+        backoffMaxMs: 200,
+        recoveryCooldownMs: 0,
+      });
+
+    async function exhaustAttempts(purchaseIds: string[]) {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        await database.query('UPDATE shipments SET next_attempt_at = NOW(3) WHERE processing_status = "RETRY_WAIT" AND purchase_id IN (?)', [purchaseIds]);
+        await worker.processDueShipments();
+      }
+    }
+
+    async function cleanup(purchaseIds: string[], snapshot?: PurchaseStateSnapshot, testEnvironment?: { userId: string; pokemonId: string }) {
+      if (snapshot && testEnvironment) await restorePurchaseState(database, testEnvironment.userId, testEnvironment.pokemonId, snapshot);
+      for (const id of purchaseIds) {
+        await database.query('DELETE FROM shipments WHERE purchase_id=?', [id]);
+        await database.query('DELETE FROM purchases WHERE id=?', [id]);
+      }
+    }
+
+    test('14. Outage outlasts maxAttempts; after the provider returns the worker recovers FAILED shipments by itself', async ({
+      bffRequest,
+      testEnvironment,
+      shippingMock,
+    }) => {
+      const purchaseIds = [testEnvironment.purchaseId(), testEnvironment.purchaseId()];
+      let snapshot: PurchaseStateSnapshot | undefined;
+      const recoveryWorker = newRecoveryWorker();
+
+      try {
+        snapshot = await snapshotPurchaseState(database, testEnvironment.userId, testEnvironment.pokemonId);
+        await shippingMock.setMode('unavailable');
+        for (const id of purchaseIds) {
+          const created = await bffRequest.post('/api/purchases', { data: { purchaseId: id, pokemonId: testEnvironment.pokemonId, quantity: 1 } });
+          expect(created.status()).toBe(201);
+        }
+
+        await exhaustAttempts(purchaseIds);
+        for (const id of purchaseIds) {
+          const shipment = await (await bffRequest.get(`/api/purchases/${id}/shipment`)).json();
+          expect(shipment.processingStatus).toBe('FAILED');
+          expect(shipment.trackingNumber).toBeNull();
+        }
+
+        // Plain sweeps never pick FAILED rows up again: this is the stranded state.
+        await database.query('UPDATE shipments SET next_attempt_at = NOW(3) WHERE purchase_id IN (?)', [purchaseIds]);
+        expect(await worker.processDueShipments()).toBe(0);
+
+        // The provider comes back; one recovery sweep must clear the whole backlog.
+        await shippingMock.setMode('success');
+        expect(await recoveryWorker.recoverFailedShipments()).toBe(2);
+
+        for (const id of purchaseIds) {
+          const shipment = await (await bffRequest.get(`/api/purchases/${id}/shipment`)).json();
+          expect(shipment.processingStatus).toBe('LABEL_CREATED');
+          expect(shipment.deliveryStatus).toBe('LABEL_CREATED');
+          expect(typeof shipment.trackingNumber).toBe('string');
+        }
+      } finally {
+        await recoveryWorker.close();
+        await cleanup(purchaseIds, snapshot, testEnvironment);
+      }
+    });
+
+    test('15. Provider still down; recovery sends one probe, not one request per stranded shipment', async ({
+      bffRequest,
+      testEnvironment,
+      shippingMock,
+    }) => {
+      const purchaseIds = [testEnvironment.purchaseId(), testEnvironment.purchaseId(), testEnvironment.purchaseId()];
+      let snapshot: PurchaseStateSnapshot | undefined;
+      const recoveryWorker = newRecoveryWorker();
+
+      try {
+        snapshot = await snapshotPurchaseState(database, testEnvironment.userId, testEnvironment.pokemonId);
+        await shippingMock.setMode('http-500');
+        for (const id of purchaseIds) {
+          await bffRequest.post('/api/purchases', { data: { purchaseId: id, pokemonId: testEnvironment.pokemonId, quantity: 1 } });
+        }
+        await exhaustAttempts(purchaseIds);
+
+        const before = (await shippingMock.getRequests()).filter((r: any) => r.path === '/v1/shipments').length;
+        expect(await recoveryWorker.recoverFailedShipments()).toBe(0);
+        const after = (await shippingMock.getRequests()).filter((r: any) => r.path === '/v1/shipments').length;
+        expect(after - before).toBe(1);
+
+        // Nothing is lost: all three are FAILED again and recoverable later.
+        const [rows] = await database.query<RowDataPacket[]>(
+          'SELECT COUNT(*) AS total FROM shipments WHERE processing_status = "FAILED" AND purchase_id IN (?)',
+          [purchaseIds]
+        );
+        expect(Number((rows[0] as any).total)).toBe(3);
+
+        await shippingMock.setMode('success');
+        expect(await recoveryWorker.recoverFailedShipments()).toBe(3);
+      } finally {
+        await recoveryWorker.close();
+        await cleanup(purchaseIds, snapshot, testEnvironment);
+      }
+    });
+
+    test('16. Permanent failure (4xx) is not revived', async ({ bffRequest, testEnvironment }) => {
+      const purchaseId = testEnvironment.purchaseId();
+      let snapshot: PurchaseStateSnapshot | undefined;
+      const recoveryWorker = newRecoveryWorker();
+
+      try {
+        snapshot = await snapshotPurchaseState(database, testEnvironment.userId, testEnvironment.pokemonId);
+        await bffRequest.post('/api/purchases', { data: { purchaseId, pokemonId: testEnvironment.pokemonId, quantity: 1 } });
+        await database.query(
+          `UPDATE shipments SET processing_status = 'FAILED', attempt_count = 1, last_error_code = 'HTTP_400' WHERE purchase_id = ?`,
+          [purchaseId]
+        );
+
+        expect(await recoveryWorker.recoverFailedShipments()).toBe(0);
+        const shipment = await (await bffRequest.get(`/api/purchases/${purchaseId}/shipment`)).json();
+        expect(shipment.processingStatus).toBe('FAILED');
+        expect(shipment.attemptCount).toBe(1);
+      } finally {
+        await recoveryWorker.close();
+        await cleanup([purchaseId], snapshot, testEnvironment);
+      }
+    });
+
+    test('17. Delivery sync rotates through shipments so none is starved by the batch limit', async ({
+      bffRequest,
+      testEnvironment,
+      shippingMock,
+    }) => {
+      const purchaseIds = [testEnvironment.purchaseId(), testEnvironment.purchaseId()];
+      let snapshot: PurchaseStateSnapshot | undefined;
+      const narrowWorker = new ShippingWorker({ shippingBaseUrl: 'http://localhost:4002', requestTimeoutMs: 1000, batchSize: 1 });
+
+      try {
+        snapshot = await snapshotPurchaseState(database, testEnvironment.userId, testEnvironment.pokemonId);
+        for (const id of purchaseIds) {
+          await bffRequest.post('/api/purchases', { data: { purchaseId: id, pokemonId: testEnvironment.pokemonId, quantity: 1 } });
+        }
+        await worker.processDueShipments();
+
+        const [rows] = await database.query<RowDataPacket[]>(
+          'SELECT provider_shipment_id FROM shipments WHERE purchase_id = ?',
+          [purchaseIds[1]]
+        );
+        await shippingMock.updateDeliveryStatus((rows[0] as any).provider_shipment_id, 'IN_TRANSIT');
+
+        // batchSize 1: each tick checks a single shipment. The shared database may hold other open
+        // shipments too, so tick once per open shipment: with fair rotation that visits every one of them
+        // exactly once, whichever the database returned first. Without rotation the same first row is
+        // polled every time and ours is never reached.
+        const [open] = await database.query<RowDataPacket[]>(
+          `SELECT COUNT(*) AS total FROM shipments
+           WHERE provider_shipment_id IS NOT NULL AND delivery_status NOT IN ('DELIVERED', 'DELIVERY_FAILED')`
+        );
+        for (let tick = 0; tick < Number((open[0] as any).total); tick++) {
+          await narrowWorker.syncDeliveryStatus();
+        }
+
+        const res = await (await bffRequest.get(`/api/purchases/${purchaseIds[1]}/shipment`)).json();
+        expect(res.deliveryStatus).toBe('IN_TRANSIT');
+      } finally {
+        await narrowWorker.close();
+        await cleanup(purchaseIds, snapshot, testEnvironment);
+      }
+    });
+  });
 });
