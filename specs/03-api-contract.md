@@ -23,6 +23,7 @@ The formal contract is `specs/openapi.yaml`. This file describes behavior and ru
 | `GET` | `/api/wallet` | Get the lab user's wallet |
 | `GET` | `/api/inventory` | Get Pokémon owned by the lab user |
 | `POST` | `/api/purchases` | Purchase a Pokémon (`pokemonId`) or an item (`itemId`, never both) using a client-generated purchase ID |
+| `POST` | `/api/checkouts` | Purchase a whole bag (1–20 lines, each a purchase body) atomically: every line commits, or nothing changes |
 | `GET` | `/api/purchases` | List purchase history of both kinds, newest first; optional `kind=POKEMON` or `kind=ITEM` |
 | `GET` | `/api/purchases/:id` | Get purchase details (either kind) |
 | `GET` | `/api/purchases/:id/shipment` | Get the authenticated user's local shipping status (either kind) |

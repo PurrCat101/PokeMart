@@ -4,7 +4,7 @@ import { testConfig } from '../../index';
 
 // A purchase whose answer is lost may have been committed. Paying again must re-send the SAME purchaseId,
 // so the API can answer 409 PURCHASE_DUPLICATE instead of charging twice (specs/03-api-contract.md section 7).
-// Real sign-in and catalog; only POST /api/purchases and GET /api/purchases/{id} are stubbed in the browser.
+// Real sign-in and catalog; only POST /api/checkouts and GET /api/purchases/{id} are stubbed in the browser.
 
 async function signIn(page: Page) {
   await page.addInitScript(() => {
@@ -51,9 +51,9 @@ test('UI-RETRY-001 a retry after a lost answer re-sends the same purchaseId and 
 
   const sent: string[] = [];
   let pokemonId = 0;
-  await page.route('**/api/purchases', async (route) => {
+  await page.route('**/api/checkouts', async (route) => {
     if (route.request().method() !== 'POST') return route.fallback();
-    sent.push(route.request().postDataJSON().purchaseId);
+    sent.push(route.request().postDataJSON().lines[0].purchaseId);
     if (sent.length === 1) return route.abort('connectionreset'); // committed on the server, answer lost
     return route.fulfill({
       status: 409,
@@ -92,9 +92,9 @@ test('UI-RETRY-002 a clear rejection frees the purchaseId, so the next attempt i
   await signIn(page);
 
   const sent: string[] = [];
-  await page.route('**/api/purchases', async (route) => {
+  await page.route('**/api/checkouts', async (route) => {
     if (route.request().method() !== 'POST') return route.fallback();
-    sent.push(route.request().postDataJSON().purchaseId);
+    sent.push(route.request().postDataJSON().lines[0].purchaseId);
     return route.fulfill({
       status: 409,
       contentType: 'application/json',
@@ -123,9 +123,9 @@ test('UI-RETRY-003 a 503 on purchase keeps the purchaseId and shows the referenc
   await signIn(page);
 
   const sent: string[] = [];
-  await page.route('**/api/purchases', async (route) => {
+  await page.route('**/api/checkouts', async (route) => {
     if (route.request().method() !== 'POST') return route.fallback();
-    sent.push(route.request().postDataJSON().purchaseId);
+    sent.push(route.request().postDataJSON().lines[0].purchaseId);
     return route.fulfill({
       status: 503,
       contentType: 'application/json',

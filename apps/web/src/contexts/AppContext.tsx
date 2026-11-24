@@ -4,7 +4,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { api, ApiError, clearToken, errorReference, hasStoredToken } from "../lib/api";
 import { PurchaseAttempts } from "../lib/purchase-attempts";
 import { lineKey, lineMaxQuantity, lineRequiredKyc, normalizeCart, verificationNameTh } from "../lib/cart";
-import type { AuthUser, CartItem, CheckoutFailure, CheckoutReceipt, KycStatus, WalletData } from "../types/api";
+import type { AuthUser, CartItem, CheckoutFailure, CheckoutLineRequest, CheckoutReceipt, KycStatus, PurchaseItem, WalletData } from "../types/api";
 import { Header } from "../components/Header";
 import { CartDrawer } from "../components/CartDrawer";
 import { CheckoutModal } from "../components/CheckoutModal";
@@ -200,82 +200,78 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  // Pays for each line against its own endpoint. A failed line never blocks the others.
+  // Buys the whole bag in one request, so it is all-or-nothing: either every line is bought, or none is and the
+  // wallet, stock and inventory are untouched. Each line still has its own purchase id, kept across uncertain tries.
   const executeCheckout = async (lines: CartItem[], onProgress: (current: number, total: number, itemName: string) => void) => {
     const completed: CheckoutReceipt[] = [];
     const errors: CheckoutFailure[] = [];
+    onProgress(1, 1, "your bag");
 
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const name = lineName(line);
-      onProgress(i + 1, lines.length, name);
+    const receipt = (line: CartItem, purchase: PurchaseItem): CheckoutReceipt => ({
+      purchaseId: purchase.purchaseId,
+      kind: line.kind,
+      name: (line.kind === "pokemon" ? purchase.pokemon?.name : purchase.item?.name.replaceAll("-", " ")) ?? lineName(line),
+      quantity: purchase.quantity,
+      totalPrice: purchase.pricing.totalPrice,
+    });
 
-      // Same id as an earlier try that ended without an answer, so a retry can never charge twice.
-      const { purchaseId, isRetry } = purchaseAttempts.current.begin(line);
-
+    let pending = lines;
+    // Round 2 only runs when an earlier checkout committed part of this bag and its answer was lost (see below).
+    for (let round = 0; round < 2 && pending.length > 0; round++) {
+      const attempts = pending.map((line) => purchaseAttempts.current.begin(line));
+      const isRetry = attempts.some((a) => a.isRetry);
       try {
-        if (line.kind === "pokemon") {
-          const purchase = await api.createPurchase({
-            purchaseId,
-            pokemonId: line.item.pokemon.id,
+        const result = await api.createCheckout(
+          pending.map((line, i) => ({
+            purchaseId: attempts[i].purchaseId,
+            ...(line.kind === "pokemon" ? { pokemonId: line.item.pokemon.id } : { itemId: line.item.id }),
             quantity: line.quantity,
+          })) as CheckoutLineRequest[],
+        );
+        const byId = new Map(result.purchases.map((p) => [p.purchaseId, p]));
+        pending.forEach((line, i) => {
+          const purchase = byId.get(attempts[i].purchaseId);
+          if (purchase) completed.push(receipt(line, purchase));
+          purchaseAttempts.current.settle(line);
+        });
+        pending = [];
+      } catch (checkoutErr) {
+        // An earlier try committed (all of it, since it is atomic) and its answer was lost: read the orders back.
+        // Lines that are not there were added to the bag since, so buy those in a second round.
+        if (isRetry && checkoutErr instanceof ApiError && checkoutErr.code === "PURCHASE_DUPLICATE") {
+          const reads = await Promise.allSettled(pending.map((_, i) => api.getPurchase(attempts[i].purchaseId)));
+          const notBought: CartItem[] = [];
+          let unconfirmed: unknown = null;
+          reads.forEach((read, i) => {
+            if (read.status === "fulfilled") {
+              completed.push(receipt(pending[i], read.value));
+              purchaseAttempts.current.settle(pending[i]);
+            } else if (read.reason instanceof ApiError && read.reason.status === 404) {
+              notBought.push(pending[i]);
+            } else {
+              unconfirmed = read.reason;
+            }
           });
-          completed.push({
-            purchaseId: purchase.purchaseId,
-            kind: "pokemon",
-            name: purchase.pokemon?.name ?? name,
-            quantity: purchase.quantity,
-            totalPrice: purchase.pricing.totalPrice,
-          });
-        } else {
-          const purchase = await api.createItemPurchase({
-            purchaseId,
-            itemId: line.item.id,
-            quantity: line.quantity,
-          });
-          completed.push({
-            purchaseId: purchase.purchaseId,
-            kind: "item",
-            name: purchase.itemName.replaceAll("-", " "),
-            quantity: purchase.quantity,
-            totalPrice: purchase.totalPrice,
-          });
-        }
-        purchaseAttempts.current.settle(line);
-        continue;
-      } catch (purchaseErr) {
-        let failure: unknown = purchaseErr;
-
-        // The earlier try did commit; its answer was just lost. Read the order back instead of reporting a failure.
-        if (isRetry && purchaseErr instanceof ApiError && purchaseErr.code === "PURCHASE_DUPLICATE") {
-          try {
-            const purchase = await api.getPurchase(purchaseId);
-            completed.push({
-              purchaseId: purchase.purchaseId,
-              kind: line.kind,
-              name: (line.kind === "pokemon" ? purchase.pokemon?.name : purchase.item?.name.replaceAll("-", " ")) ?? name,
-              quantity: purchase.quantity,
-              totalPrice: purchase.pricing.totalPrice,
-            });
-            purchaseAttempts.current.settle(line);
+          if (unconfirmed === null) {
+            pending = notBought; // empty when everything was confirmed
             continue;
-          } catch (readErr) {
-            failure = readErr; // could not confirm either: keep the id and report it as uncertain
           }
+          checkoutErr = unconfirmed; // could not confirm either: keep the ids and report it as uncertain
         }
 
-        // A 5xx, a timeout or a lost connection on a purchase can mean the order went through.
-        // Only a clear rejection frees the id; an uncertain result keeps it for the next try.
-        const uncertain = failure instanceof ApiError && (failure.status >= 500 || failure.code === "NETWORK_ERROR");
-        if (!uncertain) purchaseAttempts.current.settle(line);
+        // A 5xx, a timeout or a lost connection can mean the order went through. Only a clear rejection frees the ids.
+        const uncertain = checkoutErr instanceof ApiError && (checkoutErr.status >= 500 || checkoutErr.code === "NETWORK_ERROR");
+        if (!uncertain) pending.forEach((line) => purchaseAttempts.current.settle(line));
 
         const message =
-          failure instanceof ApiError && failure.code === "KYC_LEVEL_REQUIRED"
-            ? `ต้อง${verificationNameTh(lineRequiredKyc(line))}ก่อนจึงจะซื้อได้`
-            : failure instanceof Error && failure.message
-              ? failure.message
-              : "Purchase rejected by server.";
-        errors.push({ key: lineKey(line), name, error: message, reference: errorReference(failure), uncertain });
+          checkoutErr instanceof ApiError && checkoutErr.code === "KYC_LEVEL_REQUIRED"
+            ? `ต้อง${verificationNameTh(Math.max(...pending.map(lineRequiredKyc)))}ก่อนจึงจะซื้อได้`
+            : checkoutErr instanceof Error && checkoutErr.message
+              ? checkoutErr.message
+              : "Order rejected by server.";
+        // Nothing was bought, so every remaining line fails together with the same reason.
+        pending.forEach((line) => errors.push({ key: lineKey(line), name: lineName(line), error: message, reference: errorReference(checkoutErr), uncertain }));
+        break;
       }
     }
 

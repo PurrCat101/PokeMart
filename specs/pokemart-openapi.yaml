@@ -301,6 +301,55 @@ paths:
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
 
+  /pokemart/v1/checkouts:
+    post:
+      tags: [Purchases]
+      summary: Buy a whole bag atomically
+      security:
+        - bearerAuth: []
+      description: |
+        Send 1 to 20 purchase lines (each as in `POST /pokemart/v1/purchases`, with its own `purchaseId` and exactly one of
+        `pokemonId` or `itemId`; no repeated product or purchase ID). All lines are bought in one transaction: if any line
+        is rejected nothing is bought or charged. `INSUFFICIENT_FUNDS` is checked against the bag total. Line-specific
+        errors carry `details: [{ field: "lines[i]", message }]`; validation fields are prefixed `lines[i].`.
+        Retrying a committed bag returns 409 `PURCHASE_DUPLICATE` and writes nothing; read the purchases back by ID.
+        Errors: 400 `VALIDATION_ERROR` or `INVALID_JSON`; 403 `KYC_PENDING_REVIEW` or `KYC_LEVEL_REQUIRED`;
+        404 `POKEMON_NOT_FOUND` or `ITEM_NOT_FOUND`; 409 `PURCHASE_DUPLICATE`, `POKEMON_NOT_FOR_SALE`, `ITEM_NOT_FOR_SALE`
+        or `INSUFFICIENT_STOCK`; 415 `UNSUPPORTED_MEDIA_TYPE`; 422 `INSUFFICIENT_FUNDS`; 500 `INTERNAL_ERROR`;
+        503 `DEPENDENCY_UNAVAILABLE`.
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdRequest'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutRequest'
+      responses:
+        '201':
+          description: Every line was bought
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '415':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
   /pokemart/v1/purchases/{id}:
     security:
       - bearerAuth: []
@@ -719,6 +768,25 @@ components:
           items:
             $ref: '#/components/schemas/InventoryItem'
 
+    CheckoutRequest:
+      type: object
+      additionalProperties: false
+      required: [lines]
+      properties:
+        lines:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/PurchaseRequest'
+    CheckoutResponse:
+      type: object
+      required: [purchases]
+      properties:
+        purchases:
+          type: array
+          items:
+            $ref: '#/components/schemas/Purchase'
     PurchaseRequest:
       type: object
       required: [purchaseId, quantity]

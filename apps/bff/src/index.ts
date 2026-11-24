@@ -217,6 +217,24 @@ function validatePurchase(body: unknown) {
     if (typeof value[field] !== 'number' || !Number.isInteger(value[field]) || (value[field] as number) < 1 || (maximum && (value[field] as number) > maximum)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field, message: maximum ? `must be an integer from 1 to ${maximum}` : 'must be a positive integer' }]);
   }
 }
+const MAX_CHECKOUT_LINES = 20;
+function validateCheckout(body: unknown) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'body', message: 'must be an object' }]);
+  const value = body as Record<string, unknown>;
+  if (Object.keys(value).some((field) => field !== 'lines')) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'body', message: 'contains unknown fields' }]);
+  if (!Array.isArray(value.lines) || value.lines.length < 1 || value.lines.length > MAX_CHECKOUT_LINES) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'lines', message: `must be an array of 1 to ${MAX_CHECKOUT_LINES} purchase lines` }]);
+  value.lines.forEach((line, index) => {
+    try { validatePurchase(line); } catch (error) {
+      if (error instanceof AppError && error.status === 400) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', (error.details as Array<{ field: string; message: string }>).map((d) => ({ ...d, field: `lines[${index}]${d.field === 'body' ? '' : `.${d.field}`}` })));
+      throw error;
+    }
+  });
+}
+function mapCheckout(value: unknown) {
+  const checkout = asRecord(value);
+  if (!Array.isArray(checkout.purchases)) throw new AppError(503, 'DEPENDENCY_UNAVAILABLE', 'PokéMart API returned an invalid checkout');
+  return { purchases: checkout.purchases.map(mapPurchase) };
+}
 async function callUpstream(req: Request, path: string, method = 'GET', body?: unknown): Promise<globalThis.Response> {
   const timeout = method === 'GET' ? 3000 : 5000;
   const attempts = method === 'GET' ? 2 : 1;
@@ -280,7 +298,7 @@ app.use((req, res, next) => {
   });
   next();
 });
-app.use((req, _res, next) => req.method === 'POST' && ['/api/auth/login', '/api/purchases', '/api/wallet/top-ups', '/api/kyc/submissions'].includes(req.path) && !req.is('application/json') ? next(new AppError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Content-Type must be application/json')) : next());
+app.use((req, _res, next) => req.method === 'POST' && ['/api/auth/login', '/api/purchases', '/api/checkouts', '/api/wallet/top-ups', '/api/kyc/submissions'].includes(req.path) && !req.is('application/json') ? next(new AppError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Content-Type must be application/json')) : next());
 app.use(express.json({ strict: false }));
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
@@ -310,6 +328,7 @@ app.get('/api/purchases', async (req, res, next) => { try { const { limit, offse
 app.get('/api/purchases/:id', async (req, res, next) => { try { if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(req.params.id)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'id', message: 'must be a UUID' }]); await relay(req, res, `/pokemart/v1/purchases/${req.params.id}`, 'GET', undefined, mapPurchase); } catch (error) { next(error); } });
 app.get('/api/purchases/:id/shipment', async (req, res, next) => { try { if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(req.params.id)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'id', message: 'must be a UUID' }]); await relay(req, res, `/pokemart/v1/purchases/${req.params.id}/shipment`, 'GET', undefined, mapShipment); } catch (error) { next(error); } });
 app.post('/api/purchases', async (req, res, next) => { try { validatePurchase(req.body); await relay(req, res, '/pokemart/v1/purchases', 'POST', req.body, mapPurchase); } catch (error) { next(error); } });
+app.post('/api/checkouts', async (req, res, next) => { try { validateCheckout(req.body); await relay(req, res, '/pokemart/v1/checkouts', 'POST', req.body, mapCheckout); } catch (error) { next(error); } });
 app.use((error: any, req: Request, res: ExpressResponse, _next: NextFunction) => {
   const appError = error instanceof AppError ? error : error?.type === 'entity.parse.failed' ? new AppError(400, 'INVALID_JSON', 'Malformed JSON request body') : new AppError(500, 'INTERNAL_ERROR', 'An unexpected error occurred');
   if (!(error instanceof AppError) && error?.type !== 'entity.parse.failed') log({ severity: 'error', requestId: resRequestId(req), message: error?.message });
