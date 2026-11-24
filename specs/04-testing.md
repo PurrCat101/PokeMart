@@ -38,6 +38,7 @@ Initial flows:
 3. Attempt to purchase more than available stock; verify the expected error and no partial database changes.
 4. Retrieve a purchase by ID after a successful purchase and compare it with the creation response and persisted state.
 5. Retry a failed, uncommitted purchase with the same `purchaseId`; verify the retry can succeed. Retry after success and verify `409 PURCHASE_DUPLICATE` with no second state change.
+6. Buy a bag of several lines with one `checkoutId`; verify all lines commit together, or that nothing changes when any line fails. Resend the same `checkoutId` and bag and verify the stored `201` is replayed (`Idempotent-Replayed: true`) with no second charge; resend it with a different bag and verify `409 CHECKOUT_ID_CONFLICT`.
 
 Scenario principles:
 - Keep target-specific test files in their respective folders.
@@ -84,6 +85,8 @@ Minimum set for the behavior in `03-api-contract.md` 7.4:
 - Missing or malformed `purchaseId` → `400 VALIDATION_ERROR`.
 - Concurrent requests with the same ID → at most one committed purchase; a repeated request receives a duplicate error. Verify the database afterwards.
 - A timeout or dependency failure where no purchase committed → retry with the same ID may succeed. If the commit outcome is uncertain, look up the purchase ID before retrying.
+
+For `POST /api/checkouts` (`03-api-contract.md` 7.4.1; cases `INT-CHECKOUT-001`–`010` in `08-test-design.md`): same `checkoutId` and bag → replay; same id and different bag → `409 CHECKOUT_ID_CONFLICT`; identical concurrent requests → one commit and one replay; a rejected id stays reusable; a failing line leaves no `checkouts` or `purchases` row; check order is phase by phase over the whole bag.
 
 ## 8.2 Test-data strategy and repeatability
 

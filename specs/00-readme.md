@@ -66,6 +66,7 @@ Public API:
 - `GET /api/purchases/{id}/shipment`
 - `GET /api/items/inventory`
 - `POST /api/purchases` (ส่ง `purchaseId`, `quantity` และ `pokemonId` หรือ `itemId` อย่างใดอย่างหนึ่งใน JSON body)
+- `POST /api/checkouts` (ซื้อทั้งตะกร้าแบบ atomic: `checkoutId` และ `lines` 1–20 รายการ)
 - `GET /health` และ `GET /ready`
 
 Internal service ใช้ endpoints ที่สอดคล้องกันภายใต้ `/pokemart/v1` เช่น `/pokemart/v1/catalog/pokemon`, `/pokemart/v1/auth/login`, `/pokemart/v1/wallet` และ `/pokemart/v1/purchases`; wallet, inventory และ purchase resources ต้องใช้ bearer JWT
@@ -128,6 +129,7 @@ npm run test:e2e
 - Client สร้าง UUID `purchaseId` ก่อนส่งคำขอ และใส่ลง JSON body; ไม่ใช้ `Idempotency-Key` header
 - หาก request ล้มเหลวก่อน transaction commit จะ retry ด้วย `purchaseId` เดิมได้
 - หาก transaction commit แล้ว การส่ง ID เดิมอีกครั้งจะได้ `409 PURCHASE_DUPLICATE`; ตรวจรายการเดิมได้ด้วย `GET /api/purchases/{purchaseId}`
+- `POST /api/checkouts` ใช้ `checkoutId` แทน: ส่งซ้ำด้วยตะกร้าเดิมได้ `201` เดิม (`Idempotent-Replayed: true`) ส่งด้วยตะกร้าต่างได้ `409 CHECKOUT_ID_CONFLICT` (ดู `03-api-contract.md` §7.4.1)
 
 ## เอกสารโครงการ
 

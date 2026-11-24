@@ -47,7 +47,7 @@ Login fields start blank; the UI does not prefill or auto-fill demo credentials.
 
 The frontend calls public routes such as `/api/pokemon`, `/api/items`, `/api/auth/login`, `/api/wallet`, `/api/inventory`, and `/api/purchases`. Next.js rewrites these requests to the BFF. The browser does not need a direct URL or credential for the internal API.
 
-The shared API client in `apps/web/src/lib/api.ts` sends an `X-Request-Id`, adds the stored bearer token when present, and converts public API error envelopes into `ApiError` instances. Purchase requests use a client-generated UUID `purchaseId` in the JSON body, following the public API contract.
+The shared API client in `apps/web/src/lib/api.ts` sends an `X-Request-Id`, adds the stored bearer token when present, and converts public API error envelopes into `ApiError` instances. A bag is bought with one `POST /api/checkouts` carrying a client-generated UUID `checkoutId`; a single purchase uses `purchaseId`, following the public API contract.
 
 ## 5. UX states and data persistence
 
@@ -75,7 +75,7 @@ The user gets a plain-language message and, only when they cannot fix the proble
 
 ### Purchase retry and session checks
 
-- **One `purchaseId` per bag line until the outcome is known** (`lib/purchase-attempts.ts`, keyed by line and quantity). An uncertain result (`5xx`, timeout, network loss) keeps the id, so paying again re-sends it. If the first try had committed, the API answers `409 PURCHASE_DUPLICATE`; the UI then reads the order back with `GET /api/purchases/{id}` and shows it as a receipt instead of an error. A clear rejection (`4xx`) or a success frees the id, and the next attempt is a new purchase. Ids are forgotten on sign-in and sign-out. They live in memory, so a full page reload starts fresh; the order history is the way to check after a reload.
+- **One `checkoutId` per bag until the outcome is known** (`lib/purchase-attempts.ts`, keyed by the sorted lines and quantities). An uncertain result (`5xx`, timeout, network loss) keeps the id, so paying again re-sends it. If the first try had committed, the API replays the stored `201` (`Idempotent-Replayed: true`) and the UI shows the receipts as normal; there is no read-back. A clear rejection (`4xx`) or a success frees the id, and the next attempt is a new checkout. Ids are forgotten on sign-in and sign-out. They live in memory, so a full page reload starts fresh; the order history is the way to check after a reload.
 - **A failed session check is not a sign-out.** On load, `GET /api/account-info` answering `401` means signed out and the dead token is removed. Any other failure (`503`, network) with a saved token shows the `session-unavailable` notice with **Try again** and the reference, keeps whatever is already on screen, and makes `/orders` and `/profile` show nothing in place of the "Sign in" prompt, because the user may well still be signed in.
 
 Support finds the request in Grafana by pasting the reference into the *Request ID* box ([`05-operations.md`](05-operations.md)).
