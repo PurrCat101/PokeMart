@@ -34,6 +34,7 @@ test('WireMock returns the documented exact error bodies for every public error 
     { scenario: 'insufficient-stock', path: '/api/purchases', method: 'POST', status: 409, code: 'INSUFFICIENT_STOCK', message: 'Insufficient stock', body: { purchaseId, pokemonId: 1, quantity: 99 } },
     { scenario: 'insufficient-funds', path: '/api/purchases', method: 'POST', status: 422, code: 'INSUFFICIENT_FUNDS', message: 'Insufficient funds', body: { purchaseId, pokemonId: 1, quantity: 1 } },
     { scenario: 'purchase-duplicate', path: '/api/purchases', method: 'POST', status: 409, code: 'PURCHASE_DUPLICATE', message: 'Purchase ID has already been processed', body: { purchaseId, pokemonId: 1, quantity: 2 } },
+    { scenario: 'checkout-id-conflict', path: '/api/checkouts', method: 'POST', status: 409, code: 'CHECKOUT_ID_CONFLICT', message: 'Checkout ID was already used for a different order', body: { checkoutId: '00000000-0000-4000-8000-0000000000c1', lines: [{ pokemonId: 1, quantity: 1 }] } },
     { scenario: 'dependency-unavailable', path: '/api/pokemon', method: 'GET', status: 503, code: 'DEPENDENCY_UNAVAILABLE', message: 'Catalog service is temporarily unavailable' },
     { scenario: 'internal-error', path: '/api/wallet', method: 'GET', status: 500, code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' },
   ];

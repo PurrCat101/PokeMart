@@ -135,6 +135,8 @@ export interface PurchaseItem {
     totalPrice: number;
   };
   createdAt: string;
+  /** Set when the purchase was made through a checkout (a bag); absent for single purchases. */
+  checkoutId?: string;
 }
 
 export interface ShipmentItem {

@@ -91,6 +91,9 @@ test('INT-CHECKOUT-001 a two-line bag commits every line together under one chec
     expect(result.purchases.map((p: { pokemonId: number }) => p.pokemonId)).toEqual(bag.ids);
     expect(result.purchases.map((p: { totalPrice: number }) => p.totalPrice)).toEqual(bag.prices);
     expect(new Set(result.purchases.map((p: { id: string }) => p.id)).size).toBe(2); // server-made ids, one per line
+    expect(result.purchases.every((p: { checkoutId?: string }) => p.checkoutId === checkoutId)).toBe(true); // every line carries its order id
+    const detail = await request.get(`/pokemart/v1/purchases/${result.purchases[0].id}`, { headers: internalHeaders(bag.userId, 'tc-checkout-001-detail') });
+    expect((await detail.json()).checkoutId).toBe(checkoutId); // and so does the history read
 
     const after = await state(bag);
     expect(after.balance).toBe(before.balance - bag.prices[0] - bag.prices[1]);

@@ -16,7 +16,7 @@ The application owns fictional shop price, stock, user wallet balance, Pokémon 
 
 Suggested files:
 
-- `database/schema/001_create_shop_tables.sql`
+- `database/schema/001_create_shop_tables.sql` (frozen baseline; later schema changes are numbered Liquibase changesets, and `database/schema/pokemart.dbml` shows the current result)
 - `database/seed/001_seed_shop_data.sql`
 - `database/liquibase/db.changelog-master.yaml` (applies the schema and seed files; new changes are added here)
 - `database/migrations/003_add_users_and_foreign_keys.sql` (history, already part of the baseline schema)

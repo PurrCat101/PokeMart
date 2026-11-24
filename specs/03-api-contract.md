@@ -119,7 +119,7 @@ The client generates a UUID `purchaseId` before sending `POST /api/purchases`. I
 
 ### 7.4.1 Checkout (a whole bag) and its idempotency
 
-`POST /api/checkouts` buys a bag in one request. Body: `{ checkoutId, lines }`, where `checkoutId` is a client-generated UUID and `lines` has 1 to 20 entries, each `{ quantity }` plus exactly one of `pokemonId` or `itemId`. A product may appear once; lines carry no `purchaseId` (the server creates one purchase per line). Success is `201` with `{ checkoutId, purchases: [...] }`; every purchase has its own shipment, and the purchases are tagged with the `checkoutId`.
+`POST /api/checkouts` buys a bag in one request. Body: `{ checkoutId, lines }`, where `checkoutId` is a client-generated UUID and `lines` has 1 to 20 entries, each `{ quantity }` plus exactly one of `pokemonId` or `itemId`. A product may appear once; lines carry no `purchaseId` (the server creates one purchase per line). Success is `201` with `{ checkoutId, purchases: [...] }`; every purchase has its own shipment, and the purchases are tagged with the `checkoutId`. The tag is returned as `checkoutId` on each purchase of the bag, in the checkout response and in `GET /api/purchases` and `GET /api/purchases/{id}`; purchases made through `POST /api/purchases` have no `checkoutId` field, so clients can group history into orders by it.
 
 **All or nothing.** Every line is checked and written in one transaction, so a rejected bag changes nothing (no stock, wallet, inventory, purchase or shipment). Checks run one phase at a time over the whole bag, in the same priority as a single purchase: product exists (`404`), product for sale (`409`), verification (`403`), stock (`409`), then the wallet against the **bag total** (`422`). Within a phase the first failing line in request order decides the error, so the result never depends on the order of the lines. Line-specific errors carry `details: [{ "field": "lines[i]", "message": "..." }]`; validation fields are prefixed `lines[i].`.
 
@@ -132,7 +132,9 @@ The client generates a UUID `purchaseId` before sending `POST /api/purchases`. I
 | Two identical requests at the same time | One commits. The other waits for it, then gets the same replay (`201` plus `Idempotent-Replayed: true`). |
 | Same `checkoutId` after a rejection (`4xx`) or a failure before commit | Processed as a new attempt. A rejected checkout leaves no record, so the id is free until a checkout commits under it. |
 
-The checkout row and everything it bought commit together, so a replay only ever returns a committed result. `POST /api/purchases` is unchanged and keeps its own `purchaseId` rules (section 7.4).
+The checkout row and everything it bought commit together, so a replay only ever returns a committed result. **Retention.** A `checkouts` row is the order record for the purchases it bought (`purchases.checkout_id` references it), so it is kept for as long as those purchases are; there is no expiry and a replay works at any later time. The table grows at the same rate as `purchases` (one small row per committed bag), so it needs no separate clean-up job in this lab. A production system that expires idempotency keys (commonly after 24 hours to 30 days) would need to stop treating the row as the order record first, for example by dropping `response_json` and the foreign key, and that is deliberately not done here.
+
+`POST /api/purchases` is unchanged and keeps its own `purchaseId` rules (section 7.4).
 
 ## 7.5 Purchase history
 

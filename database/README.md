@@ -6,7 +6,7 @@ Liquibase applies the schema and seed data (see [Schema migrations](#schema-migr
 
 ![PokéMart MySQL entity relationship diagram](schema/erd.svg)
 
-The diagram reflects the physical schema in [`schema/001_create_shop_tables.sql`](schema/001_create_shop_tables.sql). `pokemon_reference` is the shared catalog; a listing may be present for each catalog Pokémon, while inventory and purchase rows refer back to that Pokémon. The arrows label cardinality from `pokemon_reference` to the related table.
+The current schema is the frozen baseline [`schema/001_create_shop_tables.sql`](schema/001_create_shop_tables.sql) plus the Liquibase changesets after it (`migrations/007` and later: shipments, unified orders/inventory/listings, `checkouts`). [`schema/pokemart.dbml`](schema/pokemart.dbml) is the source for the diagram below and always shows the end result; `erd.svg` is exported from it by hand and can lag behind (regenerate it from the DBML in dbdiagram.io after a schema change). `pokemon_reference` is the shared catalog; a listing may be present for each catalog Pokémon, while inventory and purchase rows refer back to that Pokémon. The arrows label cardinality from `pokemon_reference` to the related table.
 
 ### Open or edit the ERD in dbdiagram.io
 
@@ -81,9 +81,9 @@ PokeAPI data: [PokeAPI REST API](https://pokeapi.co/) and [PokeAPI project](http
 | `make db-adopt` | **One time, for a volume created before Liquibase:** records the baseline as already applied without running it |
 | `make db-reset` | **Destructive.** Deletes the volume and re-applies every changeset |
 
-The baseline changesets point at the existing files, so there is nothing to keep in sync: `001-baseline-schema` runs `schema/001_create_shop_tables.sql` (the schema with migrations 001-006 already folded in) and the `seed` changesets run `seed/*.sql`. Two contexts exist: `schema` and `seed`; set `LIQUIBASE_CONTEXTS=schema` to get an empty schema.
+The baseline changesets point at the existing files, so there is nothing to keep in sync: `001-baseline-schema` runs `schema/001_create_shop_tables.sql` (the schema with migrations 001-006 already folded in; it is not updated by later changes) and the `seed` changesets run `seed/*.sql`. Two contexts exist: `schema` and `seed`; set `LIQUIBASE_CONTEXTS=schema` to get an empty schema.
 
-To change the schema, add a new numbered `changeSet` at the end of the master changelog (a `sqlFile` pointing at a new file in `database/migrations/` works well). Never edit a changeset that has already been applied; Liquibase stores a checksum of each one and will refuse to continue. Keep `schema/001_create_shop_tables.sql` and `pokemart.dbml` equal to the end result, because `001-baseline-schema` is the starting point for a new database.
+To change the schema, add a new numbered `changeSet` at the end of the master changelog (a `sqlFile` pointing at a new file in `database/migrations/` works well). Never edit a changeset that has already been applied; Liquibase stores a checksum of each one and will refuse to continue. Do not edit `schema/001_create_shop_tables.sql`: it is the frozen baseline, and changing it would apply a change twice on a new database (once in the baseline, once in the changeset that adds it). Keep `pokemart.dbml` equal to the end result instead.
 
 The numbered files `migrations/001`-`006` are history. They are already part of the baseline, so a volume created with the current flow never needs them. A volume created before the user-identity rename, the `idempotency_keys` removal, user foreign keys, or the item/KYC/payment tables should be recreated with `make db-reset` rather than patched by hand; the notes below describe what each of those files did.
 
