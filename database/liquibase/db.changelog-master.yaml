@@ -1,8 +1,12 @@
 # Liquibase master changelog for the PokéMart lab database.
 #
 # The baseline reuses the existing SQL files as they are (no copies to keep in sync):
-#   schema/001_create_shop_tables.sql  -> the complete current schema, i.e. the result of
-#                                         database/migrations/001-006 already folded in
+#   schema/001_create_shop_tables.sql  -> the FROZEN baseline: the result of
+#                                         database/migrations/001-006 folded in. It is not the
+#                                         current schema. Later changes (migrations 007+) are
+#                                         applied by the numbered changesets below; the current
+#                                         schema is baseline + those changesets, see
+#                                         schema/pokemart.dbml
 #   seed/*.sql                         -> deterministic reference data (1,025 Pokémon,
 #                                         2,222 items) and the demo account
 #

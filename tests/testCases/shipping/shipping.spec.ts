@@ -523,7 +523,7 @@ test.describe('Shipping Integration and Resilience Suite', () => {
       }
     }
 
-    async function cleanup(purchaseIds: string[], snapshot?: PurchaseStateSnapshot, testEnvironment?: { userId: string; pokemonId: string }) {
+    async function cleanup(purchaseIds: string[], snapshot?: PurchaseStateSnapshot, testEnvironment?: { userId: string; pokemonId: number }) {
       if (snapshot && testEnvironment) await restorePurchaseState(database, testEnvironment.userId, testEnvironment.pokemonId, snapshot);
       for (const id of purchaseIds) {
         await database.query('DELETE FROM shipments WHERE purchase_id=?', [id]);

@@ -156,6 +156,7 @@ function mapPurchase(value: unknown) {
     quantity: purchase.quantity,
     pricing: { unitPrice: purchase.unitPrice, totalPrice: purchase.totalPrice },
     createdAt: purchase.createdAt,
+    ...(typeof purchase.checkoutId === 'string' ? { checkoutId: purchase.checkoutId } : {}),
   };
 }
 function mapShipment(value: unknown) {
@@ -293,7 +294,7 @@ app.use((req, res, next) => {
     res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Request-Id');
-    res.setHeader('Access-Control-Expose-Headers', 'X-Request-Id, Location');
+    res.setHeader('Access-Control-Expose-Headers', 'X-Request-Id, Location, Idempotent-Replayed');
   }
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();

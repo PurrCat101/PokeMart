@@ -123,6 +123,8 @@ $env:TEST_ENV='sit'; npm run test:api  # PowerShell
 | `make db-reset` | **ลบฐานข้อมูล** แล้วสร้างใหม่ด้วย Liquibase |
 | `make help` | แสดงทุก target |
 
+GitHub Actions (`.github/workflows/ci.yml`) รันให้อัตโนมัติทุก PR เฉพาะส่วนที่ไม่ต้องใช้ฐานข้อมูล: typecheck ทุก service และ tests, lint ของ web และ `test:mocked` (WireMock) ส่วน `api`, `pokeapi`, `e2e`, `ui`, `shipping`, `kyc` ต้องใช้ stack จึงยังรันด้วยมือ (`make up` แล้วตามด้วยคำสั่งด้านบน)
+
 `make fresh` และ `make db-reset` ห้ามใช้กับ SIT/shared/production ห้ามใช้ `podman compose down` เปล่าๆ เพราะไม่หยุด service ของ profile `observability` ถ้าเห็น `ssh: handshake failed: EOF` ตอน `make down` ให้รันซ้ำ
 
 ## Purchase request และ retry

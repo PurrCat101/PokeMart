@@ -1,0 +1,71 @@
+name: CI
+
+# Checks that need no database: typecheck, lint, and the WireMock contract tests.
+# The suites that need the full stack (api, pokeapi, e2e, ui, shipping, kyc) run with
+# `make up` and are not part of this workflow.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  typecheck-and-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck services
+        run: |
+          for app in bff pokemart-api payment-mock kyc-api shipping-mock web; do
+            echo "== apps/$app"
+            npx tsc --noEmit -p apps/$app/tsconfig.json
+          done
+      - name: Typecheck tests
+        run: npx tsc --noEmit -p tests/tsconfig.json
+      - name: Lint web
+        run: npm run lint:web
+
+  wiremock-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Start WireMock with the repo mappings
+        run: |
+          docker run -d --name wiremock -p 8080:8080 \
+            -v "$PWD/wiremock/mappings:/home/wiremock/mappings:ro" \
+            wiremock/wiremock:3.10.0
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8080/__admin/mappings >/dev/null && exit 0
+            sleep 1
+          done
+          docker logs wiremock
+          exit 1
+      - name: Run WireMock contract tests
+        env:
+          WEB_BASE_URL: http://localhost:4003 # tells Playwright not to start the web app
+        run: npm run test:mocked
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: tests/playwright-report
+          retention-days: 7

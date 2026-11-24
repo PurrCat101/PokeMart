@@ -157,13 +157,14 @@ function isDuplicateEntry(error: unknown): boolean {
 function asPokemon(row: Row) { return { id: row.id, name: row.name, types: typeof row.types === 'string' ? JSON.parse(row.types) : row.types, spriteUrl: row.spriteUrl, price: row.price, stock: row.stock }; }
 // One DTO for both kinds: `kind` says which of pokemonId/pokemonName or itemId/itemName is present.
 function asPurchase(row: Row) {
-  const common = { quantity: Number(row.quantity), unitPrice: Number(row.unitPrice), totalPrice: Number(row.totalPrice), createdAt: new Date(row.createdAt).toISOString() };
+  // checkoutId is present only for purchases made through POST /checkouts, so single purchases keep their original shape.
+  const common = { quantity: Number(row.quantity), unitPrice: Number(row.unitPrice), totalPrice: Number(row.totalPrice), createdAt: new Date(row.createdAt).toISOString(), ...(row.checkoutId ? { checkoutId: String(row.checkoutId) } : {}) };
   return row.kind === 'POKEMON'
     ? { id: row.id, kind: row.kind, pokemonId: Number(row.pokemonId), pokemonName: row.pokemonName, ...common }
     : { id: row.id, kind: row.kind, itemId: Number(row.itemId), itemName: row.itemName, ...common };
 }
 const PURCHASE_SELECT = `SELECT p.id, p.kind, p.pokemon_source_id AS pokemonId, pr.name AS pokemonName, p.item_source_id AS itemId, ir.name AS itemName,
-  p.quantity, p.unit_price AS unitPrice, p.total_price AS totalPrice, p.created_at AS createdAt
+  p.quantity, p.unit_price AS unitPrice, p.total_price AS totalPrice, p.created_at AS createdAt, p.checkout_id AS checkoutId
   FROM purchases p
   LEFT JOIN pokemon_reference pr ON pr.source_id = p.pokemon_source_id
   LEFT JOIN item_reference ir ON ir.source_id = p.item_source_id`;
@@ -594,7 +595,7 @@ async function createCheckout(userId: string, body: unknown): Promise<CheckoutRe
       await connection.query('INSERT INTO shipments (purchase_id, processing_status, delivery_status, attempt_count, next_attempt_at, created_at, updated_at) VALUES (?, "PENDING", "WAITING_FOR_SHIPMENT", 0, ?, ?, ?)', [purchaseId, createdAt, createdAt, createdAt]);
       await connection.query(`UPDATE listings SET stock=stock-? WHERE ${product.column}=?`, [line.quantity, line.productId]);
       await connection.query(`INSERT INTO user_inventory (user_id,${product.column},quantity) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE quantity=quantity+VALUES(quantity)`, [userId, line.productId, line.quantity]);
-      purchases.push(asPurchase({ id: purchaseId, kind: line.kind === 'item' ? 'ITEM' : 'POKEMON', pokemonId: line.productId, pokemonName: listing.name, itemId: line.productId, itemName: listing.name, quantity: line.quantity, unitPrice: listing.price, totalPrice: lineTotal, createdAt }));
+      purchases.push(asPurchase({ id: purchaseId, kind: line.kind === 'item' ? 'ITEM' : 'POKEMON', pokemonId: line.productId, pokemonName: listing.name, itemId: line.productId, itemName: listing.name, quantity: line.quantity, unitPrice: listing.price, totalPrice: lineTotal, createdAt, checkoutId }));
     }
     await connection.query('UPDATE user_wallet SET balance=balance-? WHERE user_id=?', [total, userId]);
     const response = { checkoutId, purchases };
