@@ -48,7 +48,7 @@ npm run start:web
 1. **Catalog Browsing:** Filterable by name, ID, and Pokémon type with real-time stock and pricing.
 2. **Trainer Authentication:** Direct login modal with blank email and password fields; local demo credentials are documented in the repository root [README](../../README.md).
 3. **Live Wallet Display:** Real-time PokéDollar (`₽`) balance indicator.
-4. **Transactional Idempotency:** Creates unique UUID `purchaseId` per checkout, with balance & stock validation.
+4. **Transactional Idempotency:** Creates one UUID `checkoutId` per bag and buys all lines atomically (balance checked against the bag total, stock per line); a retry with the same id replays the original result.
 5. **Trainer Backpack (Inventory):** Live synced collection of purchased Pokémon.
 6. **Audit Ledger:** Chronological record of all past purchases with transaction UUIDs.
 

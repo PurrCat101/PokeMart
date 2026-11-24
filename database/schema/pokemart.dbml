@@ -87,6 +87,14 @@ Table user_inventory {
   Note: 'One table for Pokémon and item ownership. Surrogate key because a nullable product column cannot be in a primary key; the two unique keys give one row per user per product (NULLs never collide). Added by migration 008.'
 }
 
+Table checkouts {
+  id char(36) [pk, not null, note: 'Client-generated checkoutId: idempotency key and order id for one bag.']
+  user_id varchar(64) [not null]
+  request_hash char(64) [not null, note: 'SHA-256 of the normalized bag; the same id with another hash is refused.']
+  response_json json [note: 'The 201 body, replayed for an identical retry.']
+  created_at timestamp(3) [not null, default: `CURRENT_TIMESTAMP(3)`]
+}
+
 Table purchases {
   id char(36) [pk, not null, note: 'Client-generated purchase UUID; committed IDs are unique across Pokémon and item orders.']
   user_id varchar(64) [not null]
@@ -96,9 +104,11 @@ Table purchases {
   quantity int [not null]
   unit_price int [not null, note: 'Price snapshot at purchase time.']
   total_price int [not null, note: 'Price snapshot at purchase time.']
+  checkout_id char(36) [note: 'The bag this purchase was bought with (POST /checkouts); NULL for single purchases.']
   created_at timestamp(3) [not null, default: `CURRENT_TIMESTAMP(3)`]
 
   indexes {
+    checkout_id [name: 'idx_purchase_checkout']
     (user_id, kind, created_at, id) [name: 'idx_purchase_user_kind_created', note: 'created_at and id are DESC in the MySQL schema']
   }
 
@@ -171,5 +181,7 @@ Ref fk_inventory_item: item_reference.source_id < user_inventory.item_source_id
 Ref fk_inventory_user: users.user_id < user_inventory.user_id
 Ref fk_purchase_item: item_reference.source_id < purchases.item_source_id
 Ref fk_purchase_user: users.user_id < purchases.user_id
+Ref fk_checkout_user: users.user_id < checkouts.user_id
+Ref fk_purchase_checkout: checkouts.id < purchases.checkout_id
 Ref fk_shipment_purchase: purchases.id - shipments.purchase_id [delete: cascade]
 Ref fk_top_up_user: users.user_id < top_ups.user_id

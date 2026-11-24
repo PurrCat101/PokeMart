@@ -23,6 +23,7 @@ The formal contract is `specs/openapi.yaml`. This file describes behavior and ru
 | `GET` | `/api/wallet` | Get the lab user's wallet |
 | `GET` | `/api/inventory` | Get Pokémon owned by the lab user |
 | `POST` | `/api/purchases` | Purchase a Pokémon (`pokemonId`) or an item (`itemId`, never both) using a client-generated purchase ID |
+| `POST` | `/api/checkouts` | Buy a whole bag (1–20 lines) atomically under a client-generated `checkoutId` (idempotency key and order id): every line commits, or nothing changes |
 | `GET` | `/api/purchases` | List purchase history of both kinds, newest first; optional `kind=POKEMON` or `kind=ITEM` |
 | `GET` | `/api/purchases/:id` | Get purchase details (either kind) |
 | `GET` | `/api/purchases/:id/shipment` | Get the authenticated user's local shipping status (either kind) |
@@ -114,6 +115,24 @@ The client generates a UUID `purchaseId` before sending `POST /api/purchases`. I
 - Pokémon and item purchases share one `purchases` table and one endpoint, so a committed `purchaseId` is a duplicate whichever product the second request names (`409 PURCHASE_DUPLICATE`). Clients should generate a fresh UUID per purchase attempt regardless of kind.
 - The purchase row's primary key is the final duplicate guard. The purchase row and wallet, stock, and inventory changes commit atomically.
 - Reference client behavior (the web app, [`09-frontend.md`](09-frontend.md)): it keeps one `purchaseId` per bag line (and quantity) after an uncertain result (`5xx`, timeout, lost connection) and re-sends it on the next try. A `409 PURCHASE_DUPLICATE` on such a retry is not shown as a failure: the client reads the order with `GET /api/purchases/{purchaseId}` and treats it as the committed purchase. A clear `4xx` rejection frees the ID.
+
+
+### 7.4.1 Checkout (a whole bag) and its idempotency
+
+`POST /api/checkouts` buys a bag in one request. Body: `{ checkoutId, lines }`, where `checkoutId` is a client-generated UUID and `lines` has 1 to 20 entries, each `{ quantity }` plus exactly one of `pokemonId` or `itemId`. A product may appear once; lines carry no `purchaseId` (the server creates one purchase per line). Success is `201` with `{ checkoutId, purchases: [...] }`; every purchase has its own shipment, and the purchases are tagged with the `checkoutId`.
+
+**All or nothing.** Every line is checked and written in one transaction, so a rejected bag changes nothing (no stock, wallet, inventory, purchase or shipment). Checks run one phase at a time over the whole bag, in the same priority as a single purchase: product exists (`404`), product for sale (`409`), verification (`403`), stock (`409`), then the wallet against the **bag total** (`422`). Within a phase the first failing line in request order decides the error, so the result never depends on the order of the lines. Line-specific errors carry `details: [{ "field": "lines[i]", "message": "..." }]`; validation fields are prefixed `lines[i].`.
+
+**The `checkoutId` is the idempotency key.** The client keeps it after an uncertain result (`5xx`, timeout, lost connection) and sends the same id with the same bag on the next try.
+
+| Request | Result |
+|---|---|
+| Same `checkoutId`, same user, same bag (line order does not matter) after the first one committed | `201` with the stored first response, same purchase ids, header `Idempotent-Replayed: true`. Nothing is written or charged again. |
+| Same `checkoutId` with a different bag, or an id that belongs to another user | `409 CHECKOUT_ID_CONFLICT`. Nothing changes. |
+| Two identical requests at the same time | One commits. The other waits for it, then gets the same replay (`201` plus `Idempotent-Replayed: true`). |
+| Same `checkoutId` after a rejection (`4xx`) or a failure before commit | Processed as a new attempt. A rejected checkout leaves no record, so the id is free until a checkout commits under it. |
+
+The checkout row and everything it bought commit together, so a replay only ever returns a committed result. `POST /api/purchases` is unchanged and keeps its own `purchaseId` rules (section 7.4).
 
 ## 7.5 Purchase history
 

@@ -14,7 +14,7 @@ const serviceName = 'bff';
 installLogShipper(serviceName);
 const validRequestId = /^[A-Za-z0-9_-]{1,64}$/;
 const validUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const knownCodes = new Set(['VALIDATION_ERROR', 'UNKNOWN_QUERY_PARAMETER', 'INVALID_JSON', 'UNSUPPORTED_MEDIA_TYPE', 'UNAUTHORIZED', 'INVALID_CREDENTIALS', 'POKEMON_NOT_FOUND', 'USER_NOT_FOUND', 'PURCHASE_NOT_FOUND', 'POKEMON_NOT_FOR_SALE', 'ITEM_NOT_FOUND', 'ITEM_NOT_FOR_SALE', 'INSUFFICIENT_STOCK', 'INSUFFICIENT_FUNDS', 'PURCHASE_DUPLICATE', 'KYC_LEVEL_REQUIRED', 'KYC_PENDING_REVIEW', 'KYC_ALREADY_PENDING', 'KYC_ALREADY_VERIFIED', 'TOP_UP_DUPLICATE', 'TOP_UP_NOT_FOUND', 'PAYMENT_FAILED']);
+const knownCodes = new Set(['VALIDATION_ERROR', 'UNKNOWN_QUERY_PARAMETER', 'INVALID_JSON', 'UNSUPPORTED_MEDIA_TYPE', 'UNAUTHORIZED', 'INVALID_CREDENTIALS', 'POKEMON_NOT_FOUND', 'USER_NOT_FOUND', 'PURCHASE_NOT_FOUND', 'POKEMON_NOT_FOR_SALE', 'ITEM_NOT_FOUND', 'ITEM_NOT_FOR_SALE', 'INSUFFICIENT_STOCK', 'INSUFFICIENT_FUNDS', 'PURCHASE_DUPLICATE', 'KYC_LEVEL_REQUIRED', 'KYC_PENDING_REVIEW', 'CHECKOUT_ID_CONFLICT', 'KYC_ALREADY_PENDING', 'KYC_ALREADY_VERIFIED', 'TOP_UP_DUPLICATE', 'TOP_UP_NOT_FOUND', 'PAYMENT_FAILED']);
 const swaggerOrigins = new Set(['http://localhost:8081', 'http://127.0.0.1:8081']);
 
 function log(fields: Record<string, unknown>) { console.log(JSON.stringify({ timestamp: new Date().toISOString(), service: serviceName, environment: process.env.NODE_ENV ?? 'development', ...fields })); }
@@ -217,6 +217,32 @@ function validatePurchase(body: unknown) {
     if (typeof value[field] !== 'number' || !Number.isInteger(value[field]) || (value[field] as number) < 1 || (maximum && (value[field] as number) > maximum)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field, message: maximum ? `must be an integer from 1 to ${maximum}` : 'must be a positive integer' }]);
   }
 }
+const MAX_CHECKOUT_LINES = 20;
+// A checkout line is a purchase without an id: the server creates the purchase ids, the client sends one checkoutId.
+function validateCheckout(body: unknown) {
+  const invalid = (field: string, message: string) => new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field, message }]);
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw invalid('body', 'must be an object');
+  const value = body as Record<string, unknown>;
+  if (Object.keys(value).some((field) => field !== 'checkoutId' && field !== 'lines')) throw invalid('body', 'contains unknown fields');
+  if (typeof value.checkoutId !== 'string' || !validUuid.test(value.checkoutId)) throw invalid('checkoutId', 'must be a UUID');
+  if (!Array.isArray(value.lines) || value.lines.length < 1 || value.lines.length > MAX_CHECKOUT_LINES) throw invalid('lines', `must be an array of 1 to ${MAX_CHECKOUT_LINES} lines`);
+  value.lines.forEach((line, index) => {
+    const field = (name: string) => `lines[${index}]${name === 'body' ? '' : `.${name}`}`;
+    if (!line || typeof line !== 'object' || Array.isArray(line)) throw invalid(field('body'), 'must be an object');
+    const item = line as Record<string, unknown>;
+    if (Object.keys(item).some((key) => key !== 'pokemonId' && key !== 'itemId' && key !== 'quantity')) throw invalid(field('body'), 'contains unknown fields');
+    if (item.pokemonId !== undefined && item.itemId !== undefined) throw invalid(field('body'), 'provide either pokemonId or itemId, not both');
+    const productField = item.itemId !== undefined ? 'itemId' : 'pokemonId';
+    for (const [name, maximum] of [[productField, undefined], ['quantity', 99]] as const) {
+      if (typeof item[name] !== 'number' || !Number.isInteger(item[name]) || (item[name] as number) < 1 || (maximum && (item[name] as number) > maximum)) throw invalid(field(name), maximum ? `must be an integer from 1 to ${maximum}` : 'must be a positive integer');
+    }
+  });
+}
+function mapCheckout(value: unknown) {
+  const checkout = asRecord(value);
+  if (typeof checkout.checkoutId !== 'string' || !Array.isArray(checkout.purchases)) throw new AppError(503, 'DEPENDENCY_UNAVAILABLE', 'PokéMart API returned an invalid checkout');
+  return { checkoutId: checkout.checkoutId, purchases: checkout.purchases.map(mapPurchase) };
+}
 async function callUpstream(req: Request, path: string, method = 'GET', body?: unknown): Promise<globalThis.Response> {
   const timeout = method === 'GET' ? 3000 : 5000;
   const attempts = method === 'GET' ? 2 : 1;
@@ -250,6 +276,7 @@ async function relay(req: Request, res: ExpressResponse, path: string, method = 
     const details = Array.isArray((payload as any).error.details) ? (payload as any).error.details : [];
     throw new AppError(upstream.status, code, String((payload as any).error.message ?? ''), details);
   }
+  if (upstream.headers.get('idempotent-replayed') === 'true') res.setHeader('Idempotent-Replayed', 'true'); // a retried checkout answered from the stored result
   const location = upstream.headers.get('location');
   if (location) res.setHeader('Location', location.replace(/^\/pokemart\/v1\//, '/api/')); // never expose the internal service path
   if (upstream.status < 400 && mapResponse) payload = mapResponse(payload);
@@ -280,7 +307,7 @@ app.use((req, res, next) => {
   });
   next();
 });
-app.use((req, _res, next) => req.method === 'POST' && ['/api/auth/login', '/api/purchases', '/api/wallet/top-ups', '/api/kyc/submissions'].includes(req.path) && !req.is('application/json') ? next(new AppError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Content-Type must be application/json')) : next());
+app.use((req, _res, next) => req.method === 'POST' && ['/api/auth/login', '/api/purchases', '/api/checkouts', '/api/wallet/top-ups', '/api/kyc/submissions'].includes(req.path) && !req.is('application/json') ? next(new AppError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Content-Type must be application/json')) : next());
 app.use(express.json({ strict: false }));
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
@@ -310,6 +337,7 @@ app.get('/api/purchases', async (req, res, next) => { try { const { limit, offse
 app.get('/api/purchases/:id', async (req, res, next) => { try { if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(req.params.id)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'id', message: 'must be a UUID' }]); await relay(req, res, `/pokemart/v1/purchases/${req.params.id}`, 'GET', undefined, mapPurchase); } catch (error) { next(error); } });
 app.get('/api/purchases/:id/shipment', async (req, res, next) => { try { if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(req.params.id)) throw new AppError(400, 'VALIDATION_ERROR', 'Request validation failed', [{ field: 'id', message: 'must be a UUID' }]); await relay(req, res, `/pokemart/v1/purchases/${req.params.id}/shipment`, 'GET', undefined, mapShipment); } catch (error) { next(error); } });
 app.post('/api/purchases', async (req, res, next) => { try { validatePurchase(req.body); await relay(req, res, '/pokemart/v1/purchases', 'POST', req.body, mapPurchase); } catch (error) { next(error); } });
+app.post('/api/checkouts', async (req, res, next) => { try { validateCheckout(req.body); await relay(req, res, '/pokemart/v1/checkouts', 'POST', req.body, mapCheckout); } catch (error) { next(error); } });
 app.use((error: any, req: Request, res: ExpressResponse, _next: NextFunction) => {
   const appError = error instanceof AppError ? error : error?.type === 'entity.parse.failed' ? new AppError(400, 'INVALID_JSON', 'Malformed JSON request body') : new AppError(500, 'INTERNAL_ERROR', 'An unexpected error occurred');
   if (!(error instanceof AppError) && error?.type !== 'entity.parse.failed') log({ severity: 'error', requestId: resRequestId(req), message: error?.message });

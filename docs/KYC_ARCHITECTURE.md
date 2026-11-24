@@ -35,7 +35,7 @@ Additionally, accounts under review (**PENDING_REVIEW status**) cannot purchase 
 **Location:** `apps/pokemart-api/src/index.ts`
 
 - **Responsibility:** Enforce KYC checks at transaction time
-- **Entry Points:** `/pokemart/v1/purchases` (Pokémon and items)
+- **Entry Points:** `/pokemart/v1/purchases` (one Pokémon or item) and `/pokemart/v1/checkouts` (a whole bag, all lines in one transaction)
 
 #### Key Functions
 
@@ -103,7 +103,7 @@ User Level 0 tries to buy level-1 item:
 
 #### UI Checks
 
-**A. Checkout Modal** (`CheckoutModal.tsx:37`)
+**A. Checkout Modal** (`CheckoutModal.tsx`)
 ```typescript
 const cannotPay = 
   remainingBalance < 0 ||           // Insufficient funds
@@ -112,7 +112,7 @@ const cannotPay =
 // → Disable "Pay" button
 ```
 
-**B. KYC Prompt** (`page.tsx:468-469`)
+**B. KYC Prompt** (`AppContext.tsx`, `needsVerificationPrompt`)
 ```typescript
 const needsVerificationPrompt =
   !!user &&
@@ -146,12 +146,14 @@ REJECTED: "Verification was declined — Send again"
                  │ (HTTP POST)
          ┌───────▼──────────────┐
          │ BFF Relays Request   │ ← Passes through unchanged
-         │ /api/purchases       │
+         │ /api/purchases or    │
+         │ /api/checkouts       │
          └───────┬──────────────┘
                  │ (HTTP POST)
          ┌───────▼────────────────────┐
          │ PokéMart API               │
-         │ POST /purchases            │
+         │ POST /purchases or         │
+         │ POST /checkouts            │
          └───────┬────────────────────┘
                  │
          ┌───────▼─────────────┐
@@ -184,6 +186,8 @@ REJECTED: "Verification was declined — Send again"
          │ or HTTP 403 Forbidden    │   403/422/409 error
          └───────────────────────────┘
 ```
+
+> **Checkout (a whole bag).** `POST /checkouts` runs the same chain once for the bag: `prefetchKyc` is called once, using the highest level any line needs (it fails closed only when some line needs a level above 0). Inside the transaction the checks run phase by phase over all lines (exists, for sale, KYC, stock, then wallet against the bag total), and `assertKyc()` is applied to every line before any stock or funds check. So a KYC failure on line 2 wins over a stock failure on line 1 (test `INT-CHECKOUT-010`). Any failure rolls back the whole bag. See `specs/12-kyc.md` section 6.
 
 ---
 
@@ -251,6 +255,7 @@ Response: 403 Forbidden
 | UI prompt shown for unverified | KYC-UI-001 | `ui-kyc/verification.spec.ts` |
 | UI form validation | KYC-UI-003 | `ui-kyc/verification.spec.ts` |
 | Cannot buy while under review | KYC-UI-004 | `ui-kyc/verification.spec.ts` |
+| KYC failure on a later bag line beats stock failure on an earlier line | INT-CHECKOUT-010 | `PokeAPI/checkouts/create.spec.ts` |
 
 ### 🟡 Partially Covered
 

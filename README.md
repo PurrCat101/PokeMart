@@ -85,7 +85,7 @@ Login คืน JWT อายุ 1 ชั่วโมง ส่งเป็น `
 | `npm run test:mocked` | WireMock contract (ไม่ทดสอบ logic จริงของ BFF) | WireMock |
 | `npm run test:api` | Public API validation กับ BFF จริง | stack |
 | `npm run test:pokeapi` | Internal API แยกตาม endpoint | stack |
-| `npm run test:purchase-retry` | Retry ด้วย `purchaseId` เดิม และ duplicate | stack |
+| `npm run test:purchase-retry` | UI: retry ด้วย `checkoutId` เดิมและ replay (stub ที่ `/api/checkouts`) | stack |
 | `npm run test:e2e` | User journeys ผ่าน BFF ถึง MySQL | stack |
 | `npm run test:shipping` | Shipment: resilience, batch worker, idempotency, delivery lifecycle | stack |
 | `npm run test:kyc` | KYC levels, สถานะตรวจสอบ และฟอร์มยืนยันตัวตน (API + UI) | stack |
@@ -138,6 +138,22 @@ Client สร้าง UUID `purchaseId` เองและส่งใน JSON 
 - ไม่แน่ใจว่า commit หรือยัง: ตรวจ `GET /api/purchases/{purchaseId}` ก่อน retry
 - สถานะจัดส่ง: `GET /api/purchases/{id}/shipment` (ใช้ได้กับทั้ง Pokémon และ item)
 - ประวัติ: `GET /api/purchases` รวมทั้งสองประเภท กรองด้วย `?kind=POKEMON` หรือ `?kind=ITEM` ได้
+
+### ซื้อทั้งตะกร้า (`POST /api/checkouts`)
+
+ตะกร้าหนึ่งใบคือคำขอเดียว สำเร็จทั้งหมดหรือไม่สำเร็จเลย (หนึ่ง transaction) Client สร้าง UUID `checkoutId` เอง ใช้เป็น idempotency key และเลข order:
+
+```json
+{ "checkoutId": "00000000-0000-4000-8000-0000000000c1",
+  "lines": [ { "pokemonId": 1, "quantity": 1 }, { "itemId": 4, "quantity": 2 } ] }
+```
+
+- `lines` มี 1–20 รายการ ไม่ส่ง `purchaseId` (server สร้างให้แต่ละ line และเก็บ purchase/shipment แยกต่อ line)
+- ส่ง `checkoutId` เดิม + ตะกร้าเดิม (ลำดับ line ไม่สำคัญ): ได้ `201` เดิมกลับมา พร้อม header `Idempotent-Replayed: true` ไม่หักเงินซ้ำ
+- `checkoutId` เดิมแต่ตะกร้าต่างหรือคนละ user: `409 CHECKOUT_ID_CONFLICT`
+- ถูกปฏิเสธ: rollback ทั้งหมด id ใช้ซ้ำได้
+- ลำดับตรวจทั้งตะกร้า: มีสินค้า 404 → ขายได้ 409 → KYC 403 → stock 409 → wallet เทียบยอดรวม 422
+- `POST /api/purchases` (ซื้อ 1 รายการ) ยังใช้ `purchaseId` เหมือนเดิม
 
 ## ฐานข้อมูล
 
