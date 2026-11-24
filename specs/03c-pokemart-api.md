@@ -30,6 +30,7 @@ The BFF forwards tokens unchanged. The internal API is still intended to remain 
 | `GET` | `/pokemart/v1/inventory` | Owned Pokémon of the caller |
 | `GET` | `/pokemart/v1/items/inventory` | Owned items of the caller (items only) |
 | `POST` | `/pokemart/v1/purchases` | Create a purchase of a Pokémon (`pokemonId`) or an item (`itemId`, never both) using the supplied purchase ID |
+| `POST` | `/pokemart/v1/checkouts` | Buy a bag of 1–20 lines in ONE transaction under a client-generated `checkoutId` (idempotency key and order id): all commit or none do. Each line keeps its own purchase and shipment, tagged with `checkout_id` |
 | `GET` | `/pokemart/v1/purchases` | Paged purchase history of the caller, both kinds, newest first; optional `kind=POKEMON\|ITEM` |
 | `GET` | `/pokemart/v1/purchases/{id}` | One purchase of the caller, either kind |
 | `GET` | `/pokemart/v1/purchases/{id}/shipment` | Local shipment state for the caller's purchase, either kind |
@@ -104,3 +105,15 @@ The PokéMart API creates a shipment record with `processing_status = PENDING` a
 `POST /pokemart/v1/wallet/top-ups` validates `topUpId` and a 1–10,000 THB integer, persists a `PENDING` row, then calls Payment Mock outside a database transaction with `topUpId` as provider idempotency key. A succeeded result transitions the row to `COMPLETED` and credits the wallet in one transaction. Declines become `FAILED`; timeouts/provider errors become `UNKNOWN` and never credit the wallet in the request path. `GET /pokemart/v1/wallet/top-ups/{topUpId}` is owner-scoped.
 
 KYC levels come from the KYC API (`KYC_BASE_URL`, timeout `KYC_REQUEST_TIMEOUT_MS`, see [`12-kyc.md`](12-kyc.md)), not from MySQL. On every purchase the service calls KYC **before opening the transaction and before taking a pool connection**, then checks at the KYC step of the purchase order. An account in `PENDING_REVIEW` gets `403 KYC_PENDING_REVIEW` for any listing; otherwise a shortfall against a listing's `required_kyc_level` returns `403 KYC_LEVEL_REQUIRED` before stock, wallet, inventory, purchase, and shipment writes. If KYC is unreachable the result is `503 DEPENDENCY_UNAVAILABLE` (fail closed), but earlier checks (duplicate, not found, not for sale) still win, and a KYC outage fails every purchase closed (`503`), because every seeded listing needs level 1 or 2. `POST /pokemart/v1/kyc/submissions` forwards the identity form to the KYC API and returns the new status (`202`), mapping KYC `400` to `VALIDATION_ERROR` (with `details`) and `409` to `KYC_ALREADY_PENDING` / `KYC_ALREADY_VERIFIED`; see [`12-kyc.md`](12-kyc.md) section 10. `GET /pokemart/v1/kyc/status` returns the KYC record or `503`; `GET /pokemart/v1/account-info` returns `kyc: null` when KYC is down. `GET /pokemart/v1/purchases/{id}` is owner-scoped for both kinds (`404 PURCHASE_NOT_FOUND`).
+
+## 13. Checkout (atomic bag, idempotent)
+
+`POST /pokemart/v1/checkouts` accepts `{ checkoutId, lines: [{ pokemonId | itemId, quantity }] }` (1–20 lines, no repeated product; lines have no `purchaseId`, the service generates one per line). The contract is in [`03-api-contract.md`](03-api-contract.md) section 7.4.1; this is how the service does it:
+
+1. Validate the body, hash the normalized bag (SHA-256 of the sorted `kind:productId:quantity` lines).
+2. Look the `checkoutId` up in `checkouts`. Same user and same hash → return the stored `response_json` (`201`, `Idempotent-Replayed: true`). Another hash or user → `409 CHECKOUT_ID_CONFLICT`.
+3. Read the caller's KYC level once before taking a pool connection (failing closed only when some line needs a level).
+4. In one transaction: `INSERT` the `checkouts` row first (the primary key makes a concurrent identical request wait for this one; after it commits, the loser re-reads and replays, after a rollback it proceeds). Lock the listings in a fixed order (Pokémon before items, by ID, so two bags can never deadlock), then run the checks **by phase over the whole bag**: product exists, for sale, verification, stock, and finally the wallet against the **bag total**. Then write each line's purchase (with `checkout_id`), shipment, stock and inventory, one wallet debit, and the stored `response_json`.
+5. Any failure rolls everything back, including the `checkouts` row, so a rejected bag changes nothing and its id stays usable. Line-specific errors carry `details: [{ "field": "lines[i]", "message": "..." }]`.
+
+The single-purchase endpoint `POST /pokemart/v1/purchases` is unchanged. The schema change is migration `011_create_checkouts.sql` (Liquibase changeset `013`).

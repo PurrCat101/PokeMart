@@ -100,7 +100,7 @@ export function CheckoutModal({ isOpen, onClose, lines, wallet, kyc, onExecuteCh
               </Alert>
             )}
             {failures.length > 0 && (
-              <Alert tone="danger" title="Some items could not be purchased" data-testid="checkout-errors">
+              <Alert tone="danger" title={completed.length === 0 ? "Your order was not placed" : "Some items could not be purchased"} data-testid="checkout-errors">
                 <ul className="mt-1 list-disc space-y-0.5 pl-5">
                   {failures.map((err) => (
                     <li key={err.key}>
@@ -111,10 +111,12 @@ export function CheckoutModal({ isOpen, onClose, lines, wallet, kyc, onExecuteCh
                 </ul>
                 {failures.some((f) => f.uncertain) ? (
                   <p className="mt-2 text-xs" data-testid="checkout-uncertain-note">
-                    Check My orders before paying again, because the order may have gone through. Items that failed are still in your bag.
+                    Check My orders before paying again, because the order may have gone through. The whole bag is bought together, so it either all went through or none did.
                   </p>
                 ) : (
-                  <p className="mt-2 text-xs">Items that failed are still in your bag so you can try again.</p>
+                  <p className="mt-2 text-xs">
+                    {completed.length === 0 ? "Nothing was charged and every item is still in your bag, so you can try again." : "Items that failed are still in your bag so you can try again."}
+                  </p>
                 )}
               </Alert>
             )}

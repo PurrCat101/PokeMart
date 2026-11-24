@@ -156,3 +156,15 @@ databaseChangeLog:
             relativeToChangelogFile: true
             splitStatements: true
             endDelimiter: ;
+
+  - changeSet:
+      id: 013-checkouts
+      author: pokemart
+      context: schema
+      comment: Atomic bag checkout - checkouts table (idempotency key and order id) and purchases.checkout_id (migration 011)
+      changes:
+        - sqlFile:
+            path: ../migrations/011_create_checkouts.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            endDelimiter: ;

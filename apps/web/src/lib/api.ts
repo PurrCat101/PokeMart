@@ -7,6 +7,8 @@ import {
   InventoryResponse,
   PurchasesPageResponse,
   PurchaseItem,
+  CheckoutLineRequest,
+  CheckoutResponse,
   CreatePurchaseRequest,
   ApiErrorResponse,
   ShipmentItem,
@@ -265,6 +267,17 @@ export const api = {
     return request<PurchaseItem>("/api/purchases", {
       method: "POST",
       body: JSON.stringify(purchase),
+    });
+  },
+
+  /**
+   * Buys a whole bag as one unit: every line is bought, or none is and nothing is charged. The checkoutId is the
+   * idempotency key: sending it again with the same bag returns the first result instead of buying twice.
+   */
+  async createCheckout(checkoutId: string, lines: CheckoutLineRequest[]): Promise<CheckoutResponse> {
+    return request<CheckoutResponse>("/api/checkouts", {
+      method: "POST",
+      body: JSON.stringify({ checkoutId, lines }),
     });
   },
 

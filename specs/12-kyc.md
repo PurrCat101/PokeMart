@@ -74,6 +74,8 @@ Base path `/kyc/v1`. Contract เต็มอยู่ใน [`kyc-openapi.yaml`
 6. ตรวจ stock → `409 INSUFFICIENT_STOCK`
 7. ตรวจ wallet → `422 INSUFFICIENT_FUNDS`
 
+สำหรับ `POST /api/checkouts` ลำดับนี้ใช้ทีละเฟสกับทั้งตะกร้า (ข้อ 3 ทุก line ก่อน แล้วข้อ 4, 5, 6) โดยข้อ 2 คือการเทียบ `checkoutId` (`409 CHECKOUT_ID_CONFLICT` หรือ replay) และข้อ 7 เทียบ wallet กับยอดรวมของตะกร้า ภายในเฟสเดียวกัน line แรกที่ไม่ผ่านตามลำดับ request เป็นตัวตัดสิน และเรียก KYC ครั้งเดียวต่อตะกร้าด้วยระดับสูงสุดที่ต้องการ
+
 การเรียก KYC เกิด **ก่อนเปิด transaction** (และก่อนรับ connection จาก pool) **ในทุกการซื้อ** เพื่อให้ตรวจ `PENDING_REVIEW` ได้ (เดิมเรียกเฉพาะ `required_kyc_level > 0`). สินค้าในข้อมูลเริ่มต้นต้องการระดับ ≥ 1 ทั้งหมด จึงเรียก KYC เสมอและ fail closed เมื่อ KYC ล่ม (§7). ผลหรือความล้มเหลวถูกเก็บไว้แล้วนำไปใช้ที่ข้อ 5 ภายใน transaction จึงรักษาลำดับ error ตามข้างบน เช่น สินค้าไม่มีจริงยังได้ `404` แม้ KYC ล่ม
 
 การปฏิเสธเพราะ KYC ต้องไม่เปลี่ยน wallet, stock, inventory, purchase history หรือ shipment

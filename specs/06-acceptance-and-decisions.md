@@ -62,9 +62,10 @@
 
 ### Decided
 
-- **Purchase retry:** the client generates a UUID `purchaseId` in the JSON body. Failed, uncommitted requests may reuse the ID; committed IDs return `409 PURCHASE_DUPLICATE`. There is no `Idempotency-Key` header or replay response.
+- **Purchase retry:** the client generates a UUID `purchaseId` in the JSON body. Failed, uncommitted requests may reuse the ID; committed IDs return `409 PURCHASE_DUPLICATE`. There is no `Idempotency-Key` header. A single purchase has no replay response; a checkout does (see below).
 - **One table per concept, not per product type:** Pokémon and item orders, shipments, inventory and listings share `purchases`, `shipments`, `user_inventory` and `listings` (migrations `008`/`009`). A `purchaseId` is therefore unique across both kinds, and both are bought, listed, read and shipped through one endpoint family (`/api/purchases`, with a `kind` field and an optional `kind` list filter) instead of parallel `/api/items/purchases` routes. Reference tables stay separate (different columns). Trade-offs: surrogate keys on `user_inventory` and `listings`, and a `kind` filter on history queries.
-- **Order identifier:** client-generated UUID `purchaseId`. Human-readable order numbers are out of scope.
+- **Order identifier:** client-generated UUID `purchaseId` for a single purchase, and client-generated UUID `checkoutId` for a bag. Human-readable order numbers are out of scope.
+- **Checkout (whole bag):** `POST /api/checkouts` buys all lines in one transaction (all or nothing). `checkoutId` is the idempotency key: same id and same bag replays the stored `201` with `Idempotent-Replayed: true`; same id and a different bag or user is `409 CHECKOUT_ID_CONFLICT`. Validation runs phase by phase over the whole bag (exists, for sale, KYC, stock, wallet against the bag total); listings are locked in a fixed order to avoid deadlock. Each line keeps its own purchase and shipment row, linked by `purchases.checkout_id`.
 - **Authentication:** local demo login uses email/password, scrypt password hashes, and one-hour HS256 bearer tokens. The local seeded account is `lab-user-001@example.test`; there is no public registration, password reset, refresh token, or production-grade rate limiting.
 - **Error body format:** `{ error: { code, message, requestId, details } }`.
 - **Unknown query parameters:** rejected with `400 UNKNOWN_QUERY_PARAMETER`.

@@ -265,6 +265,68 @@ paths:
           $ref: '#/components/responses/Error'
         '503':
           $ref: '#/components/responses/Error'
+  /api/checkouts:
+    post:
+      tags: [Purchases]
+      summary: Buy a whole bag atomically (idempotent)
+      security:
+        - bearerAuth: []
+      description: |
+        Send a client-generated `checkoutId` and 1 to 20 lines, each `quantity` plus exactly one of `pokemonId` or `itemId`
+        (a product may appear once; lines carry no `purchaseId`, the server creates one purchase per line).
+        All lines are bought in one transaction: if any line is rejected nothing is bought or charged.
+        Checks run by phase over the whole bag: product exists (404), for sale (409), verification (403), stock (409),
+        then the wallet against the bag total (422); within a phase the first failing line decides the error.
+        Line-specific errors carry `details: [{ field: "lines[i]", message }]`; validation fields are prefixed `lines[i].`.
+
+        The `checkoutId` is the idempotency key. The same id with the same bag (line order does not matter) after it
+        committed returns the stored 201 with header `Idempotent-Replayed: true` and charges nothing again. The same id
+        with a different bag, or another user's id, returns 409 `CHECKOUT_ID_CONFLICT`. A rejected checkout leaves no
+        record, so its id can be used again.
+
+        Errors: 400 `VALIDATION_ERROR` or `INVALID_JSON`; 403 `KYC_PENDING_REVIEW` or `KYC_LEVEL_REQUIRED`;
+        404 `POKEMON_NOT_FOUND` or `ITEM_NOT_FOUND`; 409 `CHECKOUT_ID_CONFLICT`, `POKEMON_NOT_FOR_SALE`, `ITEM_NOT_FOR_SALE`
+        or `INSUFFICIENT_STOCK`; 415 `UNSUPPORTED_MEDIA_TYPE`; 422 `INSUFFICIENT_FUNDS`; 500 `INTERNAL_ERROR`;
+        503 `DEPENDENCY_UNAVAILABLE`.
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdRequest'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutRequest'
+      responses:
+        '201':
+          description: Every line was bought (or this is the replay of an identical, already committed checkout)
+          headers:
+            Idempotent-Replayed:
+              description: '`true` when the response is the stored result of an earlier identical request.'
+              schema:
+                type: string
+                enum: ['true']
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '415':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
   /api/purchases/{id}:
     get:
       tags: [Purchases]
@@ -725,6 +787,53 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/InventoryItem'
+    CheckoutLine:
+      type: object
+      additionalProperties: false
+      required: [quantity]
+      oneOf:
+        - required: [pokemonId]
+        - required: [itemId]
+      properties:
+        pokemonId:
+          type: integer
+          minimum: 1
+          description: Buy this Pokémon. Mutually exclusive with `itemId`.
+        itemId:
+          type: integer
+          minimum: 1
+          description: Buy this item. Mutually exclusive with `pokemonId`.
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 99
+    CheckoutRequest:
+      type: object
+      additionalProperties: false
+      required: [checkoutId, lines]
+      properties:
+        checkoutId:
+          type: string
+          format: uuid
+          description: Client-generated UUID, the idempotency key and order id of this bag. Reuse it only to retry the same bag.
+        lines:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/CheckoutLine'
+    CheckoutResponse:
+      type: object
+      required: [checkoutId, purchases]
+      properties:
+        checkoutId:
+          type: string
+          format: uuid
+        purchases:
+          type: array
+          description: One purchase per line, each with its own shipment.
+          items:
+            $ref: '#/components/schemas/Purchase'
     PurchaseRequest:
       type: object
       additionalProperties: false
@@ -884,6 +993,7 @@ components:
                 - INSUFFICIENT_STOCK
                 - INSUFFICIENT_FUNDS
                 - PURCHASE_DUPLICATE
+                - CHECKOUT_ID_CONFLICT
                 - KYC_LEVEL_REQUIRED
                 - KYC_PENDING_REVIEW
                 - KYC_ALREADY_PENDING

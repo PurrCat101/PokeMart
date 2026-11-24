@@ -42,7 +42,7 @@ Learning goals:
 - Real-money transactions (the Payment Mock never contacts a real provider) or real Pokémon trading.
 - Live PokéAPI calls during ordinary test execution.
 - Kubernetes, cloud deployment, heavy load tests, or a full CI/CD pipeline.
-- Human-readable order numbers (for example `ORD-20261017-000123`). Purchases use a client-generated UUID as `purchaseId`.
+- Human-readable order numbers (for example `ORD-20261017-000123`). Purchases use a client-generated UUID as `purchaseId`; a checkout (whole bag) uses a client-generated UUID `checkoutId`.
 - A requirement to install the full observability stack for every functional test run.
 
 ## 4. High-level architecture
