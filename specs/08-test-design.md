@@ -36,6 +36,7 @@ The public BFF maps internal response DTOs: catalog pages use `totalCount/page/i
 | E2E-PUR-001 | Snapshot DB; read catalog detail, wallet, inventory; `POST /api/purchases` for quantity 1; read purchase detail, history, wallet, inventory, and catalog again | 201 plus `Location`; exact public purchase DTO; wallet decreases by price, stock decreases by one, inventory increases by one, history/detail agree; restore state and delete purchase | `tests/testCases/purchases/lifecycle.spec.ts` |
 | E2E-PUR-002 | Snapshot DB; submit an invalid Pokémon using a fresh `purchaseId`; retry that same ID with a valid Pokémon; submit again after commit; read detail | First attempt does not reserve ID; retry succeeds; committed duplicate returns 409; persisted purchase and one-time side effects verified; restore and delete | `tests/testCases/purchases/retry.spec.ts` |
 | E2E-PUR-003 | Snapshot DB; concurrently submit the same valid purchase ID twice | Exactly one 201 and one 409 `PURCHASE_DUPLICATE`; only one purchase and one set of side effects; restore and delete | `tests/testCases/purchases/concurrency.spec.ts` |
+| INT-CHECKOUT-001–010 | `POST /pokemart/v1/checkouts` against the real service and MySQL: a two-line bag commits together under one `checkoutId`; stock, funds-against-total and KYC failures roll the whole bag back and leave no `checkouts` row; same `checkoutId` and bag (any line order) replays the stored 201 with `Idempotent-Replayed: true`; same id with another bag is 409 `CHECKOUT_ID_CONFLICT`; invalid bags are 400 with `lines[i]` fields; two bags in opposite order both commit; two identical requests at once commit once and replay; a rejected id is reusable; a KYC failure on line 2 beats a stock failure on line 1 (phase order) | Nothing is written on any rejection; replays never charge twice; state restored by `checkout_id` | `tests/testCases/PokeAPI/checkouts/create.spec.ts` (needs MySQL and the KYC service; not run in the sandbox that wrote it) |
 | PUR-BIZ-001 | Submit purchase for a nonexistent Pokémon | 404 `POKEMON_NOT_FOUND`; no purchase or unintended mutation | `tests/testCases/purchases/business-errors.spec.ts` |
 | PUR-BIZ-002 | Set listing inactive, submit purchase | 409 `POKEMON_NOT_FOR_SALE`; no purchase or wallet/stock/inventory mutation; restore listing and state | Same |
 | PUR-BIZ-003 | Set stock to zero, submit purchase | 409 `INSUFFICIENT_STOCK`; no purchase or unintended mutation; restore state | Same |
@@ -146,7 +147,7 @@ The OpenAPI documents now enumerate error codes by operation, require and define
 
 ### Coverage summary
 
-All nine public BFF route/method combinations have at least one exact success response assertion in the WireMock suite, and every one of the 13 public error codes used by the current BFF/service error contracts is represented by an exact fixture assertion. The direct `pokeapi` project now covers all nine internal route/method combinations, business errors, transactional retries, and concurrency, but not database fault paths. The mock track's 503/500 results are fixture coverage only. Do not describe this as complete upstream fault-mapping or dependency-failure coverage until the open items below are resolved.
+All nine public BFF route/method combinations have at least one exact success response assertion in the WireMock suite, and every one of the 13 public error codes used by the current BFF/service error contracts is represented by an exact fixture assertion (`CHECKOUT_ID_CONFLICT`, added with the checkout endpoint, is covered only by the real-service case `INT-CHECKOUT-005`). The direct `pokeapi` project now covers all nine internal route/method combinations, business errors, transactional retries, and concurrency, but not database fault paths. The mock track's 503/500 results are fixture coverage only. Do not describe this as complete upstream fault-mapping or dependency-failure coverage until the open items below are resolved.
 
 ## 9. Internal PokéMart API direct coverage
 
@@ -181,6 +182,7 @@ Internal API error-code coverage (excluding fault-only codes):
 | `INSUFFICIENT_STOCK` | Quantity exceeds stock, including valid maximum quantity 99 | `purchases/create.spec.ts` |
 | `INSUFFICIENT_FUNDS` | Wallet set to zero; same ID retried after restoration | `purchases/create.spec.ts`, `purchases/retry.spec.ts` |
 | `PURCHASE_DUPLICATE` | Committed ID reused; concurrent same-ID submissions | `purchases/create.spec.ts`, `purchases/concurrency.spec.ts` |
+| `CHECKOUT_ID_CONFLICT` | Committed `checkoutId` reused with a different bag | `PokeAPI/checkouts/create.spec.ts` (`INT-CHECKOUT-005`); no WireMock fixture yet |
 | `DEPENDENCY_UNAVAILABLE` | MySQL request failure | Not run; requires isolated DB fault injection |
 | `INTERNAL_ERROR` | Unexpected service exception | Not run; requires safe fault injection |
 

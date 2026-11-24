@@ -43,7 +43,12 @@ The copyable DBML source is [`schema/pokemart.dbml`](schema/pokemart.dbml). In d
 | | `user_id` | `VARCHAR(64)` | No | FK → `users.user_id` |
 | | `pokemon_source_id` / `item_source_id` | `INT` | Yes | FK → `pokemon_reference` / `item_reference`; CHECK exactly one is set. Unique `(user_id, pokemon_source_id)` and `(user_id, item_source_id)` give one row per user per product |
 | | `quantity` | `INT` | No | CHECK `quantity > 0` |
-| `purchases` | `id` | `CHAR(36)` | No | PK; client-generated UUID |
+| `purchases` | `id` | `CHAR(36)` | No | PK; client-generated UUID (server-generated for the lines of a checkout) |
+| `purchases` | `checkout_id` | `CHAR(36)` | Yes | FK → `checkouts.id`; set for purchases bought through `POST /checkouts`, NULL otherwise |
+| `checkouts` | `id` | `CHAR(36)` | No | PK; client-generated checkoutId, the idempotency key and order id of one bag |
+| `checkouts` | `user_id` | `VARCHAR(64)` | No | FK → `users.user_id` |
+| `checkouts` | `request_hash` | `CHAR(64)` | No | SHA-256 of the normalized bag; the same id with another hash is refused |
+| `checkouts` | `response_json` | `JSON` | Yes | The `201` body, replayed for an identical retry |
 | | `user_id` | `VARCHAR(64)` | No | FK → `users.user_id`; leads `idx_purchase_user_kind_created` |
 | | `pokemon_source_id` / `item_source_id` | `INT` | Yes | FK → `pokemon_reference` / `item_reference`; CHECK exactly one is set |
 | | `kind` | `ENUM('POKEMON','ITEM')` | No | STORED generated column, derived from which product column is set |
@@ -108,3 +113,5 @@ The migration also stops (and the backup is the way back) if a purchase ID exist
 `database/migrations/010_purchase_history_index.sql` (Liquibase changeset `012`) adds `idx_purchase_user_created (user_id, created_at DESC, id DESC)` back: purchase history is now one list across Pokémon and items (`GET /purchases`, optional `kind` filter), and the per-kind index from 008 only serves the filtered query.
 
 `make db-reset` deletes the local Compose volume, then re-applies every Liquibase changeset, and is destructive. It must never be used for shared or production data.
+
+`database/migrations/011_create_checkouts.sql` (Liquibase changeset `013`) adds `checkouts` and `purchases.checkout_id` for the atomic bag checkout (`POST /checkouts`). A checkout row is written inside the checkout transaction, so a rejected checkout leaves no row and its id can be used again. Run `make db-migrate` on an existing volume; DDL commits implicitly, so back up first as for migration 008.

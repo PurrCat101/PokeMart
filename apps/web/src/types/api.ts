@@ -164,12 +164,13 @@ export interface CreatePurchaseRequest {
   quantity: number;
 }
 
-/** One line of a checkout: the same body as a single purchase, with exactly one of pokemonId or itemId. */
+/** One line of a checkout: a purchase without an id (the server creates it), with exactly one of pokemonId or itemId. */
 export type CheckoutLineRequest =
-  | { purchaseId: string; pokemonId: number; quantity: number }
-  | { purchaseId: string; itemId: number; quantity: number };
+  | { pokemonId: number; quantity: number }
+  | { itemId: number; quantity: number };
 
 export interface CheckoutResponse {
+  checkoutId: string;
   purchases: PurchaseItem[];
 }
 
